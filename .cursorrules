@@ -1,0 +1,847 @@
+---
+
+## TỔNG QUAN DỰ ÁN
+
+Bạn đang hỗ trợ xây dựng **ADBA (Autonomous Data & Business Intelligence Agent)** — hệ thống AI multi-agent tự trị nhận câu hỏi ngôn ngữ tự nhiên, tự lập kế hoạch, phân công cho các specialist agents, tự sửa lỗi, và trình bày business insights có thể hành động được.
+
+**Paper gốc:** Fu et al. (2025), "Autonomous Data Agents", arXiv:2509.18710 — implement Section 3 (Perception + Planning + Execution) và extend Section 4.2 (Multi-Agent Collaboration, paper chỉ đề xuất không implement).
+
+**Contribution của dự án so với paper:**
+- Implement đầy đủ Hierarchical Supervisor + 5 Specialist Agents (paper chỉ đề xuất lý thuyết)
+- Thêm Insight Agent sinh structured business insights (finding + evidence + actionable recommendation)
+- Engineering layer: Docker sandbox, Streamlit UI với agent trace viewer, production docker-compose
+
+**Môi trường phát triển:**
+- MacBook Air M2, 16GB Unified Memory, macOS
+- Python 3.11+
+- Model inference: Ollama (Metal backend) — `OLLAMA_NUM_CTX=4096`
+- Training: MLX-LM (M2 local) hoặc Google Colab Pro (Unsloth + CUDA)
+- Primary model: `qwen2.5-coder:7b-instruct-q5_K_M`
+- Backup model: `llama3.1:8b-instruct-q4_K_M`
+
+---
+
+## KIẾN TRÚC HỆ THỐNG — HIERARCHICAL MULTI-AGENT
+
+### Tổng quan luồng xử lý
+
+```
+User Query (ngôn ngữ tự nhiên)
+        │
+        ▼
+┌─────────────────────────────────────┐
+│         SUPERVISOR AGENT            │
+│  Parse intent → ExecutionPlan JSON  │
+│  [{agent, task, depends_on}, ...]   │
+└──────────────┬──────────────────────┘
+               │ route theo dependency graph
+       ┌───────┼───────────────┐
+       ▼       ▼               ▼
+  SQL Agent  Python Agent   Viz Agent
+  (step 1)   (step 2)       (step 3)
+       │       │               │
+       └───────┴───────────────┘
+               │ outputs → shared state
+               ▼
+        INSIGHT AGENT
+        (step cuối)
+        structured {finding, evidence, action}
+               │
+       ┌───────┴───────┐
+       │  (nếu có lỗi) │
+       ▼               │
+  REFLECTOR AGENT      │
+  classify → reroute   │
+       │               │
+       └───────────────┘
+               │
+               ▼
+        STREAMLIT UI
+        Chat + Table + Chart + Insight card
+        Agent trace expander (từng agent)
+```
+
+### ExecutionPlan Format (output của Supervisor)
+
+```json
+{
+  "plan_summary": "Query sales data, compute YoY growth, visualize, then generate insight",
+  "steps": [
+    {
+      "step": 1,
+      "agent": "sql",
+      "task": "Query total revenue by region for Q4-2024 and Q4-2023",
+      "depends_on": [],
+      "skill_type": "text-to-sql"
+    },
+    {
+      "step": 2,
+      "agent": "python",
+      "task": "Compute YoY percentage change, detect anomalies using IQR",
+      "depends_on": ["sql"],
+      "skill_type": "data-analysis"
+    },
+    {
+      "step": 3,
+      "agent": "viz",
+      "task": "Grouped bar chart comparing Q4-2024 vs Q4-2023, highlight anomalies in red",
+      "depends_on": ["python"],
+      "skill_type": "visualization"
+    },
+    {
+      "step": 4,
+      "agent": "insight",
+      "task": "Summarize findings, identify top anomaly, provide actionable recommendation",
+      "depends_on": ["sql", "python", "viz"],
+      "skill_type": "insight-generation"
+    }
+  ]
+}
+```
+
+### Insight Agent Output Format (structured business insight)
+
+```json
+{
+  "finding": "Miền Bắc dẫn đầu tăng trưởng Q4 với +89% YoY",
+  "evidence": [
+    "Revenue Q4-2024: 142,000 USD vs Q4-2023: 75,000 USD",
+    "Tăng trưởng trung bình toàn quốc: +23% YoY"
+  ],
+  "anomaly": {
+    "type": "positive_outlier",
+    "detail": "Miền Bắc vượt 3.2 sigma so với trung bình"
+  },
+  "action": "Tăng tồn kho khu vực Miền Bắc ít nhất 60% cho Q1 2025",
+  "confidence": "high"
+}
+```
+
+---
+
+## MULTI-AGENT STATE
+
+```python
+# graph/state.py
+from typing import TypedDict, Any
+
+class MultiAgentState(TypedDict):
+    # ── Input ──────────────────────────────────────────────
+    query: str                        # câu hỏi gốc của user
+    info_box: dict                    # JSON schema từ Perception Layer
+
+    # ── Supervisor ─────────────────────────────────────────
+    execution_plan: list[dict]        # [{step, agent, task, depends_on, skill_type}]
+    current_agent: str                # agent đang chạy ("sql" | "python" | "viz" | "insight" | "reflector")
+    completed_agents: list[str]       # agents đã hoàn thành
+
+    # ── Inter-agent Communication ──────────────────────────
+    agent_outputs: dict               # {agent_name: {status, output, error}}
+    shared_dataframe: dict | None     # DataFrame dạng JSON-serializable
+                                      # {"records": [...], "columns": [...], "dtypes": {...}}
+    shared_metadata: dict             # context pass giữa agents (row_count, schema hints, etc.)
+
+    # ── Error Handling ─────────────────────────────────────
+    error_count: int                  # tổng số lỗi (max 5 toàn pipeline)
+    agent_error_counts: dict          # {agent_name: count} — max 3 per agent
+    last_error: dict | None           # {agent, error_type, traceback, corrected_context}
+
+    # ── Final Outputs ──────────────────────────────────────
+    sql_result: dict | None           # {sql, dataframe_json, row_count}
+    python_result: dict | None        # {code, dataframe_json, stats}
+    chart_b64: str | None             # base64 PNG
+    chart_metadata: dict | None       # {chart_type, x_col, y_col, title}
+    insight: dict | None              # {finding, evidence, anomaly, action, confidence}
+
+    # ── Trace ──────────────────────────────────────────────
+    action_trace: list[dict]          # toàn bộ trace cho UI display
+    status: str                       # "planning" | "running" | "success" | "failed"
+```
+
+### DataFrame Serialization — QUAN TRỌNG
+
+LangGraph state phải JSON-serializable. **Không được lưu DataFrame object trực tiếp vào state.**
+
+```python
+# Helpers — graph/utils.py
+
+def df_to_state(df: pd.DataFrame) -> dict:
+    """Convert DataFrame → JSON-serializable dict cho state"""
+    return {
+        "records": df.to_dict("records"),
+        "columns": df.columns.tolist(),
+        "dtypes": df.dtypes.astype(str).to_dict(),
+        "shape": list(df.shape)
+    }
+
+def df_from_state(data: dict) -> pd.DataFrame:
+    """Restore DataFrame từ state"""
+    df = pd.DataFrame(data["records"])
+    for col, dtype in data["dtypes"].items():
+        try:
+            df[col] = df[col].astype(dtype)
+        except Exception:
+            pass
+    return df
+```
+
+---
+
+## 5 SPECIALIST AGENTS — CHI TIẾT
+
+### Agent 1: Supervisor Agent
+
+```python
+# graph/agents/supervisor.py
+
+SUPERVISOR_SYSTEM_PROMPT = """
+You are the Supervisor Agent for ADBA — an autonomous data intelligence system.
+
+Your role:
+1. Parse the user's query to understand the analytical intent
+2. Generate an ExecutionPlan: an ordered list of specialist agents to invoke
+3. Determine dependencies between steps
+
+Available agents:
+- "sql": Write and execute PostgreSQL queries. Use when data retrieval is needed.
+- "python": Data transformation, aggregation, statistical analysis with pandas/numpy.
+- "viz": Generate charts and visualizations from DataFrames.
+- "insight": Generate natural language business insights from results.
+
+Rules:
+- Always start with "sql" if raw data retrieval is needed
+- "python" must depend on "sql" if it needs the query results
+- "viz" should depend on "python" if data was transformed, else depend on "sql"
+- "insight" always comes last, depends on all other completed agents
+- For simple queries (single metric, no analysis): [sql, insight] only
+- For complex queries: [sql, python, viz, insight]
+- Output ONLY valid JSON matching the ExecutionPlan schema. No explanation.
+
+Database schema context: {info_box}
+"""
+```
+
+**Routing logic:**
+
+```python
+def route_next_agent(state: MultiAgentState) -> str:
+    """Conditional edge function — quyết định agent nào chạy tiếp"""
+    if state["status"] == "failed":
+        return END
+
+    plan = state["execution_plan"]
+    completed = set(state["completed_agents"])
+    error_counts = state["agent_error_counts"]
+
+    for step in plan:
+        agent = step["agent"]
+        if agent in completed:
+            continue
+        # Check error limit per agent
+        if error_counts.get(agent, 0) >= 3:
+            return "reflector"
+        # Check all dependencies satisfied
+        if all(dep in completed for dep in step["depends_on"]):
+            return agent
+
+    return END  # tất cả agents đã xong
+```
+
+---
+
+### Agent 2: SQL Agent
+
+```python
+# graph/agents/sql_agent.py
+
+SQL_SYSTEM_PROMPT = """
+You are a PostgreSQL specialist agent. Your only job is to write correct, efficient SQL queries.
+
+Database schema:
+{info_box}
+
+Rules:
+- Always use CTEs (WITH clauses) for multi-step queries
+- Use table aliases consistently
+- Include LIMIT 1000 for exploratory queries unless aggregating
+- Handle NULL values explicitly (COALESCE, IS NOT NULL)
+- For date filtering: use date_trunc() or explicit BETWEEN
+- Return ONLY the SQL query. No explanation, no markdown fences.
+
+Self-repair context (if retrying):
+Previous SQL: {previous_sql}
+Error: {error_message}
+Fix the specific error above.
+"""
+
+# Tools available to SQL Agent
+SQL_TOOLS = [
+    execute_sql,          # psycopg2 execute + fetch → DataFrame
+    get_table_sample,     # SELECT * FROM {table} LIMIT 5
+    explain_query_plan,   # EXPLAIN ANALYZE
+]
+```
+
+---
+
+### Agent 3: Python / Data Agent
+
+```python
+# graph/agents/python_agent.py
+
+PYTHON_SYSTEM_PROMPT = """
+You are a data engineering specialist. You receive a pandas DataFrame and transform it.
+
+Available libraries: pandas (as pd), numpy (as np), scipy.stats (as stats)
+Input DataFrame is available as variable: df
+
+Rules:
+- ALWAYS check for NaN before operations: df.dropna() or df.fillna()
+- Never modify df in-place — always assign to new variable or use copy()
+- For percentage calculations: round to 2 decimal places
+- For outlier detection: use IQR method (Q1 - 1.5*IQR, Q3 + 1.5*IQR)
+- Add a boolean column "is_anomaly" if anomaly detection is requested
+- Return ONLY executable Python code. The last expression must be the result DataFrame.
+
+Task: {task}
+DataFrame columns available: {columns}
+DataFrame sample (first 3 rows): {sample}
+"""
+
+# Restricted execution namespace — KHÔNG thêm gì ngoài list này
+PYTHON_SAFE_NAMESPACE = {
+    "__builtins__": {
+        "print": print, "len": len, "range": range, "list": list,
+        "dict": dict, "str": str, "int": int, "float": float,
+        "bool": bool, "sum": sum, "min": min, "max": max,
+        "round": round, "abs": abs, "enumerate": enumerate,
+        "zip": zip, "sorted": sorted, "isinstance": isinstance,
+        "ValueError": ValueError, "KeyError": KeyError,
+    },
+    "pd": pd,
+    "np": np,
+}
+```
+
+---
+
+### Agent 4: Visualization Agent
+
+```python
+# graph/agents/viz_agent.py
+
+VIZ_SYSTEM_PROMPT = """
+You are a data visualization specialist. Generate matplotlib code to visualize the given DataFrame.
+
+Chart type selection rules:
+- Time series (date column present) → line chart
+- Categorical comparison (≤10 categories) → bar chart (horizontal if labels long)
+- Distribution (single numeric column) → histogram
+- Correlation (2 numeric columns) → scatter plot
+- Part-of-whole → pie chart (only if ≤6 categories)
+- Multi-series comparison → grouped bar chart
+
+Rules:
+- Use plt.style.use('seaborn-v0_8-whitegrid') for clean look
+- Figure size: (10, 6) default
+- If "is_anomaly" column exists: color anomalous bars/points in #E24B4A (red)
+- Always add: title, xlabel, ylabel, tight_layout()
+- Save to buffer: plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
+- Return ONLY executable Python code. Variable 'df' contains the DataFrame.
+
+Task: {task}
+DataFrame columns: {columns}
+"""
+```
+
+---
+
+### Agent 5: Insight Agent
+
+```python
+# graph/agents/insight_agent.py
+
+INSIGHT_SYSTEM_PROMPT = """
+You are a business intelligence analyst. Your job is to extract actionable insights from data.
+
+Context available:
+- User's original question: {query}
+- SQL query executed: {sql}
+- Data statistics: {stats}
+- Anomalies detected: {anomalies}
+- Chart generated: {chart_description}
+
+Output format — respond ONLY with valid JSON:
+{
+  "finding": "<1 sentence: the most important finding>",
+  "evidence": ["<data point 1>", "<data point 2>", "<data point 3>"],
+  "anomaly": {
+    "type": "positive_outlier | negative_outlier | none",
+    "detail": "<explanation if anomaly exists, else null>"
+  },
+  "action": "<1 sentence: specific actionable recommendation>",
+  "confidence": "high | medium | low"
+}
+
+Rules:
+- "finding" must include specific numbers from the data
+- "evidence" list: exactly 2-3 items, each with concrete numbers
+- "action" must be specific and measurable, not generic
+- If no meaningful insight: set confidence to "low" and explain why in finding
+"""
+```
+
+---
+
+### Agent 6: Reflector Agent
+
+```python
+# graph/agents/reflector_agent.py
+
+REFLECTOR_SYSTEM_PROMPT = """
+You are an error diagnosis specialist for a multi-agent data pipeline.
+
+A specialist agent failed. Diagnose the error and provide a corrected context.
+
+Failed agent: {failed_agent}
+Task that failed: {failed_task}
+Error type: {error_type}
+Full traceback: {traceback}
+Previous attempt: {previous_attempt}
+
+Diagnose and output JSON:
+{
+  "root_cause": "<what actually went wrong>",
+  "error_category": "sql_syntax | sql_logic | python_runtime | python_logic | data_quality | schema_mismatch",
+  "fix_strategy": "<how to fix it>",
+  "corrected_context": "<the corrected instruction/code to pass back to the agent>"
+}
+
+Error category guide:
+- sql_syntax: typo, missing keyword, wrong function name
+- sql_logic: wrong join, incorrect aggregation, bad filter
+- python_runtime: NameError, TypeError, KeyError on DataFrame
+- python_logic: wrong calculation, incorrect column selection
+- data_quality: NaN values, wrong dtypes, empty result
+- schema_mismatch: column doesn't exist, wrong table name
+"""
+```
+
+---
+
+## CẤU TRÚC THƯ MỤC DỰ ÁN
+
+```
+adba/
+├── .cursorrules                        # Paste toàn bộ file này vào đây
+├── docker-compose.yml
+├── .env.example
+├── requirements.txt
+├── README.md
+│
+├── data/
+│   ├── schemas/
+│   │   ├── schema_sales.sql
+│   │   ├── schema_inventory.sql
+│   │   └── schema_hr.sql
+│   ├── seed/
+│   │   └── seed_data.py
+│   ├── raw_dataset.jsonl               # ~1,500 pairs từ GPT-4o-mini
+│   ├── validated_dataset.jsonl         # ~1,200 sau SQL validation
+│   ├── train.json                      # 960 (80%)
+│   ├── val.json                        # 120 (10%)
+│   └── test.json                       # 120 (10%)
+│
+├── perception/
+│   └── extract_info_box.py             # Schema → JSON info_box
+│
+├── schemas/
+│   ├── plan_schema.py                  # Pydantic: ExecutionPlan, AgentStep
+│   └── insight_schema.py              # Pydantic: InsightOutput
+│
+├── prompts/
+│   ├── supervisor_routing.txt          # GPT-4o-mini template cho supervisor training data
+│   ├── text_to_sql.txt
+│   ├── data_analysis.txt
+│   └── insight_generation.txt
+│
+├── training/
+│   ├── generate_data.py                # GPT-4o-mini batch generation
+│   ├── validate_dataset.py             # SQL execution validation
+│   ├── format_sharegpt.py
+│   ├── train_mlx.py                    # MLX-LM cho M2
+│   ├── train_colab.ipynb               # Unsloth fallback
+│   └── mlx_config.yaml
+│
+├── model/
+│   ├── model_client.py                 # Abstract Ollama interface
+│   └── model_config.py                 # Model constants
+│
+├── graph/
+│   ├── __init__.py
+│   ├── state.py                        # MultiAgentState TypedDict
+│   ├── multi_agent.py                  # Compiled LangGraph graph (main)
+│   ├── utils.py                        # df_to_state, df_from_state, safe_parse_json
+│   │
+│   ├── agents/
+│   │   ├── __init__.py
+│   │   ├── supervisor.py               # Supervisor Agent + route_next_agent()
+│   │   ├── sql_agent.py                # SQL Specialist
+│   │   ├── python_agent.py             # Python/Data Specialist
+│   │   ├── viz_agent.py                # Visualization Specialist
+│   │   ├── insight_agent.py            # Insight Specialist
+│   │   └── reflector_agent.py          # Cross-agent Error Handler
+│   │
+│   └── tools/
+│       ├── sql_tool.py                 # execute_sql, get_table_sample
+│       ├── python_tool.py              # run_pandas_safe (restricted exec)
+│       ├── viz_tool.py                 # generate_chart → base64
+│       └── insight_tools.py            # detect_anomaly, compare_periods
+│
+├── eval/
+│   ├── baseline_results.json
+│   ├── finetuned_results.json
+│   ├── single_vs_multi_comparison.json
+│   └── eval_runner.py
+│
+├── tests/
+│   ├── unit/
+│   │   ├── test_supervisor.py
+│   │   ├── test_sql_agent.py
+│   │   ├── test_python_agent.py
+│   │   ├── test_viz_agent.py
+│   │   ├── test_insight_agent.py
+│   │   └── test_reflector.py
+│   └── integration/
+│       ├── test_simple_queries.py      # 10 simple SQL-only queries
+│       └── test_complex_queries.py     # 10 multi-agent queries
+│
+├── sandbox/                            # Milestone 2: Docker code execution
+│   ├── Dockerfile
+│   └── sandbox_client.py
+│
+└── app.py                              # Streamlit UI
+```
+
+---
+
+## TECH STACK
+
+```toml
+# requirements.txt — versions đã test trên M2
+
+# Agent Framework
+langgraph>=0.2.0
+langchain-core>=0.2.0
+langchain-ollama>=0.1.0
+
+# Model Inference
+ollama>=0.2.0
+
+# Database
+psycopg2-binary>=2.9.9
+sqlalchemy>=2.0.0
+
+# Data Processing
+pandas>=2.0.0
+numpy>=1.26.0
+matplotlib>=3.8.0
+seaborn>=0.13.0
+scipy>=1.11.0
+
+# Schema Validation
+pydantic>=2.0.0
+
+# API
+openai>=1.30.0                    # GPT-4o-mini cho data generation
+
+# UI
+streamlit>=1.35.0
+
+# Training — chọn 1
+# mlx>=0.16.0                     # Option A: M2 local
+# mlx-lm>=0.15.0
+# (unsloth: chỉ cài trên Colab)   # Option B: Colab
+
+# Evaluation (Milestone 2)
+ragas>=0.1.0
+```
+
+### Model Configuration
+
+```python
+# model/model_config.py
+
+PRIMARY_MODEL   = "qwen2.5-coder:7b-instruct-q5_K_M"
+BACKUP_MODEL    = "llama3.1:8b-instruct-q4_K_M"
+OLLAMA_BASE_URL = "http://localhost:11434"
+
+# QUAN TRỌNG: đủ cho supervisor prompt + info_box + execution plan + history
+OLLAMA_NUM_CTX  = 4096
+
+AGENT_TEMPERATURES = {
+    "supervisor":  0.1,   # deterministic routing
+    "sql":         0.0,   # deterministic SQL
+    "python":      0.1,   # deterministic code
+    "viz":         0.2,   # slight creativity for chart choices
+    "insight":     0.3,   # more expressive for NL insight
+    "reflector":   0.1,   # deterministic diagnosis
+}
+
+AGENT_MAX_TOKENS = {
+    "supervisor":  512,   # ExecutionPlan JSON
+    "sql":         1024,  # SQL có thể dài
+    "python":      1024,  # Python code
+    "viz":         1024,  # Matplotlib code
+    "insight":     512,   # Structured JSON insight
+    "reflector":   512,   # Diagnosis JSON
+}
+```
+
+### Database Schemas
+
+**Sales:** `orders(id, customer_id, product_id, region, amount, quantity, order_date, quarter, year, status)`, `products(id, name, category, unit_price, cost)`, `customers(id, name, email, city, segment, region)`
+
+**Inventory:** `stock(id, product_id, warehouse_id, quantity, min_threshold, last_updated)`, `warehouses(id, name, city, region, capacity)`, `stock_movements(id, product_id, from_warehouse_id, to_warehouse_id, quantity, movement_date, movement_type)`
+
+**HR:** `employees(id, name, department_id, role, level, salary, hire_date, status)`, `departments(id, name, budget, headcount, manager_id)`, `payroll(id, employee_id, month, year, base_salary, bonus, deduction, net_salary)`
+
+---
+
+## QUY TẮC CODING BẮT BUỘC
+
+```python
+# 1. LUÔN dùng model_client.py — không gọi Ollama trực tiếp trong agents
+from model.model_client import ModelClient
+client = ModelClient(agent_type="sql")  # sets temperature và max_tokens tự động
+
+# 2. LUÔN strip markdown fence trước khi parse JSON
+import re, json
+
+def safe_parse_json(text: str) -> dict:
+    """Strip ```json ... ``` fence và parse — dùng ở mọi LLM JSON output"""
+    clean = re.sub(r"```(?:json|python|sql)?\s*|\s*```", "", text).strip()
+    return json.loads(clean)
+
+# 3. LUÔN return đầy đủ state — không partial update
+def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
+    # ... xử lý ...
+    new_outputs = {**state["agent_outputs"], "sql": result}
+    new_completed = state["completed_agents"] + ["sql"]
+    return {
+        **state,
+        "agent_outputs": new_outputs,
+        "completed_agents": new_completed,
+        "shared_dataframe": df_to_state(df),
+        "sql_result": {"sql": sql_str, "row_count": len(df)},
+        "current_agent": "sql",
+    }
+
+# 4. LUÔN dùng parameterized queries cho SQL
+# WRONG:
+cursor.execute(f"SELECT * FROM orders WHERE region = '{region}'")
+# CORRECT:
+cursor.execute("SELECT * FROM orders WHERE region = %s", (region,))
+
+# 5. LUÔN restricted exec() cho Python Agent
+exec(code, PYTHON_SAFE_NAMESPACE | {"df": input_df})
+
+# 6. LUÔN log action trace để debug
+import json, pathlib, time
+def append_trace(state: MultiAgentState, agent: str, action: str,
+                  observation: str, status: str) -> list:
+    entry = {
+        "agent": agent, "action": action,
+        "observation": observation, "status": status,
+        "timestamp": time.time()
+    }
+    pathlib.Path("logs/").mkdir(exist_ok=True)
+    return state["action_trace"] + [entry]
+
+# 7. DataFrame serialization — KHÔNG lưu DataFrame trực tiếp vào state
+# WRONG: state["shared_dataframe"] = df
+# CORRECT:
+from graph.utils import df_to_state, df_from_state
+state["shared_dataframe"] = df_to_state(df)
+df = df_from_state(state["shared_dataframe"])
+```
+
+---
+
+## TRAINING DATA — CẬP NHẬT CHO MULTI-AGENT
+
+Cần tổng **~1,400 samples** (thêm 200 so với single agent plan):
+
+| Skill type | Số lượng | Mục đích |
+|---|---|---|
+| text-to-sql | 600 | SQL Agent training |
+| data-analysis (pandas) | 400 | Python Agent training |
+| supervisor-routing | 200 | Supervisor ExecutionPlan generation |
+| insight-generation | 150 | Insight Agent training |
+| error-reflection | 100 | Reflector Agent training |
+
+**Supervisor routing samples** có format đặc biệt:
+```json
+{
+  "messages": [
+    {"role": "system", "content": "<SUPERVISOR_SYSTEM_PROMPT với info_box>"},
+    {"role": "user", "content": "So sánh doanh thu Q4-2024 vs Q4-2023 theo region"},
+    {"role": "assistant", "content": "{\"plan_summary\": \"...\", \"steps\": [{\"step\": 1, \"agent\": \"sql\", ...}]}"}
+  ]
+}
+```
+
+### MLX-LM Training Config (M2 local)
+
+```yaml
+# training/mlx_config.yaml
+model: mlx-community/Qwen2.5-Coder-7B-Instruct-4bit
+train: true
+data: data/                          # thư mục chứa train.jsonl, valid.jsonl
+lora_layers: 16
+batch_size: 2
+iters: 1200                          # ~3 epochs với 960 samples, batch 2
+val_batches: 25
+learning_rate: 2e-4
+steps_per_report: 50
+steps_per_eval: 200
+save_every: 200
+adapter_path: adapters/
+max_seq_length: 2048
+train_on_completion_only: true       # Loss chỉ trên assistant tokens — implement L=Σlog P(aₜ|q,sₜ,a<ₜ)
+```
+
+**Chạy training:** `python -m mlx_lm.lora --config training/mlx_config.yaml`
+
+---
+
+## TIMELINE — 38 NGÀY
+
+### Milestone 1: Single Agent (Ngày 1–22) — Safety Net
+
+| Ngày | Task | Checkpoint |
+|------|------|-----------|
+| 1–2 | Docker + PostgreSQL + 3 schemas + seed data + extract_info_box.py | docker-compose up OK |
+| 3–4 | JSON Plan format + Pydantic schemas + Prompt templates | validator.py OK |
+| 4–5 | GPT-4o-mini batch gen 1,500 samples + SQL validation | ≥1,200 valid samples |
+| 6 | ShareGPT format + train/val/test split | dataset stats OK |
+| **7** | **Baseline eval trên Qwen-7B chưa fine-tune** | **CHECKPOINT 1** |
+| 8 | MLX-LM setup hoặc Colab notebook | dry run 10 steps OK |
+| 9–11 | Fine-tuning 3 epochs | val loss giảm đều |
+| 12 | Post-training evaluation | SQL acc ≥70%, JSON valid ≥85% |
+| 13–14 | Export GGUF q5_K_M + model_client.py | **CHECKPOINT 2** |
+| 15 | MultiAgentState + graph skeleton | state transitions test OK |
+| 16 | Supervisor Agent + routing logic | routing test OK |
+| 17–18 | SQL Agent + Python Agent + tools | unit tests pass |
+| 19 | Viz Agent + Insight Agent + Reflector | unit tests pass |
+| 20 | Wire full graph + 20 integration tests | ≥80% pass |
+| 21–22 | Streamlit UI + 5 demo queries | **CHECKPOINT 3 — Demo hoạt động** |
+
+### Milestone 2: Full Multi-Agent (Ngày 23–38)
+
+| Ngày | Task |
+|------|------|
+| 23–24 | Refactor → specialist agents riêng biệt + MultiAgentState |
+| 25–26 | Supervisor ExecutionPlan + dependency resolver + 200 routing training samples |
+| 27 | Insight Agent với structured output + anomaly tools |
+| 28 | Reflector v2 — domain-aware error classification + smart rerouting |
+| 29–30 | Wire multi-agent graph + 20 integration tests (10 simple + 10 complex) |
+| 31–32 | Docker sandbox + Ragas evaluation (+ Agent Routing Accuracy metric mới) |
+| 33–35 | So sánh Single vs Multi-Agent định lượng trên test set |
+| 36–38 | Docker-compose production + README + video demo 5 phút |
+
+---
+
+## CHECKPOINTS & FALLBACK
+
+### Checkpoint Ngày 7 — Dataset Quality Gate
+- Pass: ≥1,200 valid samples, SQL exec rate ≥90%
+- Fail → thêm 1 ngày manual filter + viết tay 100 high-quality samples
+
+### Checkpoint Ngày 14 — Model Quality Gate
+- Pass: SQL execution accuracy ≥70%, JSON valid rate ≥85%
+- Fail → **Option B**: GPT-4o API làm Supervisor + SQL Agent, fine-tuned model làm Python/Insight Agent
+
+### Checkpoint Ngày 22 — Single Agent Demo Gate
+- Pass: 5 demo queries chạy end-to-end trong Streamlit
+- Fail → scope cut: bỏ Viz Agent, chỉ giữ SQL + Insight output
+
+### Checkpoint Ngày 30 — Multi-Agent Gate
+- Pass: 20 integration tests ≥80% pass, Supervisor routing accuracy ≥80%
+- Fail → demo single agent (đã có từ ngày 22) + báo cáo multi-agent architecture as future work
+
+---
+
+## EVALUATION METRICS — ĐẦY ĐỦ
+
+| Metric | Đo bằng | Target |
+|--------|---------|--------|
+| SQL Execution Accuracy | Chạy SQL trên PostgreSQL, check không lỗi | ≥82% |
+| JSON Plan Valid Rate | Pydantic validation | ≥88% |
+| Agent Routing Accuracy | Supervisor chọn đúng agents vs expected | ≥85% |
+| End-to-End Success Rate | Query → insight không crash | ≥75% |
+| Insight Quality Score | GPT-4o judge 1–5 (finding + action quality) | ≥3.8/5 |
+| Average Retry Count | action_trace thống kê | ≤1.2 per query |
+| Latency P50 | Thời gian end-to-end | ≤25s |
+
+---
+
+## LIMITATIONS (ghi vào báo cáo)
+
+**So với paper gốc — chưa implement:**
+- Reinforcement Learning từ execution feedback (paper Section 6.3) — chỉ SFT
+- Privacy-preserving operations — không trong scope
+- Open-world generalization — chỉ test trên 3 schema cố định
+- Real-time streaming data — chỉ batch queries
+
+**Engineering limitations:**
+- Docker sandbox thay exec() chỉ có ở Milestone 2
+- Parallel agent execution không khả thi trên 16GB M2 (sequential only)
+- Airflow integration là tính năng optional M2
+
+---
+
+## OLLAMA SETUP — CHẠY TRƯỚC KHI CODE
+
+```bash
+# 1. Set context window (BẮT BUỘC — default 2048 quá nhỏ cho agent pipeline)
+export OLLAMA_NUM_CTX=4096
+
+# 2. Pull models
+ollama pull qwen2.5-coder:7b-instruct-q5_K_M
+ollama pull llama3.1:8b-instruct-q4_K_M
+
+# 3. Tạo custom Modelfile với đúng parameters
+cat > Modelfile << 'EOF'
+FROM qwen2.5-coder:7b-instruct-q5_K_M
+PARAMETER num_ctx 4096
+PARAMETER temperature 0.1
+PARAMETER num_predict 1024
+PARAMETER stop "<|im_end|>"
+EOF
+ollama create adba-qwen -f Modelfile
+
+# 4. Verify
+ollama run adba-qwen "Write a SQL query to count rows in a table called orders"
+```
+
+---
+
+; ## GHI NHỚ KHI LÀM VIỆC VỚI AI IDE
+
+; Khi bắt đầu session mới, dùng prompt ngắn:
+
+; ```
+; Đọc file .cursorrules để hiểu toàn bộ dự án ADBA multi-agent.
+; Tôi đang ở Ngày [X], task hiện tại: [tên task cụ thể].
+; [Mô tả ngắn vấn đề hoặc yêu cầu]
+; ```
+
+; Khi bắt đầu implement một agent mới:
+
+; ```
+; Implement [tên agent] theo spec trong .cursorrules.
+; Các agents đã xong: [danh sách].
+; State hiện tại có các fields: [fields liên quan].
+; Viết code + unit test luôn trong cùng file output.
+; ```

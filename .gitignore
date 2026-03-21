@@ -42,3 +42,7 @@ data/train.json
 data/val.json
 data/test.json
 eval/*.json
+
+.cursor/plans/
+
+ADBA_Project_Context_Prompt_v2.md

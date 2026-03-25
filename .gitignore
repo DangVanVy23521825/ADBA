@@ -37,6 +37,7 @@ logs/
 adapters/
 *.gguf
 data/raw_dataset.jsonl
+data/rejected_dataset.jsonl
 data/validated_dataset.jsonl
 data/train.json
 data/val.json
@@ -46,3 +47,5 @@ eval/*.json
 .cursor/plans/
 
 ADBA_Project_Context_Prompt_v2.md
+
+checklists/

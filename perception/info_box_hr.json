@@ -1,0 +1,441 @@
+{
+  "domain": "hr",
+  "tables": [
+    {
+      "table_name": "departments",
+      "row_count": 10,
+      "primary_key": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "name",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "region",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false,
+          "enum_values": [
+            "Miền Bắc",
+            "Miền Trung",
+            "Miền Nam",
+            "Tây Nguyên",
+            "HQ"
+          ]
+        },
+        {
+          "name": "budget",
+          "data_type": "numeric",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "headcount",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false,
+          "default": "0"
+        },
+        {
+          "name": "manager_id",
+          "data_type": "integer",
+          "nullable": true,
+          "is_generated": false
+        },
+        {
+          "name": "created_at",
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "is_generated": false,
+          "default": "now()"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "column": "manager_id",
+          "references": "employees.id"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "departments_name_key"
+        },
+        {
+          "name": "idx_departments_region"
+        }
+      ],
+      "sample_rows": [
+        {
+          "id": 9,
+          "name": "R&D",
+          "region": "Miền Bắc",
+          "budget": 3500000000.0,
+          "headcount": 19,
+          "manager_id": null,
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        },
+        {
+          "id": 8,
+          "name": "Pháp chế",
+          "region": "HQ",
+          "budget": 1200000000.0,
+          "headcount": 10,
+          "manager_id": null,
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        },
+        {
+          "id": 4,
+          "name": "Tài chính",
+          "region": "HQ",
+          "budget": 4800000000.0,
+          "headcount": 19,
+          "manager_id": 125,
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        }
+      ],
+      "query_notes": [
+        "manager_id is a self-referential FK to employees.id (DEFERRABLE INITIALLY DEFERRED).",
+        "budget is monthly budget in VND. Compare with SUM(payroll.net_salary) for budget analysis."
+      ]
+    },
+    {
+      "table_name": "employees",
+      "row_count": 250,
+      "primary_key": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "name",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "email",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "department_id",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "role",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "level",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false,
+          "enum_values": [
+            "Junior",
+            "Mid",
+            "Senior",
+            "Lead",
+            "Manager",
+            "Director",
+            "C-Level"
+          ]
+        },
+        {
+          "name": "salary",
+          "data_type": "numeric",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "hire_date",
+          "data_type": "date",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "end_date",
+          "data_type": "date",
+          "nullable": true,
+          "is_generated": false
+        },
+        {
+          "name": "status",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false,
+          "default": "'active'::character varying",
+          "enum_values": [
+            "active",
+            "on_leave",
+            "terminated",
+            "contractor"
+          ]
+        },
+        {
+          "name": "performance_score",
+          "data_type": "numeric",
+          "nullable": true,
+          "is_generated": false
+        },
+        {
+          "name": "created_at",
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "is_generated": false,
+          "default": "now()"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "column": "department_id",
+          "references": "departments.id"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "employees_email_key"
+        },
+        {
+          "name": "idx_employees_active",
+          "partial_where": "WHERE ((status)::text = 'active'::text)"
+        },
+        {
+          "name": "idx_employees_dept"
+        },
+        {
+          "name": "idx_employees_hire_date"
+        },
+        {
+          "name": "idx_employees_level"
+        },
+        {
+          "name": "idx_employees_status"
+        }
+      ],
+      "sample_rows": [
+        {
+          "id": 243,
+          "name": "Quý cô Thảo Đặng",
+          "email": "omai@example.com",
+          "department_id": 10,
+          "role": "CEO",
+          "level": "Mid",
+          "salary": 15086511.72,
+          "hire_date": "2022-12-27",
+          "end_date": null,
+          "status": "active",
+          "performance_score": 1.4,
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        },
+        {
+          "id": 46,
+          "name": "Lâm Văn Bùi",
+          "email": "janevu@example.org",
+          "department_id": 2,
+          "role": "DevOps Engineer",
+          "level": "Mid",
+          "salary": 14014413.74,
+          "hire_date": "2018-05-11",
+          "end_date": null,
+          "status": "active",
+          "performance_score": 4.8,
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        },
+        {
+          "id": 187,
+          "name": "Quý cô Nhật Lê",
+          "email": "john29@example.com",
+          "department_id": 7,
+          "role": "Logistics Manager",
+          "level": "Senior",
+          "salary": 23768015.18,
+          "hire_date": "2023-05-20",
+          "end_date": null,
+          "status": "active",
+          "performance_score": 3.3,
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        }
+      ],
+      "query_notes": [
+        "Use WHERE status = 'active' for current headcount (partial index idx_employees_active).",
+        "end_date IS NULL for currently active employees.",
+        "departments.headcount is auto-synced by trigger trg_headcount_sync."
+      ]
+    },
+    {
+      "table_name": "payroll",
+      "row_count": 5897,
+      "primary_key": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "employee_id",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "month",
+          "data_type": "smallint",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "year",
+          "data_type": "smallint",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "base_salary",
+          "data_type": "numeric",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "bonus",
+          "data_type": "numeric",
+          "nullable": false,
+          "is_generated": false,
+          "default": "0"
+        },
+        {
+          "name": "deduction",
+          "data_type": "numeric",
+          "nullable": false,
+          "is_generated": false,
+          "default": "0"
+        },
+        {
+          "name": "overtime_hours",
+          "data_type": "numeric",
+          "nullable": false,
+          "is_generated": false,
+          "default": "0"
+        },
+        {
+          "name": "net_salary",
+          "data_type": "numeric",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "paid_at",
+          "data_type": "date",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "created_at",
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "is_generated": false,
+          "default": "now()"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "column": "employee_id",
+          "references": "employees.id"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_payroll_employee"
+        },
+        {
+          "name": "idx_payroll_paid_at"
+        },
+        {
+          "name": "idx_payroll_year_month"
+        },
+        {
+          "name": "payroll_employee_id_month_year_key"
+        }
+      ],
+      "sample_rows": [
+        {
+          "id": 1276,
+          "employee_id": 55,
+          "month": 2,
+          "year": 2023,
+          "base_salary": 24011615.88,
+          "bonus": 768563.81,
+          "deduction": 2167130.95,
+          "overtime_hours": 10.1,
+          "net_salary": 22613048.74,
+          "paid_at": "2023-02-27",
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        },
+        {
+          "id": 5382,
+          "employee_id": 229,
+          "month": 1,
+          "year": 2024,
+          "base_salary": 15425364.27,
+          "bonus": 684068.62,
+          "deduction": 1367590.38,
+          "overtime_hours": 3.3,
+          "net_salary": 14741842.51,
+          "paid_at": "2024-01-28",
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        },
+        {
+          "id": 276,
+          "employee_id": 12,
+          "month": 12,
+          "year": 2023,
+          "base_salary": 11165464.46,
+          "bonus": 882102.19,
+          "deduction": 966991.81,
+          "overtime_hours": 17.8,
+          "net_salary": 11080574.84,
+          "paid_at": "2023-12-26",
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        }
+      ],
+      "query_notes": [
+        "payroll HAS a 'month' column (SMALLINT 1–12) — use p.month directly.",
+        "net_salary = base_salary + bonus - deduction (enforced by CHECK constraint).",
+        "UNIQUE on (employee_id, month, year) — one row per employee per month."
+      ]
+    }
+  ],
+  "cross_domain_hints": [
+    {
+      "from_table": "departments",
+      "from_column": "region",
+      "to_table": "orders",
+      "to_column": "region",
+      "note": "Soft link via region string: workforce location ↔ sales territory"
+    }
+  ],
+  "extraction_note": "This info_box contains schema metadata and sample rows. Use it to write correct SQL — column names, types, enum values, FK relationships, and query notes are all included."
+}

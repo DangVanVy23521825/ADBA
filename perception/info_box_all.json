@@ -1,0 +1,1272 @@
+{
+  "domain": "all",
+  "tables": [
+    {
+      "table_name": "customers",
+      "row_count": 600,
+      "primary_key": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "name",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "email",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "phone",
+          "data_type": "character varying",
+          "nullable": true,
+          "is_generated": false
+        },
+        {
+          "name": "city",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "region",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false,
+          "enum_values": [
+            "Miền Bắc",
+            "Miền Trung",
+            "Miền Nam",
+            "Tây Nguyên"
+          ]
+        },
+        {
+          "name": "segment",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false,
+          "enum_values": [
+            "Enterprise",
+            "SME",
+            "Retail",
+            "Government"
+          ]
+        },
+        {
+          "name": "created_at",
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "is_generated": false,
+          "default": "now()"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "name": "customers_email_key"
+        },
+        {
+          "name": "idx_customers_region"
+        },
+        {
+          "name": "idx_customers_segment"
+        }
+      ],
+      "sample_rows": [
+        {
+          "id": 176,
+          "name": "Kim Trần",
+          "email": "dpham@example.org",
+          "phone": "09 9042102",
+          "city": "Hà Nội",
+          "region": "Miền Bắc",
+          "segment": "Retail",
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        },
+        {
+          "id": 67,
+          "name": "Huy Trần",
+          "email": "johnduong@example.net",
+          "phone": "(00) 0471 1382",
+          "city": "Hà Nội",
+          "region": "Miền Bắc",
+          "segment": "Retail",
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        },
+        {
+          "id": 297,
+          "name": "Hoàng Quang Trần",
+          "email": "phamjohn@example.net",
+          "phone": "+84-03-924 0514",
+          "city": "Nha Trang",
+          "region": "Miền Trung",
+          "segment": "SME",
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        }
+      ]
+    },
+    {
+      "table_name": "products",
+      "row_count": 80,
+      "primary_key": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "name",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "sku",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "category",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false,
+          "enum_values": [
+            "Electronics",
+            "Office Supplies",
+            "Furniture",
+            "Industrial",
+            "Food & Beverage",
+            "Apparel"
+          ]
+        },
+        {
+          "name": "unit_price",
+          "data_type": "numeric",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "cost",
+          "data_type": "numeric",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "is_active",
+          "data_type": "boolean",
+          "nullable": false,
+          "is_generated": false,
+          "default": "true"
+        },
+        {
+          "name": "created_at",
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "is_generated": false,
+          "default": "now()"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "name": "idx_products_category"
+        },
+        {
+          "name": "idx_products_is_active"
+        },
+        {
+          "name": "products_sku_key"
+        }
+      ],
+      "sample_rows": [
+        {
+          "id": 8,
+          "name": "Điện thoại 92",
+          "sku": "ELEC-008",
+          "category": "Electronics",
+          "unit_price": 1990968.01,
+          "cost": 1536417.24,
+          "is_active": true,
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        },
+        {
+          "id": 67,
+          "name": "Đèn công nghiệp 06",
+          "sku": "INDS-010",
+          "category": "Industrial",
+          "unit_price": 1344689.08,
+          "cost": 1046936.4,
+          "is_active": true,
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        },
+        {
+          "id": 38,
+          "name": "Mực in 58",
+          "sku": "OFFC-008",
+          "category": "Office Supplies",
+          "unit_price": 8709584.3,
+          "cost": 5684173.02,
+          "is_active": true,
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        }
+      ]
+    },
+    {
+      "table_name": "orders",
+      "row_count": 29830,
+      "primary_key": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "customer_id",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "product_id",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "region",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false,
+          "enum_values": [
+            "Miền Bắc",
+            "Miền Trung",
+            "Miền Nam",
+            "Tây Nguyên"
+          ]
+        },
+        {
+          "name": "quantity",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "unit_price",
+          "data_type": "numeric",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "discount_rate",
+          "data_type": "numeric",
+          "nullable": false,
+          "is_generated": false,
+          "default": "0"
+        },
+        {
+          "name": "amount",
+          "data_type": "numeric",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "order_date",
+          "data_type": "date",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "quarter",
+          "data_type": "smallint",
+          "nullable": false,
+          "is_generated": true,
+          "generated_as": "(EXTRACT(quarter FROM order_date))::smallint"
+        },
+        {
+          "name": "year",
+          "data_type": "smallint",
+          "nullable": false,
+          "is_generated": true,
+          "generated_as": "(EXTRACT(year FROM order_date))::smallint"
+        },
+        {
+          "name": "status",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false,
+          "default": "'completed'::character varying",
+          "enum_values": [
+            "pending",
+            "processing",
+            "completed",
+            "cancelled",
+            "refunded"
+          ]
+        },
+        {
+          "name": "payment_method",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false,
+          "default": "'bank_transfer'::character varying",
+          "enum_values": [
+            "bank_transfer",
+            "cash",
+            "credit_card",
+            "e_wallet"
+          ]
+        },
+        {
+          "name": "created_at",
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "is_generated": false,
+          "default": "now()"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "column": "customer_id",
+          "references": "customers.id"
+        },
+        {
+          "column": "product_id",
+          "references": "products.id"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_orders_completed",
+          "partial_where": "WHERE ((status)::text = ANY ((ARRAY['completed'::character varying, 'processing'::character varying])::text[]))"
+        },
+        {
+          "name": "idx_orders_customer"
+        },
+        {
+          "name": "idx_orders_date_region"
+        },
+        {
+          "name": "idx_orders_product"
+        },
+        {
+          "name": "idx_orders_status"
+        },
+        {
+          "name": "idx_orders_year_quarter"
+        }
+      ],
+      "sample_rows": [
+        {
+          "id": 5420,
+          "customer_id": 569,
+          "product_id": 4,
+          "region": "Miền Nam",
+          "quantity": 17,
+          "unit_price": 819593.59,
+          "discount_rate": 0.0,
+          "amount": 15326400.13,
+          "order_date": "2022-07-16",
+          "quarter": 3,
+          "year": 2022,
+          "status": "pending",
+          "payment_method": "bank_transfer",
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        },
+        {
+          "id": 28733,
+          "customer_id": 34,
+          "product_id": 11,
+          "region": "Tây Nguyên",
+          "quantity": 15,
+          "unit_price": 6339100.39,
+          "discount_rate": 0.0,
+          "amount": 121710727.49,
+          "order_date": "2024-11-18",
+          "quarter": 4,
+          "year": 2024,
+          "status": "processing",
+          "payment_method": "e_wallet",
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        },
+        {
+          "id": 2332,
+          "customer_id": 73,
+          "product_id": 64,
+          "region": "Miền Nam",
+          "quantity": 2,
+          "unit_price": 9286876.64,
+          "discount_rate": 0.0,
+          "amount": 17645065.62,
+          "order_date": "2022-03-25",
+          "quarter": 1,
+          "year": 2022,
+          "status": "processing",
+          "payment_method": "cash",
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        }
+      ],
+      "generated_columns_note": "Columns ['quarter', 'year'] are GENERATED ALWAYS — never include in INSERT.",
+      "query_notes": [
+        "IMPORTANT: orders has NO 'month' column. Use EXTRACT(MONTH FROM order_date) for month-level filtering.",
+        "quarter and year are GENERATED ALWAYS columns — do NOT include them in INSERT statements.",
+        "Use WHERE status IN ('completed', 'processing') for revenue rollups to exclude cancelled/refunded.",
+        "Partial index idx_orders_completed is used automatically when filtering completed/processing status."
+      ]
+    },
+    {
+      "table_name": "warehouses",
+      "row_count": 8,
+      "primary_key": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "name",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "city",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "region",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false,
+          "enum_values": [
+            "Miền Bắc",
+            "Miền Trung",
+            "Miền Nam",
+            "Tây Nguyên"
+          ]
+        },
+        {
+          "name": "capacity",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "is_active",
+          "data_type": "boolean",
+          "nullable": false,
+          "is_generated": false,
+          "default": "true"
+        },
+        {
+          "name": "created_at",
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "is_generated": false,
+          "default": "now()"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "name": "idx_warehouses_region"
+        }
+      ],
+      "sample_rows": [
+        {
+          "id": 4,
+          "name": "Kho Đà Nẵng",
+          "city": "Đà Nẵng",
+          "region": "Miền Trung",
+          "capacity": 25000,
+          "is_active": true,
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        },
+        {
+          "id": 8,
+          "name": "Kho Pleiku",
+          "city": "Pleiku",
+          "region": "Tây Nguyên",
+          "capacity": 10000,
+          "is_active": true,
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        },
+        {
+          "id": 2,
+          "name": "Kho Hải Phòng",
+          "city": "Hải Phòng",
+          "region": "Miền Bắc",
+          "capacity": 30000,
+          "is_active": true,
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        }
+      ]
+    },
+    {
+      "table_name": "stock",
+      "row_count": 441,
+      "primary_key": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "product_id",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "warehouse_id",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "quantity",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false,
+          "default": "0"
+        },
+        {
+          "name": "min_threshold",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false,
+          "default": "0"
+        },
+        {
+          "name": "reorder_qty",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false,
+          "default": "0"
+        },
+        {
+          "name": "unit_cost",
+          "data_type": "numeric",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "last_updated",
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "is_generated": false,
+          "default": "now()"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "column": "product_id",
+          "references": "products.id"
+        },
+        {
+          "column": "warehouse_id",
+          "references": "warehouses.id"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_stock_low",
+          "partial_where": "WHERE (quantity < min_threshold)"
+        },
+        {
+          "name": "idx_stock_product"
+        },
+        {
+          "name": "idx_stock_warehouse"
+        },
+        {
+          "name": "stock_product_id_warehouse_id_key"
+        }
+      ],
+      "sample_rows": [
+        {
+          "id": 415,
+          "product_id": 76,
+          "warehouse_id": 7,
+          "quantity": 113,
+          "min_threshold": 63,
+          "reorder_qty": 189,
+          "unit_cost": 7125816.22,
+          "last_updated": "2026-03-21T12:36:56.921465+00:00"
+        },
+        {
+          "id": 284,
+          "product_id": 53,
+          "warehouse_id": 2,
+          "quantity": 303,
+          "min_threshold": 194,
+          "reorder_qty": 582,
+          "unit_cost": 7030307.57,
+          "last_updated": "2026-03-21T12:36:56.921465+00:00"
+        },
+        {
+          "id": 226,
+          "product_id": 42,
+          "warehouse_id": 1,
+          "quantity": 539,
+          "min_threshold": 153,
+          "reorder_qty": 459,
+          "unit_cost": 2732389.34,
+          "last_updated": "2026-03-21T12:36:56.921465+00:00"
+        }
+      ],
+      "query_notes": [
+        "UNIQUE constraint on (product_id, warehouse_id) — one row per product per warehouse.",
+        "Use WHERE quantity < min_threshold to find stockout-risk items (partial index idx_stock_low).",
+        "last_updated is auto-refreshed by trigger trg_stock_touch on every UPDATE."
+      ]
+    },
+    {
+      "table_name": "stock_movements",
+      "row_count": 27580,
+      "primary_key": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "product_id",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "from_warehouse_id",
+          "data_type": "integer",
+          "nullable": true,
+          "is_generated": false
+        },
+        {
+          "name": "to_warehouse_id",
+          "data_type": "integer",
+          "nullable": true,
+          "is_generated": false
+        },
+        {
+          "name": "quantity",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "movement_date",
+          "data_type": "date",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "movement_type",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false,
+          "enum_values": [
+            "inbound",
+            "outbound",
+            "transfer",
+            "adjustment",
+            "return",
+            "write_off"
+          ]
+        },
+        {
+          "name": "reference_order_id",
+          "data_type": "integer",
+          "nullable": true,
+          "is_generated": false
+        },
+        {
+          "name": "note",
+          "data_type": "text",
+          "nullable": true,
+          "is_generated": false
+        },
+        {
+          "name": "created_at",
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "is_generated": false,
+          "default": "now()"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "column": "product_id",
+          "references": "products.id"
+        },
+        {
+          "column": "from_warehouse_id",
+          "references": "warehouses.id"
+        },
+        {
+          "column": "to_warehouse_id",
+          "references": "warehouses.id"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_movements_date"
+        },
+        {
+          "name": "idx_movements_from_wh",
+          "partial_where": "WHERE (from_warehouse_id IS NOT NULL)"
+        },
+        {
+          "name": "idx_movements_product"
+        },
+        {
+          "name": "idx_movements_to_wh",
+          "partial_where": "WHERE (to_warehouse_id IS NOT NULL)"
+        },
+        {
+          "name": "idx_movements_type_date"
+        }
+      ],
+      "sample_rows": [
+        {
+          "id": 17556,
+          "product_id": 33,
+          "from_warehouse_id": 6,
+          "to_warehouse_id": null,
+          "quantity": 4,
+          "movement_date": "2024-05-03",
+          "movement_type": "outbound",
+          "reference_order_id": 23453,
+          "note": null,
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        },
+        {
+          "id": 11536,
+          "product_id": 77,
+          "from_warehouse_id": 2,
+          "to_warehouse_id": null,
+          "quantity": 2,
+          "movement_date": "2023-07-13",
+          "movement_type": "outbound",
+          "reference_order_id": 15350,
+          "note": null,
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        },
+        {
+          "id": 19813,
+          "product_id": 42,
+          "from_warehouse_id": 5,
+          "to_warehouse_id": null,
+          "quantity": 18,
+          "movement_date": "2024-08-27",
+          "movement_type": "outbound",
+          "reference_order_id": 26555,
+          "note": null,
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        }
+      ],
+      "query_notes": [
+        "from_warehouse_id IS NULL → inbound (purchase/production).",
+        "to_warehouse_id IS NULL → outbound (sale/write-off).",
+        "Both non-NULL → internal transfer between warehouses.",
+        "reference_order_id links outbound movements back to their source order in the orders table."
+      ]
+    },
+    {
+      "table_name": "departments",
+      "row_count": 10,
+      "primary_key": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "name",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "region",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false,
+          "enum_values": [
+            "Miền Bắc",
+            "Miền Trung",
+            "Miền Nam",
+            "Tây Nguyên",
+            "HQ"
+          ]
+        },
+        {
+          "name": "budget",
+          "data_type": "numeric",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "headcount",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false,
+          "default": "0"
+        },
+        {
+          "name": "manager_id",
+          "data_type": "integer",
+          "nullable": true,
+          "is_generated": false
+        },
+        {
+          "name": "created_at",
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "is_generated": false,
+          "default": "now()"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "column": "manager_id",
+          "references": "employees.id"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "departments_name_key"
+        },
+        {
+          "name": "idx_departments_region"
+        }
+      ],
+      "sample_rows": [
+        {
+          "id": 9,
+          "name": "R&D",
+          "region": "Miền Bắc",
+          "budget": 3500000000.0,
+          "headcount": 19,
+          "manager_id": null,
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        },
+        {
+          "id": 8,
+          "name": "Pháp chế",
+          "region": "HQ",
+          "budget": 1200000000.0,
+          "headcount": 10,
+          "manager_id": null,
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        },
+        {
+          "id": 4,
+          "name": "Tài chính",
+          "region": "HQ",
+          "budget": 4800000000.0,
+          "headcount": 19,
+          "manager_id": 125,
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        }
+      ],
+      "query_notes": [
+        "manager_id is a self-referential FK to employees.id (DEFERRABLE INITIALLY DEFERRED).",
+        "budget is monthly budget in VND. Compare with SUM(payroll.net_salary) for budget analysis."
+      ]
+    },
+    {
+      "table_name": "employees",
+      "row_count": 250,
+      "primary_key": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "name",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "email",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "department_id",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "role",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "level",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false,
+          "enum_values": [
+            "Junior",
+            "Mid",
+            "Senior",
+            "Lead",
+            "Manager",
+            "Director",
+            "C-Level"
+          ]
+        },
+        {
+          "name": "salary",
+          "data_type": "numeric",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "hire_date",
+          "data_type": "date",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "end_date",
+          "data_type": "date",
+          "nullable": true,
+          "is_generated": false
+        },
+        {
+          "name": "status",
+          "data_type": "character varying",
+          "nullable": false,
+          "is_generated": false,
+          "default": "'active'::character varying",
+          "enum_values": [
+            "active",
+            "on_leave",
+            "terminated",
+            "contractor"
+          ]
+        },
+        {
+          "name": "performance_score",
+          "data_type": "numeric",
+          "nullable": true,
+          "is_generated": false
+        },
+        {
+          "name": "created_at",
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "is_generated": false,
+          "default": "now()"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "column": "department_id",
+          "references": "departments.id"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "employees_email_key"
+        },
+        {
+          "name": "idx_employees_active",
+          "partial_where": "WHERE ((status)::text = 'active'::text)"
+        },
+        {
+          "name": "idx_employees_dept"
+        },
+        {
+          "name": "idx_employees_hire_date"
+        },
+        {
+          "name": "idx_employees_level"
+        },
+        {
+          "name": "idx_employees_status"
+        }
+      ],
+      "sample_rows": [
+        {
+          "id": 243,
+          "name": "Quý cô Thảo Đặng",
+          "email": "omai@example.com",
+          "department_id": 10,
+          "role": "CEO",
+          "level": "Mid",
+          "salary": 15086511.72,
+          "hire_date": "2022-12-27",
+          "end_date": null,
+          "status": "active",
+          "performance_score": 1.4,
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        },
+        {
+          "id": 46,
+          "name": "Lâm Văn Bùi",
+          "email": "janevu@example.org",
+          "department_id": 2,
+          "role": "DevOps Engineer",
+          "level": "Mid",
+          "salary": 14014413.74,
+          "hire_date": "2018-05-11",
+          "end_date": null,
+          "status": "active",
+          "performance_score": 4.8,
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        },
+        {
+          "id": 187,
+          "name": "Quý cô Nhật Lê",
+          "email": "john29@example.com",
+          "department_id": 7,
+          "role": "Logistics Manager",
+          "level": "Senior",
+          "salary": 23768015.18,
+          "hire_date": "2023-05-20",
+          "end_date": null,
+          "status": "active",
+          "performance_score": 3.3,
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        }
+      ],
+      "query_notes": [
+        "Use WHERE status = 'active' for current headcount (partial index idx_employees_active).",
+        "end_date IS NULL for currently active employees.",
+        "departments.headcount is auto-synced by trigger trg_headcount_sync."
+      ]
+    },
+    {
+      "table_name": "payroll",
+      "row_count": 5897,
+      "primary_key": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "employee_id",
+          "data_type": "integer",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "month",
+          "data_type": "smallint",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "year",
+          "data_type": "smallint",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "base_salary",
+          "data_type": "numeric",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "bonus",
+          "data_type": "numeric",
+          "nullable": false,
+          "is_generated": false,
+          "default": "0"
+        },
+        {
+          "name": "deduction",
+          "data_type": "numeric",
+          "nullable": false,
+          "is_generated": false,
+          "default": "0"
+        },
+        {
+          "name": "overtime_hours",
+          "data_type": "numeric",
+          "nullable": false,
+          "is_generated": false,
+          "default": "0"
+        },
+        {
+          "name": "net_salary",
+          "data_type": "numeric",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "paid_at",
+          "data_type": "date",
+          "nullable": false,
+          "is_generated": false
+        },
+        {
+          "name": "created_at",
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "is_generated": false,
+          "default": "now()"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "column": "employee_id",
+          "references": "employees.id"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_payroll_employee"
+        },
+        {
+          "name": "idx_payroll_paid_at"
+        },
+        {
+          "name": "idx_payroll_year_month"
+        },
+        {
+          "name": "payroll_employee_id_month_year_key"
+        }
+      ],
+      "sample_rows": [
+        {
+          "id": 1276,
+          "employee_id": 55,
+          "month": 2,
+          "year": 2023,
+          "base_salary": 24011615.88,
+          "bonus": 768563.81,
+          "deduction": 2167130.95,
+          "overtime_hours": 10.1,
+          "net_salary": 22613048.74,
+          "paid_at": "2023-02-27",
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        },
+        {
+          "id": 5382,
+          "employee_id": 229,
+          "month": 1,
+          "year": 2024,
+          "base_salary": 15425364.27,
+          "bonus": 684068.62,
+          "deduction": 1367590.38,
+          "overtime_hours": 3.3,
+          "net_salary": 14741842.51,
+          "paid_at": "2024-01-28",
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        },
+        {
+          "id": 276,
+          "employee_id": 12,
+          "month": 12,
+          "year": 2023,
+          "base_salary": 11165464.46,
+          "bonus": 882102.19,
+          "deduction": 966991.81,
+          "overtime_hours": 17.8,
+          "net_salary": 11080574.84,
+          "paid_at": "2023-12-26",
+          "created_at": "2026-03-21T12:36:56.921465+00:00"
+        }
+      ],
+      "query_notes": [
+        "payroll HAS a 'month' column (SMALLINT 1–12) — use p.month directly.",
+        "net_salary = base_salary + bonus - deduction (enforced by CHECK constraint).",
+        "UNIQUE on (employee_id, month, year) — one row per employee per month."
+      ]
+    }
+  ],
+  "cross_domain_hints": [
+    {
+      "from_table": "stock",
+      "from_column": "product_id",
+      "to_table": "products",
+      "to_column": "id",
+      "note": "Cross-domain FK: inventory.stock → sales.products"
+    },
+    {
+      "from_table": "stock_movements",
+      "from_column": "product_id",
+      "to_table": "products",
+      "to_column": "id",
+      "note": "Cross-domain FK: inventory.stock_movements → sales.products"
+    },
+    {
+      "from_table": "stock_movements",
+      "from_column": "reference_order_id",
+      "to_table": "orders",
+      "to_column": "id",
+      "note": "Soft link (not enforced): links outbound movement to its source order"
+    },
+    {
+      "from_table": "departments",
+      "from_column": "region",
+      "to_table": "orders",
+      "to_column": "region",
+      "note": "Soft link via region string: workforce location ↔ sales territory"
+    },
+    {
+      "from_table": "warehouses",
+      "from_column": "region",
+      "to_table": "orders",
+      "to_column": "region",
+      "note": "Soft link via region string: warehouse location ↔ sales territory"
+    }
+  ],
+  "extraction_note": "This merged info_box contains all 9 tables across Sales, Inventory, and HR domains. Use for cross-domain queries that JOIN across domains."
+}

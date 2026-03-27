@@ -49,3 +49,7 @@ eval/*.json
 ADBA_Project_Context_Prompt_v2.md
 
 checklists/
+
+database_check.txt
+
+testing.py

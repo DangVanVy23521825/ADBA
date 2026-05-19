@@ -150,6 +150,12 @@ def viz_agent_node(state: MultiAgentState) -> MultiAgentState:
             "shared_metadata": {
                 **state.get("shared_metadata", {}),
                 "chart_type": chart_type,
+                "chart_metadata": {
+                    "chart_type": chart_type,
+                    "x_col": result.get("x_col", ""),
+                    "y_col": result.get("y_col", ""),
+                    "title": result.get("title", ""),
+                },
             },
             "action_trace": trace,
             "status": "running",

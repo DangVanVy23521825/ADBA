@@ -1,0 +1,918 @@
+{
+  "summary": {
+    "total_samples": 98,
+    "sql_execution_accuracy": 96.9,
+    "sql_heuristic_accuracy": 100.0,
+    "python_syntax_rate": 100.0,
+    "supervisor_json_rate": 100.0,
+    "insight_json_rate": 92.9,
+    "reflector_json_rate": 100.0,
+    "overall_json_valid_rate": 97.2,
+    "avg_latency_s": 12.42,
+    "per_skill_counts": {
+      "data-analysis": 30,
+      "text-to-sql": 32,
+      "insight-generation": 14,
+      "error-reflection": 4,
+      "supervisor-routing": 18
+    },
+    "targets": {
+      "sql_execution_accuracy": "≥82%",
+      "python_syntax_rate": "≥90%",
+      "supervisor_json_rate": "≥88%",
+      "insight_json_rate": "≥88%",
+      "overall_json_valid_rate": "≥88%"
+    },
+    "total_elapsed_s": 1217.3,
+    "model": "Qwen/Qwen2.5-Coder-7B-Instruct + LoRA:checkpoint-50",
+    "backend": "peft",
+    "adapter_path": "training\\checkpoint-50",
+    "base_model": "Qwen/Qwen2.5-Coder-7B-Instruct",
+    "device": "cuda",
+    "dry_run": false,
+    "test_file": "C:\\Users\\Administrator\\Desktop\\adba\\data\\test.jsonl",
+    "timestamp": "2026-05-19T12:44:09"
+  },
+  "results": [
+    {
+      "idx": 1,
+      "skill": "data-analysis",
+      "latency_s": 14.047,
+      "generated": "import pandas as pd\n\ndf = df.copy()\ndf = df.dropna(subset=['amount'])\n\n# Define bins and labels for the buckets\nbins = [0, 100, 500, 1000, 5000, float('inf')]\nlabels = ['0-100', '100-500', '500-1000', '1000-5000', '>5000']\n\n# Create a new column for the buckets\ndf['amount_bucket'] = pd.cut(df['amount'], bins=bins, labels=labels, right=False)\n\n# Calculate count and revenue per bucket\nbucket_summary = df.groupby('amount_bucket').agg(count=('order_id', 'count'), total_revenue=('amount', 'sum')).res",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 2,
+      "skill": "text-to-sql",
+      "latency_s": 17.656,
+      "generated": "WITH outbound_totals AS (\n    SELECT\n        sm.product_id,\n        SUM(sm.quantity) AS total_outbound\n    FROM stock_movements sm\n    WHERE sm.movement_type = 'outbound'\n    GROUP BY sm.product_id\n),\nwrite_off_totals AS (\n    SELECT\n        sm.product_id,\n        SUM(sm.quantity) AS total_write_off\n    FROM stock_movements sm\n    WHERE sm.movement_type = 'write_off'\n    GROUP BY sm.product_id\n)\nSELECT\n    p.category,\n    COALESCE(wt.total_write_off, 0) AS total_write_off,\n    ot.total_outbound,",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 3,
+      "skill": "text-to-sql",
+      "latency_s": 6.885,
+      "generated": "SELECT\n    status,\n    COUNT(*) AS order_count,\n    ROUND(SUM(amount)) AS total_revenue\nFROM orders\nWHERE year = 2024\n  AND quarter = 4\n  AND status IN ('completed', 'processing')\nGROUP BY status\nORDER BY status",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 4,
+      "skill": "insight-generation",
+      "latency_s": 17.927,
+      "generated": "{\n  \"finding\": \"AOV năm 2024 đạt 2,850,000 VND, tăng +21.8% so với 2,340,000 VND năm 2023.\",\n  \"evidence\": [\n    \"AOV 2024: 2,850,000 VND vs 2023: 2,340,000 VND\",\n    \"Miền Bắc có AOV tăng mạnh nhất với +32%\",\n    \"Tăng trưởng AOV trên tất cả regions cho thấy upselling hiệu quả\"\n  ],\n  \"anomaly\": {\n    \"type\": \"positive_outlier\",\n    \"detail\": \"AOV tăng 21.8% YoY trên tất cả regions cho thấy sự cải thiện đáng kể trong chiến lược marketing và bán hàng.\"\n  },\n  \"action\": \"Kiểm tra các chiến dịch m",
+      "passed": false,
+      "detail": "1 validation error for InsightOutput\nevidence\n  Value error, evidence[2] must contain a number. Got: 'Tăng trưởng AOV trên tất cả regions cho thấy upselling hiệu quả' [type=value_error, input_value=['"
+    },
+    {
+      "idx": 5,
+      "skill": "data-analysis",
+      "latency_s": 14.141,
+      "generated": "import pandas as pd\nimport numpy as np\n\ndf = df.copy()\ndf = df.dropna(subset=['rev_2024', 'rev_2023'])\ndf['yoy_pct'] = ((df['rev_2024'] - df['rev_2023']) / df['rev_2023'] * 100).round(2)\n\nQ1 = df['yoy_pct'].quantile(0.25)\nQ3 = df['yoy_pct'].quantile(0.75)\nIQR = Q3 - Q1\nlower = Q1 - 1.5 * IQR\nupper = Q3 + 1.5 * IQR\n\ndf['is_anomaly'] = ((df['yoy_pct'] < lower) | (df['yoy_pct'] > upper))\ndf",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 6,
+      "skill": "data-analysis",
+      "latency_s": 3.338,
+      "generated": "import pandas as pd\n\ndf = df.copy()\ndf = df.dropna(subset=['monthly_revenue'])\ndf['cumulative_revenue'] = df['monthly_revenue'].cumsum()\ndf",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 7,
+      "skill": "error-reflection",
+      "latency_s": 7.927,
+      "generated": "{\n  \"root_cause\": \"The 'month' column does not exist in the 'orders' table.\",\n  \"error_category\": \"schema_mismatch\",\n  \"fix_strategy\": \"Check the schema of the 'orders' table to find the correct column name for the month. It might be named differently, such as 'order_month' or 'created_month'.\",\n  \"corrected_context\": \"SELECT region, SUM(amount) FROM orders WHERE order_month = 3 AND year = 2024 GROUP BY region\"\n}",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 8,
+      "skill": "data-analysis",
+      "latency_s": 8.068,
+      "generated": "import pandas as pd\nimport numpy as np\nfrom scipy import stats\n\ndf = df.copy()\ndf = df.dropna(subset=['salary'])\n\ndf['z_score'] = (\n    df.groupby('department')['salary']\n    .transform(lambda s: stats.zscore(s, nan_policy='omit'))\n)\ndf['z_score'] = df['z_score'].fillna(0.0).round(3)\ndf['is_anomaly'] = (df['z_score'].abs() > 2)\ndf",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 9,
+      "skill": "data-analysis",
+      "latency_s": 22.057,
+      "generated": "import pandas as pd\nimport numpy as np\nfrom scipy import stats\n\ndf = df.copy()\ndf = df.dropna(subset=['month', 'rev_2024', 'rev_2023'])\n\n# Filter for Q4 months\nq4_months = ['2023-10', '2023-11', '2023-12', '2024-10', '2024-11', '2024-12']\ndf_q4 = df[df['month'].isin(q4_months)]\n\n# Prepare data for linear regression\nx = np.array([i for i in range(len(df_q4))])\ny_2024 = df_q4['rev_2024'].values\ny_2023 = df_q4['rev_2023'].values\n\n# Calculate slopes for both years\nslope_2024 = stats.linregress(x, y_",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 10,
+      "skill": "supervisor-routing",
+      "latency_s": 14.318,
+      "generated": "{\n  \"plan_summary\": \"Xác định sản phẩm Food sắp hết hàng tại kho Miền Nam\",\n  \"steps\": [\n    {\n      \"step\": 1,\n      \"agent\": \"sql\",\n      \"task\": \"Lấy danh sách sản phẩm Food từ kho Miền Nam, bao gồm thông tin số lượng tồn kho và ngưỡng tối thiểu, chỉ lấy sản phẩm có số lượng tồn kho dưới ngưỡng tối thiểu\",\n      \"depends_on\": [],\n      \"skill_type\": \"text-to-sql\"\n    },\n    {\n      \"step\": 2,\n      \"agent\": \"insight\",\n      \"task\": \"Đưa ra danh sách sản phẩm Food sắp hết hàng tại kho Miền Nam",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 11,
+      "skill": "supervisor-routing",
+      "latency_s": 23.323,
+      "generated": "{\n  \"plan_summary\": \"Phân tích xu hướng overtime của phòng Kinh doanh năm 2024\",\n  \"steps\": [\n    {\n      \"step\": 1,\n      \"agent\": \"sql\",\n      \"task\": \"Lấy dữ liệu overtime của phòng Kinh doanh trong năm 2024, bao gồm tháng và số giờ overtime\",\n      \"depends_on\": [],\n      \"skill_type\": \"text-to-sql\"\n    },\n    {\n      \"step\": 2,\n      \"agent\": \"python\",\n      \"task\": \"Tính toán xu hướng overtime theo tháng, xác định các tháng có sự gia tăng hoặc giảm\",\n      \"depends_on\": [\"sql\"],\n      \"ski",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 12,
+      "skill": "data-analysis",
+      "latency_s": 6.349,
+      "generated": "import pandas as pd\n\ndf = df.copy()\nmelted_df = df.melt(id_vars=['region'], value_vars=['q1_rev', 'q2_rev', 'q3_rev', 'q4_rev'], \n                    var_name='quarter', value_name='revenue')\nmelted_df['quarter'] = melted_df['quarter'].str.replace('q', '')\nmelted_df",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 13,
+      "skill": "data-analysis",
+      "latency_s": 6.422,
+      "generated": "import pandas as pd\nimport numpy as np\n\ndf = df.copy()\ndf = df.dropna(subset=['daily_revenue'])\ndf['pct_change'] = df['daily_revenue'].pct_change().round(2)\ndf['is_drop'] = df['pct_change'] < -0.3\nresult = df[df['is_drop']].reset_index(drop=True)\nresult",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 14,
+      "skill": "data-analysis",
+      "latency_s": 9.563,
+      "generated": "import pandas as pd\nimport numpy as np\n\ndf = df.copy()\ndf = df.dropna(subset=['unit_price', 'quantity_sold'])\n\ndf['weighted_unit_price'] = df['unit_price'] * df['quantity_sold']\nweighted_avg = df.groupby('category').agg(weighted_avg_unit_price=('weighted_unit_price', 'sum'),\n                                          total_quantity_sold=('quantity_sold', 'sum')).reset_index()\n\nweighted_avg['weighted_average'] = (weighted_avg['weighted_avg_unit_price'] / weighted_avg['total_quantity_sold']).round(",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 15,
+      "skill": "supervisor-routing",
+      "latency_s": 20.36,
+      "generated": "{\n  \"plan_summary\": \"Phân tích doanh thu theo category và region để phát hiện trend bất thường trong Q4 2024.\",\n  \"steps\": [\n    {\n      \"step\": 1,\n      \"agent\": \"sql\",\n      \"task\": \"Lấy tổng doanh thu theo category và region cho Q4 2024, chỉ tính đơn completed và processing, sắp xếp theo region và category.\",\n      \"depends_on\": [],\n      \"skill_type\": \"text-to-sql\"\n    },\n    {\n      \"step\": 2,\n      \"agent\": \"python\",\n      \"task\": \"Tính toán xu hướng doanh thu theo category và region, phát",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 16,
+      "skill": "data-analysis",
+      "latency_s": 21.224,
+      "generated": "import pandas as pd\nimport numpy as np\nfrom scipy import stats\n\ndf = df.copy()\ndf = df.dropna(subset=['total_spend'])\n\n# Fit a power-law distribution\nfit = stats.powerlaw.fit(df['total_spend'], floc=0)\n\n# Calculate parameters\nalpha = fit[0]\nx_min = fit[1]\n\n# Create a range of values for plotting\nx_vals = np.linspace(x_min, df['total_spend'].max(), 1000)\n\n# Calculate the theoretical CDF and PDF\ncdf_theoretical = stats.powerlaw.cdf(x_vals, alpha, scale=x_min)\npdf_theoretical = stats.powerlaw.pdf(x",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 17,
+      "skill": "text-to-sql",
+      "latency_s": 10.626,
+      "generated": "WITH customer_orders AS (\n    SELECT\n        customer_id,\n        COUNT(*) AS order_count\n    FROM orders\n    WHERE year = 2024\n      AND quarter = 4\n      AND status IN ('completed', 'processing')\n    GROUP BY customer_id\n)\nSELECT\n    c.id,\n    c.name,\n    c.email,\n    c.phone,\n    c.city,\n    c.region,\n    c.segment\nFROM customer_orders co\nJOIN customers c ON co.customer_id = c.id\nWHERE co.order_count > 10",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 18,
+      "skill": "insight-generation",
+      "latency_s": 17.015,
+      "generated": "{\n  \"finding\": \"Tỷ lệ inbound/outbound tháng 11/2024 đạt 1.47, cao hơn mức trung bình 2024 là 0.89.\",\n  \"evidence\": [\n    \"Tỷ lệ inbound/outbound tháng 11/2024: 1.47 vs tháng 12/2023: 0.52\",\n    \"Tỷ lệ inbound/outbound trung bình 2024: 0.89\"\n  ],\n  \"anomaly\": {\n    \"type\": \"positive_outlier\",\n    \"detail\": \"Tăng trưởng inbound vào tháng 11/2024 có thể do hoạt động tái nhập hàng hóa cho dịp lễ nghỉ lễ.\"\n  },\n  \"action\": \"Kiểm tra tình hình tồn kho và điều chỉnh kế hoạch nhập hàng cho tháng 12/202",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 19,
+      "skill": "text-to-sql",
+      "latency_s": 17.968,
+      "generated": "WITH outbound_totals AS (\n    SELECT\n        sm.product_id,\n        SUM(sm.quantity) AS total_outbound\n    FROM stock_movements sm\n    WHERE sm.movement_type = 'outbound'\n    GROUP BY sm.product_id\n),\nwrite_off_totals AS (\n    SELECT\n        sm.product_id,\n        SUM(sm.quantity) AS total_write_off\n    FROM stock_movements sm\n    WHERE sm.movement_type = 'write_off'\n    GROUP BY sm.product_id\n)\nSELECT\n    p.category,\n    COALESCE(wt.total_write_off, 0) AS total_write_off,\n    ot.total_outbound,",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 20,
+      "skill": "supervisor-routing",
+      "latency_s": 14.813,
+      "generated": "{\n  \"plan_summary\": \"Xác định kho có tốc độ xử lý outbound chậm nhất trong Q4 2024\",\n  \"steps\": [\n    {\n      \"step\": 1,\n      \"agent\": \"sql\",\n      \"task\": \"Lấy dữ liệu về số lượng hàng hóa được chuyển đi từ mỗi kho trong Q4 2024, chỉ tính các giao dịch outbound\",\n      \"depends_on\": [],\n      \"skill_type\": \"text-to-sql\"\n    },\n    {\n      \"step\": 2,\n      \"agent\": \"insight\",\n      \"task\": \"Phân tích dữ liệu để xác định kho có tốc độ xử lý outbound chậm nhất, đưa ra nhận xét về nguyên nhân có t",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 21,
+      "skill": "data-analysis",
+      "latency_s": 5.343,
+      "generated": "import pandas as pd\nimport numpy as np\n\ndf = df.copy()\ndf = df.dropna(subset=['total_revenue'])\n\ndf['normalized_revenue'] = df.groupby('region')['total_revenue'].transform(lambda x: (x - x.min()) / (x.max() - x.min()))\ndf",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 22,
+      "skill": "supervisor-routing",
+      "latency_s": 13.578,
+      "generated": "{\n  \"plan_summary\": \"Xác định kho có tỷ lệ sử dụng vượt 90%\",\n  \"steps\": [\n    {\n      \"step\": 1,\n      \"agent\": \"sql\",\n      \"task\": \"Lấy thông tin về số lượng hàng tồn kho và sức chứa của từng kho, tính toán tỷ lệ sử dụng rate cho mỗi kho\",\n      \"depends_on\": [],\n      \"skill_type\": \"text-to-sql\"\n    },\n    {\n      \"step\": 2,\n      \"agent\": \"insight\",\n      \"task\": \"Xác định kho nào có tỷ lệ sử dụng rate vượt 90% và đưa ra khuyến nghị về việc quản lý kho\",\n      \"depends_on\": [\"sql\"],\n      \"",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 23,
+      "skill": "text-to-sql",
+      "latency_s": 11.625,
+      "generated": "WITH customer_revenue AS (\n    SELECT\n        c.id,\n        c.name,\n        SUM(o.amount) AS total_revenue\n    FROM customers c\n    JOIN orders o ON c.id = o.customer_id\n    WHERE o.order_date >= '2024-01-01' AND o.order_date < '2025-01-01'\n      AND o.status IN ('completed', 'processing')\n    GROUP BY c.id, c.name\n)\nSELECT\n    name,\n    total_revenue\nFROM customer_revenue\nORDER BY total_revenue DESC\nLIMIT 5",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 24,
+      "skill": "supervisor-routing",
+      "latency_s": 17.563,
+      "generated": "{\n  \"plan_summary\": \"Tổng hợp báo cáo hội đồng cho Q4 2024, xác định 3 thành tựu và 3 rủi ro.\",\n  \"steps\": [\n    {\n      \"step\": 1,\n      \"agent\": \"sql\",\n      \"task\": \"Lấy danh sách các thành tựu và rủi ro cho Q4 2024, chỉ tính những mục đã được đánh dấu là 'completed' hoặc 'in progress'. Sắp xếp theo mức độ ưu tiên và giới hạn 3 mục cho mỗi loại.\",\n      \"depends_on\": [],\n      \"skill_type\": \"text-to-sql\"\n    },\n    {\n      \"step\": 2,\n      \"agent\": \"insight\",\n      \"task\": \"Đưa ra nhận xét về",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 25,
+      "skill": "text-to-sql",
+      "latency_s": 17.375,
+      "generated": "WITH refunds AS (\n    SELECT\n        product_id,\n        COUNT(*) AS refund_count\n    FROM orders\n    WHERE EXTRACT(MONTH FROM order_date) = 11\n      AND year = 2023\n      AND status = 'refunded'\n    GROUP BY product_id\n),\ntotal_orders AS (\n    SELECT\n        product_id,\n        COUNT(*) AS total_count\n    FROM orders\n    WHERE EXTRACT(MONTH FROM order_date) = 11\n      AND year = 2023\n    GROUP BY product_id\n)\nSELECT\n    p.name,\n    p.sku,\n    r.refund_count,\n    t.total_count,\n    CASE WHEN t.t",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 26,
+      "skill": "insight-generation",
+      "latency_s": 14.016,
+      "generated": "{\n  \"finding\": \"Kho Miền Bắc chỉ còn 12 SKUs với coverage dưới 30 ngày, trong đó 8 SKUs ở mức critical dưới 14 ngày.\",\n  \"evidence\": [\n    \"SKUs với coverage < 30 ngày: 12 vs SKUs với coverage < 14 ngày: 8\",\n    \"Coverage trung bình: 45 ngày\"\n  ],\n  \"anomaly\": {\n    \"type\": \"negative_outlier\",\n    \"detail\": \"Có 8 SKUs ở mức critical, chủ yếu là Electronics, cần được xem xét ngay lập tức.\"\n  },\n  \"action\": \"Kiểm tra và điều chỉnh tồn kho cho 8 SKUs critical trước Q1 2025.\",\n  \"confidence\": \"mediu",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 27,
+      "skill": "text-to-sql",
+      "latency_s": 20.161,
+      "generated": "WITH b2b_orders AS (\n    SELECT\n        customer_id,\n        COUNT(*) AS order_count\n    FROM orders\n    WHERE status IN ('completed', 'processing')\n      AND customer_id IN (SELECT id FROM customers WHERE segment = 'Enterprise')\n    GROUP BY customer_id\n),\nb2b_2023 AS (\n    SELECT\n        customer_id,\n        order_count\n    FROM b2b_orders\n    WHERE order_date < '2024-01-01'\n),\nb2b_2024 AS (\n    SELECT\n        customer_id,\n        order_count\n    FROM b2b_orders\n    WHERE order_date >= '2024-0",
+      "passed": false,
+      "heuristic_pass": true,
+      "exec_pass": false,
+      "heuristic_msg": "ok",
+      "exec_msg": "column \"order_date\" does not exist\nLINE 15:     WHERE order_date < '2024-01-01'\n                   ^\n"
+    },
+    {
+      "idx": 28,
+      "skill": "insight-generation",
+      "latency_s": 14.021,
+      "generated": "{\n  \"finding\": \"Miền Bắc có 8 SKUs dưới ngưỡng tối thiểu, chiếm 10% tổng số sản phẩm.\",\n  \"evidence\": [\n    \"SKUs dưới ngưỡng tối thiểu: 8 vs Miền Nam: 3\",\n    \"SKUs dưới ngưỡng tối thiểu: 8 vs Miền Trung: 1\",\n    \"SKUs dưới ngưỡng tối thiểu: 8 vs Tây Nguyên: 0\"\n  ],\n  \"anomaly\": {\n    \"type\": \"negative_outlier\",\n    \"detail\": \"Miền Bắc có số SKUs nguy hiểm cao nhất, cần chú ý quản lý tồn kho.\"\n  },\n  \"action\": \"Kiểm tra tình trạng tồn kho Miền Bắc ngay lập tức để đảm bảo đủ hàng hóa cho nhu cầu",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 29,
+      "skill": "text-to-sql",
+      "latency_s": 6.751,
+      "generated": "SELECT\n    w.name,\n    w.capacity,\n    s.quantity,\n    ROUND((s.quantity::decimal / w.capacity) * 100, 2) AS utilization_percentage\nFROM warehouses w\nJOIN stock s ON w.id = s.warehouse_id\nORDER BY utilization_percentage DESC\nLIMIT 1",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 30,
+      "skill": "supervisor-routing",
+      "latency_s": 12.963,
+      "generated": "{\n  \"plan_summary\": \"Xác định sản phẩm có gross margin âm trong Q4 2024\",\n  \"steps\": [\n    {\n      \"step\": 1,\n      \"agent\": \"sql\",\n      \"task\": \"Lấy danh sách sản phẩm và gross margin của chúng trong Q4 2024, chỉ tính đơn completed và processing\",\n      \"depends_on\": [],\n      \"skill_type\": \"text-to-sql\"\n    },\n    {\n      \"step\": 2,\n      \"agent\": \"insight\",\n      \"task\": \"Xác định sản phẩm nào có gross margin âm và đưa ra lý do có thể\",\n      \"depends_on\": [\"sql\"],\n      \"skill_type\": \"insig",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 31,
+      "skill": "text-to-sql",
+      "latency_s": 6.688,
+      "generated": "SELECT\n    d.name AS department_name,\n    e.level,\n    COUNT(e.id) AS headcount\nFROM departments d\nJOIN employees e ON d.id = e.department_id\nWHERE e.status = 'active'\nGROUP BY d.name, e.level\nORDER BY d.name, e.level",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 32,
+      "skill": "text-to-sql",
+      "latency_s": 8.817,
+      "generated": "WITH quarterly_hires AS (\n    SELECT\n        EXTRACT(QUARTER FROM hire_date) AS quarter,\n        COUNT(*) AS new_hires\n    FROM employees\n    WHERE hire_date >= '2024-01-01'\n      AND hire_date < '2025-01-01'\n    GROUP BY quarter\n)\nSELECT\n    quarter,\n    new_hires\nFROM quarterly_hires",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 33,
+      "skill": "text-to-sql",
+      "latency_s": 21.276,
+      "generated": "WITH march_2024 AS (\n    SELECT\n        p.category,\n        SUM(o.amount) AS total_revenue\n    FROM orders o\n    JOIN products p ON o.product_id = p.id\n    WHERE EXTRACT(MONTH FROM o.order_date) = 3\n      AND o.year = 2024\n      AND o.status IN ('completed', 'processing')\n    GROUP BY p.category\n),\nmarch_2023 AS (\n    SELECT\n        p.category,\n        SUM(o.amount) AS total_revenue\n    FROM orders o\n    JOIN products p ON o.product_id = p.id\n    WHERE EXTRACT(MONTH FROM o.order_date) = 3\n      ",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 34,
+      "skill": "insight-generation",
+      "latency_s": 16.444,
+      "generated": "{\n  \"finding\": \"Kho TN-01 có tỷ lệ stockout 26.7%, gấp 2.2 lần trung bình 12.4% của các kho khác.\",\n  \"evidence\": [\n    \"Stockout count Kho TN-01: 12 vs tổng SKUs: 45\",\n    \"Stockout count Kho MB-01: 3 vs tổng SKUs: 80\",\n    \"Stockout count Kho MN-01: 7 vs tổng SKUs: 65\"\n  ],\n  \"anomaly\": {\n    \"type\": \"negative_outlier\",\n    \"detail\": \"Kho TN-01 có tỷ lệ stockout cao, ảnh hưởng nghiêm trọng đến 12 SKUs.\"\n  },\n  \"action\": \"Kiểm tra nguyên nhân stockout tại Kho TN-01 và đề xuất giải pháp cải thiệ",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 35,
+      "skill": "supervisor-routing",
+      "latency_s": 21.52,
+      "generated": "{\n  \"plan_summary\": \"Phân tích mẫu thanh toán của khách hàng Enterprise ở Miền Bắc năm 2024\",\n  \"steps\": [\n    {\n      \"step\": 1,\n      \"agent\": \"sql\",\n      \"task\": \"Lấy dữ liệu thanh toán từ bảng orders cho khách hàng Enterprise ở Miền Bắc năm 2024, bao gồm thông tin về số tiền và ngày thanh toán\",\n      \"depends_on\": [],\n      \"skill_type\": \"text-to-sql\"\n    },\n    {\n      \"step\": 2,\n      \"agent\": \"python\",\n      \"task\": \"Phân tích dữ liệu thanh toán để xác định xu hướng và mô hình thanh toá",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 36,
+      "skill": "supervisor-routing",
+      "latency_s": 19.369,
+      "generated": "{\n  \"plan_summary\": \"So sánh tốc độ tăng trưởng giữa SME và Enterprise năm 2024\",\n  \"steps\": [\n    {\n      \"step\": 1,\n      \"agent\": \"sql\",\n      \"task\": \"Lấy tổng doanh thu theo segment SME và Enterprise cho năm 2024, chỉ tính đơn completed và processing\",\n      \"depends_on\": [],\n      \"skill_type\": \"text-to-sql\"\n    },\n    {\n      \"step\": 2,\n      \"agent\": \"python\",\n      \"task\": \"Tính tỷ lệ tăng trưởng YoY của doanh thu giữa SME và Enterprise, xác định sự khác biệt và tạo cột đánh dấu anomaly",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 37,
+      "skill": "insight-generation",
+      "latency_s": 13.422,
+      "generated": "{\n  \"finding\": \"Kho Tây Nguyên có tỷ lệ write-off đạt 28.5% của outbound, gấp 3 lần benchmark ngành.\",\n  \"evidence\": [\n    \"Số lượng write-off: 4,200 units vs outbound: 15,600 units\",\n    \"Net stock giảm -10,900 units cho thấy tình trạng tồn kho không ổn định\"\n  ],\n  \"anomaly\": {\n    \"type\": \"negative_outlier\",\n    \"detail\": \"Write-off rate cao bất thường cho thấy vấn đề trong quy trình quản lý tồn kho.\"\n  },\n  \"action\": \"Kiểm tra quy trình xử lý write-off tại Kho Tây Nguyên để giảm thiểu rủi ro",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 38,
+      "skill": "data-analysis",
+      "latency_s": 7.031,
+      "generated": "import pandas as pd\nfrom datetime import datetime\n\ndf = df.copy()\ndf['last_restock_date'] = pd.to_datetime(df['last_restock_date'], errors='coerce')\ncurrent_date = datetime.now()\n\ndf['days_since_restock'] = (current_date - df['last_restock_date']).dt.days\ndf['is_unrestocked'] = df['days_since_restock'] > 30\ndf",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 39,
+      "skill": "supervisor-routing",
+      "latency_s": 19.005,
+      "generated": "{\n  \"plan_summary\": \"Phân tích hành vi mua hàng của khách hàng VIP trong năm 2024\",\n  \"steps\": [\n    {\n      \"step\": 1,\n      \"agent\": \"sql\",\n      \"task\": \"Lấy danh sách khách hàng và tổng doanh thu của họ trong năm 2024, chỉ tính đơn completed và processing\",\n      \"depends_on\": [],\n      \"skill_type\": \"text-to-sql\"\n    },\n    {\n      \"step\": 2,\n      \"agent\": \"python\",\n      \"task\": \"Xác định top 20% khách hàng dựa trên tổng doanh thu, phân tích sản phẩm mà họ đã mua và số lượng mua\",\n      \"",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 40,
+      "skill": "text-to-sql",
+      "latency_s": 7.172,
+      "generated": "SELECT\n    AVG(e.salary) - (SELECT AVG(salary) FROM employees WHERE department_id = (SELECT id FROM departments WHERE name = 'Kỹ thuật')) AS salary_difference\nFROM employees e\nWHERE e.level = 'Senior' AND e.department_id = (SELECT id FROM departments WHERE name = 'Kỹ thuật')",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 41,
+      "skill": "text-to-sql",
+      "latency_s": 12.953,
+      "generated": "WITH movement_totals AS (\n    SELECT\n        w.region,\n        SUM(CASE WHEN sm.movement_type = 'inbound' THEN sm.quantity ELSE 0 END) AS inbound_quantity,\n        SUM(CASE WHEN sm.movement_type = 'outbound' THEN sm.quantity ELSE 0 END) AS outbound_quantity\n    FROM stock_movements sm\n    JOIN warehouses w ON sm.from_warehouse_id = w.id OR sm.to_warehouse_id = w.id\n    WHERE sm.movement_date BETWEEN '2024-10-01' AND '2024-12-31'\n    GROUP BY w.region\n)\nSELECT\n    region,\n    inbound_quantity,\n  ",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 42,
+      "skill": "text-to-sql",
+      "latency_s": 16.026,
+      "generated": "WITH q1_sales AS (\n    SELECT\n        region,\n        SUM(amount) AS total_revenue\n    FROM orders\n    WHERE year = 2024\n      AND quarter = 1\n      AND status IN ('completed', 'processing')\n    GROUP BY region\n),\nq4_sales AS (\n    SELECT\n        region,\n        SUM(amount) AS total_revenue\n    FROM orders\n    WHERE year = 2024\n      AND quarter = 4\n      AND status IN ('completed', 'processing')\n    GROUP BY region\n)\nSELECT\n    COALESCE(q4.region, q1.region) AS region,\n    COALESCE(q4.total_rev",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 43,
+      "skill": "data-analysis",
+      "latency_s": 21.583,
+      "generated": "import pandas as pd\nimport numpy as np\nfrom scipy import stats\n\ndf = df.copy()\ndf = df.dropna(subset=['month', 'rev_2024', 'rev_2023'])\n\n# Filter for Q4 months\nq4_months = ['2023-10', '2023-11', '2023-12', '2024-10', '2024-11', '2024-12']\ndf_q4 = df[df['month'].isin(q4_months)]\n\n# Prepare data for linear regression\nx = np.array([i for i in range(len(df_q4))])\ny_2024 = df_q4['rev_2024'].values\ny_2023 = df_q4['rev_2023'].values\n\n# Calculate slopes for both years\nslope_2024 = stats.linregress(x, y_",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 44,
+      "skill": "data-analysis",
+      "latency_s": 5.307,
+      "generated": "import pandas as pd\nimport numpy as np\n\ndf = df.copy()\ndf = df.dropna(subset=['current_stock', 'weekly_demand'])\n\navg_weekly_demand = df['weekly_demand'].mean()\ndf['inventory_coverage'] = (df['current_stock'] / avg_weekly_demand).round(2)\ndf",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 45,
+      "skill": "insight-generation",
+      "latency_s": 17.822,
+      "generated": "{\n  \"finding\": \"Doanh thu SME Miền Trung giảm -38% từ T7 đến T12 2024, với doanh thu tháng 7 đạt 45M VND và tháng 12 chỉ còn 28M VND.\",\n  \"evidence\": [\n    \"Doanh thu tháng 7: 45,000,000 VND vs tháng 12: 28,000,000 VND\",\n    \"Xu hướng giảm liên tục 6 tháng với tổng giảm -38%\",\n    \"Tháng 10: 35M VND vs tháng 11: 31M VND\"\n  ],\n  \"anomaly\": {\n    \"type\": \"negative_outlier\",\n    \"detail\": \"Consistent declining trend cho thấy vấn đề cấu trúc cần điều tra từ bộ phận Sales.\"\n  },\n  \"action\": \"Kiểm tra",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 46,
+      "skill": "insight-generation",
+      "latency_s": 13.084,
+      "generated": "{\n  \"finding\": \"Kho Miền Bắc có hiệu quả vận chuyển tốt nhất với avg transfer size 420 units, so với Tây Nguyên chỉ 85 units.\",\n  \"evidence\": [\n    \"Avg transfer size Miền Bắc: 420 units vs Tây Nguyên: 85 units\",\n    \"Avg transfer size toàn bộ kho: 215 units\"\n  ],\n  \"anomaly\": {\n    \"type\": \"negative_outlier\",\n    \"detail\": \"Kho Tây Nguyên có avg transfer size nhỏ nhất, cho thấy giao dịch phân tán và không hiệu quả.\"\n  },\n  \"action\": \"Kiểm tra quy trình vận chuyển kho Tây Nguyên để cải thiện hiệ",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 47,
+      "skill": "text-to-sql",
+      "latency_s": 8.0,
+      "generated": "SELECT\n    d.name AS department_name,\n    SUM(p.overtime_hours) AS total_overtime_hours\nFROM departments d\nJOIN employees e ON d.id = e.department_id\nJOIN payroll p ON e.id = p.employee_id\nWHERE p.month = 3\n  AND p.year = 2024\nGROUP BY d.name\nORDER BY total_overtime_hours DESC",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 48,
+      "skill": "insight-generation",
+      "latency_s": 14.141,
+      "generated": "{\n  \"finding\": \"Kho Tây Nguyên có tỷ lệ write-off lên đến 28.5% của outbound, gấp 3 lần mức tiêu chuẩn ngành.\",\n  \"evidence\": [\n    \"Số lượng write-off: 4,200 units vs outbound: 15,600 units\",\n    \"Net stock âm: -10,900 units cho thấy tình trạng tồn kho không thể tiếp tục được duy trì.\"\n  ],\n  \"anomaly\": {\n    \"type\": \"negative_outlier\",\n    \"detail\": \"Tỷ lệ write-off cao bất thường cho thấy vấn đề nghiêm trọng trong quản lý tồn kho.\"\n  },\n  \"action\": \"Kiểm tra quy trình xử lý write-off và cải t",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 49,
+      "skill": "supervisor-routing",
+      "latency_s": 18.906,
+      "generated": "{\n  \"plan_summary\": \"Phân tích anomalies trong dữ liệu năm 2024 và tổng hợp các anomaly nổi bật\",\n  \"steps\": [\n    {\n      \"step\": 1,\n      \"agent\": \"sql\",\n      \"task\": \"Lấy dữ liệu doanh thu theo ngày cho năm 2024, bao gồm thông tin về số lượng đơn hàng và doanh thu\",\n      \"depends_on\": [],\n      \"skill_type\": \"text-to-sql\"\n    },\n    {\n      \"step\": 2,\n      \"agent\": \"python\",\n      \"task\": \"Phân tích dữ liệu doanh thu để phát hiện anomalies, sử dụng phương pháp IQR để xác định outlier\",\n   ",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 50,
+      "skill": "data-analysis",
+      "latency_s": 5.28,
+      "generated": "import pandas as pd\nimport numpy as np\n\ndf = df.copy()\ndf = df.dropna(subset=['total_revenue'])\n\ndf['normalized_revenue'] = df.groupby('region')['total_revenue'].transform(lambda x: (x - x.min()) / (x.max() - x.min()))\ndf",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 51,
+      "skill": "data-analysis",
+      "latency_s": 5.901,
+      "generated": "import pandas as pd\nimport numpy as np\n\ndf = df.copy()\ndf = df.dropna(subset=['revenue'])\ndf['rolling_avg_revenue'] = df['revenue'].rolling(window=3).mean().round(2)\ndf['deviation_from_actual'] = df['revenue'] - df['rolling_avg_revenue']\ndf",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 52,
+      "skill": "error-reflection",
+      "latency_s": 6.755,
+      "generated": "{\n  \"root_cause\": \"The SQL query is referencing a column named 'department' which does not exist in the 'employees' table. The correct column name is 'department_id'.\",\n  \"error_category\": \"schema_mismatch\",\n  \"fix_strategy\": \"Replace 'department' with 'department_id' in the SQL query.\",\n  \"corrected_context\": \"SELECT department_id, AVG(salary) FROM employees GROUP BY department_id\"\n}",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 53,
+      "skill": "data-analysis",
+      "latency_s": 4.928,
+      "generated": "import pandas as pd\n\ndf = df.copy()\ndf = df.dropna(subset=['category', 'revenue'])\n\ntotal_revenue = df['revenue'].sum()\ndf['market_share_proxy'] = (df['revenue'] / total_revenue) * 100\ndf",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 54,
+      "skill": "text-to-sql",
+      "latency_s": 6.02,
+      "generated": "SELECT DISTINCT s.product_id\nFROM stock s\nLEFT JOIN stock_movements sm ON s.product_id = sm.product_id AND sm.movement_type = 'inbound' AND sm.created_at > CURRENT_DATE - INTERVAL '90 days'\nWHERE sm.id IS NULL",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 55,
+      "skill": "insight-generation",
+      "latency_s": 16.865,
+      "generated": "{\n  \"finding\": \"SME có revenue per customer cao nhất với 2.1M VND/người khách, tăng trưởng +31% YoY, vượt xa Enterprise (+18% YoY).\",\n  \"evidence\": [\n    \"Revenue per customer SME: 2,100,000 VND vs Enterprise: 8,400,000 VND\",\n    \"Số lượng khách hàng SME: 185 vs Enterprise: 42\",\n    \"Tăng trưởng SME: +31% YoY vs Enterprise: +18% YoY\"\n  ],\n  \"anomaly\": {\n    \"type\": \"positive_outlier\",\n    \"detail\": \"SME có growth rate cao hơn Enterprise, cho thấy tiềm năng chuyển đổi lên thị trường cao hơn.\"\n  }",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 56,
+      "skill": "data-analysis",
+      "latency_s": 12.468,
+      "generated": "import pandas as pd\nimport numpy as np\n\ndf = df.copy()\ndf = df.dropna(subset=['total_revenue'])\n\n# Sort by total revenue and calculate cumulative sums\nsorted_df = df.sort_values(by='total_revenue').reset_index(drop=True)\ncumulative_revenue = sorted_df['total_revenue'].cumsum()\ntotal_revenue = sorted_df['total_revenue'].sum()\n\n# Calculate Lorenz curve points\nlorenz_curve = cumulative_revenue / total_revenue\n\n# Create a DataFrame for the Lorenz curve\nlorenz_points = pd.DataFrame({\n    'cumulative_",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 57,
+      "skill": "data-analysis",
+      "latency_s": 4.604,
+      "generated": "import pandas as pd\nimport numpy as np\n\ndf = df.copy()\ndf = df.dropna(subset=['revenue'])\ndf['ema_3_months'] = df['revenue'].ewm(span=3, adjust=False).mean().round(2)\ndf",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 58,
+      "skill": "text-to-sql",
+      "latency_s": 16.397,
+      "generated": "WITH march_revenue AS (\n    SELECT\n        SUM(amount) AS total_revenue\n    FROM orders\n    WHERE EXTRACT(MONTH FROM order_date) = 3\n      AND year = 2024\n      AND status IN ('completed', 'processing')\n),\naverage_revenue AS (\n    SELECT\n        AVG(total_revenue) AS avg_revenue\n    FROM (\n        SELECT\n            SUM(amount) AS total_revenue\n        FROM orders\n        WHERE order_date >= '2024-01-01' AND order_date < '2024-04-01'\n          AND status IN ('completed', 'processing')\n        GR",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 59,
+      "skill": "text-to-sql",
+      "latency_s": 21.374,
+      "generated": "WITH march_2024 AS (\n    SELECT\n        p.category,\n        SUM(o.amount) AS total_revenue\n    FROM orders o\n    JOIN products p ON o.product_id = p.id\n    WHERE EXTRACT(MONTH FROM o.order_date) = 3\n      AND o.year = 2024\n      AND o.status IN ('completed', 'processing')\n    GROUP BY p.category\n),\nmarch_2023 AS (\n    SELECT\n        p.category,\n        SUM(o.amount) AS total_revenue\n    FROM orders o\n    JOIN products p ON o.product_id = p.id\n    WHERE EXTRACT(MONTH FROM o.order_date) = 3\n      ",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 60,
+      "skill": "data-analysis",
+      "latency_s": 14.611,
+      "generated": "import pandas as pd\nimport numpy as np\n\ndf = df.copy()\ndf = df.dropna(subset=['total_movements'])\n\n# Calculate cumulative sum and rank\ndf['cumulative_sum'] = df['total_movements'].cumsum()\ndf['rank'] = df['total_movements'].rank(method='dense')\n\n# Total movements\ntotal_movements = df['total_movements'].sum()\n\n# Top 20% warehouses by total movements\ntop_20_percent = df.nlargest(int(len(df) * 0.2), 'total_movements')\n\n# Contribution of top 20% to total movements\ncontribution_top_20 = top_20_percen",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 61,
+      "skill": "insight-generation",
+      "latency_s": 15.707,
+      "generated": "{\n  \"finding\": \"Overtime cost của phòng Kinh doanh Q4 2024 đạt 245M VND, vượt ngân sách 36% so với 180M VND.\",\n  \"evidence\": [\n    \"Overtime cost Q4 2024: 245,000,000 VND vs ngân sách: 180,000,000 VND\",\n    \"Top 3 nhân viên có tổng overtime > 80h mỗi người\"\n  ],\n  \"anomaly\": {\n    \"type\": \"negative_outlier\",\n    \"detail\": \"Overtime cost vượt ngân sách đáng kể, cần xem xét lại workload của nhân viên.\"\n  },\n  \"action\": \"Kiểm tra và điều chỉnh workload của 3 nhân viên có tổng overtime cao để giảm c",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 62,
+      "skill": "text-to-sql",
+      "latency_s": 3.286,
+      "generated": "SELECT DISTINCT s.product_id\nFROM stock s\nWHERE s.quantity = 0",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 63,
+      "skill": "text-to-sql",
+      "latency_s": 7.672,
+      "generated": "SELECT\n    order_date,\n    ROUND(SUM(amount)) AS daily_revenue\nFROM orders\nWHERE EXTRACT(MONTH FROM order_date) = 1\n  AND year = 2024\n  AND region = 'Miền Bắc'\n  AND status IN ('completed', 'processing')\nGROUP BY order_date\nORDER BY order_date",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 64,
+      "skill": "insight-generation",
+      "latency_s": 17.932,
+      "generated": "{\n  \"finding\": \"Có 8 khách hàng Enterprise không mua hàng trong 60+ ngày, với doanh thu Q3 2024 tổng cộng 1.2B VND.\",\n  \"evidence\": [\n    \"Số lượng khách hàng Enterprise không mua hàng: 8 vs kỳ so sánh: 0\",\n    \"Doanh thu Q3 2024: 1,200,000,000 VND vs doanh thu Q2 2024: 1,050,000,000 VND\"\n  ],\n  \"anomaly\": {\n    \"type\": \"negative_outlier\",\n    \"detail\": \"Top 3 khách hàng có nguy cơ churning cao: Công ty A (180 ngày không mua), Công ty B (95 ngày), và Công ty C (72 ngày).\"\n  },\n  \"action\": \"Kiểm ",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 65,
+      "skill": "data-analysis",
+      "latency_s": 7.667,
+      "generated": "import pandas as pd\nimport numpy as np\n\ndf = df.copy()\ndf = df.dropna(subset=['salary'])\n\npercentiles = np.percentile(df['salary'], [33.33, 66.67])\ndf['salary_band'] = pd.cut(df['salary'], bins=[df['salary'].min(), percentiles[0], percentiles[1], df['salary'].max()], labels=['Low', 'Mid', 'High'])\ndf",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 66,
+      "skill": "text-to-sql",
+      "latency_s": 12.703,
+      "generated": "WITH customer_revenue AS (\n    SELECT\n        customer_id,\n        region,\n        SUM(amount) AS total_revenue\n    FROM orders\n    WHERE year = 2024\n      AND quarter = 4\n      AND status IN ('completed', 'processing')\n    GROUP BY customer_id, region\n),\nranked_customers AS (\n    SELECT\n        customer_id,\n        region,\n        total_revenue,\n        ROW_NUMBER() OVER (PARTITION BY region ORDER BY total_revenue DESC) AS rank\n    FROM customer_revenue\n)\nSELECT\n    r.customer_id,\n    r.region,",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 67,
+      "skill": "supervisor-routing",
+      "latency_s": 20.328,
+      "generated": "{\n  \"plan_summary\": \"Phân tích vấn đề pricing của sản phẩm ELEC-007 từ Q2 2024\",\n  \"steps\": [\n    {\n      \"step\": 1,\n      \"agent\": \"sql\",\n      \"task\": \"Lấy dữ liệu giá bán và số lượng bán của sản phẩm ELEC-007 từ Q2 2024, chỉ tính đơn completed và processing\",\n      \"depends_on\": [],\n      \"skill_type\": \"text-to-sql\"\n    },\n    {\n      \"step\": 2,\n      \"agent\": \"python\",\n      \"task\": \"Phân tích xu hướng giá bán và số lượng bán của sản phẩm ELEC-007, xác định các điểm bất thường trong dữ liệu\"",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 68,
+      "skill": "text-to-sql",
+      "latency_s": 8.766,
+      "generated": "SELECT\n    e.department_id,\n    AVG(CASE WHEN e.level = 'Manager' THEN p.net_salary ELSE 0 END) AS avg_manager_net_salary,\n    AVG(CASE WHEN e.level = 'Senior' THEN p.net_salary ELSE 0 END) AS avg_senior_net_salary\nFROM employees e\nJOIN payroll p ON e.id = p.employee_id\nWHERE e.status = 'active'\nGROUP BY e.department_id",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 69,
+      "skill": "supervisor-routing",
+      "latency_s": 14.63,
+      "generated": "{\n  \"plan_summary\": \"Xác định khách hàng SME tiềm năng để nâng cấp lên Enterprise tier trong Q1 2025\",\n  \"steps\": [\n    {\n      \"step\": 1,\n      \"agent\": \"sql\",\n      \"task\": \"Lấy danh sách khách hàng SME hiện tại và thông tin về số lần mua hàng của họ trong năm 2024, xác định tiêu chí để đánh giá potential nâng cấp\",\n      \"depends_on\": [],\n      \"skill_type\": \"text-to-sql\"\n    },\n    {\n      \"step\": 2,\n      \"agent\": \"insight\",\n      \"task\": \"Phân tích dữ liệu để xác định khách hàng SME tiềm n",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 70,
+      "skill": "text-to-sql",
+      "latency_s": 7.229,
+      "generated": "SELECT\n    region,\n    COUNT(*) AS order_count\nFROM orders\nWHERE amount > 10000000\n  AND year = 2024\n  AND quarter = 4\n  AND status IN ('completed', 'processing')\nGROUP BY region\nORDER BY order_count DESC",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 71,
+      "skill": "data-analysis",
+      "latency_s": 7.355,
+      "generated": "import pandas as pd\nimport numpy as np\n\ndf = df.copy()\ndf = df.dropna(subset=['avg_daily_demand', 'demand_std', 'current_stock'])\n\n# Calculate safety_stock_days\ndf['safety_stock_days'] = (df['current_stock'] / df['avg_daily_demand']).round(2)\n\n# Filter products with safety_stock_days < 7\nresult = df[df['safety_stock_days'] < 7]\nresult",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 72,
+      "skill": "supervisor-routing",
+      "latency_s": 26.286,
+      "generated": "{\n  \"plan_summary\": \"So sánh hiệu quả kho theo region cho các loại chuyển giao hàng: outbound, write-off và transfer\",\n  \"steps\": [\n    {\n      \"step\": 1,\n      \"agent\": \"sql\",\n      \"task\": \"Lấy dữ liệu về số lượng hàng hóa được chuyển giao hàng (outbound), write-off và transfer theo region từ bảng stock_movements\",\n      \"depends_on\": [],\n      \"skill_type\": \"text-to-sql\"\n    },\n    {\n      \"step\": 2,\n      \"agent\": \"python\",\n      \"task\": \"Tính toán tỷ lệ phần trăm giữa outbound, write-off và",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 73,
+      "skill": "supervisor-routing",
+      "latency_s": 14.927,
+      "generated": "{\n  \"plan_summary\": \"Phân tích khách hàng tăng spending nhanh nhất trong 6 tháng cuối năm 2024.\",\n  \"steps\": [\n    {\n      \"step\": 1,\n      \"agent\": \"sql\",\n      \"task\": \"Lấy tổng doanh thu theo khách hàng cho 6 tháng cuối năm 2024, chỉ tính đơn completed và processing, sắp xếp giảm dần.\",\n      \"depends_on\": [],\n      \"skill_type\": \"text-to-sql\"\n    },\n    {\n      \"step\": 2,\n      \"agent\": \"insight\",\n      \"task\": \"Xác định khách hàng có doanh thu tăng nhanh nhất trong 6 tháng cuối năm 2024 và ",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 74,
+      "skill": "text-to-sql",
+      "latency_s": 7.422,
+      "generated": "SELECT\n    e.name,\n    e.email,\n    e.hire_date,\n    e.end_date\nFROM employees e\nWHERE e.level = 'Senior'\n  AND e.status = 'terminated'\n  AND e.end_date BETWEEN '2024-04-01' AND '2024-06-30'",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 75,
+      "skill": "data-analysis",
+      "latency_s": 14.813,
+      "generated": "import pandas as pd\nimport numpy as np\n\ndf = df.copy()\ndf = df.dropna(subset=['annual_revenue'])\n\n# Calculate total annual revenue\ntotal_revenue = df['annual_revenue'].sum()\n\n# Calculate revenue contribution percentage\ndf['revenue_contribution'] = (df['annual_revenue'] / total_revenue) * 100\n\n# Define thresholds for ABC classification\nthresholds = {\n    'A': 0.8,\n    'B': 0.15,\n    'C': 0.05\n}\n\n# Create a function to classify each product\ndef classify_inventory(rev_contribution):\n    if rev_cont",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 76,
+      "skill": "data-analysis",
+      "latency_s": 9.99,
+      "generated": "import pandas as pd\nimport numpy as np\n\ndf = df.copy()\ndf = df.dropna(subset=['total_revenue'])\n\n# Sort by total revenue and calculate cumulative sums\nsorted_df = df.sort_values(by='total_revenue').reset_index(drop=True)\ncumulative_revenue = sorted_df['total_revenue'].cumsum()\ntotal_revenue = sorted_df['total_revenue'].sum()\n\n# Calculate Lorenz curve points\nlorenz_curve_points = cumulative_revenue / total_revenue\n\n# Add the Lorenz curve points to the DataFrame\nsorted_df['lorenz_curve'] = lorenz_",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 77,
+      "skill": "insight-generation",
+      "latency_s": 14.333,
+      "generated": "{\n  \"finding\": \"Tây Nguyên có tỷ lệ đơn hàng cancelled cao nhất Q3 2024 với 18.2%, gấp 2 lần trung bình cả nước 10.7%.\",\n  \"evidence\": [\n    \"Tỷ lệ cancelled Tây Nguyên: 18.2% vs trung bình cả nước: 10.7%\",\n    \"Số đơn hàng cancelled Tây Nguyên: 68 vs tổng số đơn hàng: 374\"\n  ],\n  \"anomaly\": {\n    \"type\": \"negative_outlier\",\n    \"detail\": \"Tây Nguyên có cancel rate gấp 2× average, cần điều tra nguyên nhân.\"\n  },\n  \"action\": \"Kiểm tra nguyên nhân tỷ lệ cancelled cao tại Tây Nguyên và đề xuất giải",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 78,
+      "skill": "error-reflection",
+      "latency_s": 7.927,
+      "generated": "{\n  \"root_cause\": \"The 'month' column does not exist in the 'orders' table.\",\n  \"error_category\": \"schema_mismatch\",\n  \"fix_strategy\": \"Check the schema of the 'orders' table to find the correct column name for the month. It might be named differently, such as 'order_month' or 'created_month'.\",\n  \"corrected_context\": \"SELECT region, SUM(amount) FROM orders WHERE order_month = 3 AND year = 2024 GROUP BY region\"\n}",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 79,
+      "skill": "text-to-sql",
+      "latency_s": 8.093,
+      "generated": "WITH max_min_threshold AS (\n    SELECT\n        warehouse_id,\n        MAX(min_threshold) AS max_min_threshold\n    FROM stock\n    GROUP BY warehouse_id\n)\nSELECT\n    s.warehouse_id,\n    s.product_id,\n    s.min_threshold\nFROM stock s\nJOIN max_min_threshold mmt ON s.warehouse_id = mmt.warehouse_id AND s.min_threshold = mmt.max_min_threshold",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 80,
+      "skill": "data-analysis",
+      "latency_s": 7.245,
+      "generated": "import pandas as pd\nimport numpy as np\n\ndf = df.copy()\ndf = df.dropna(subset=['actual_spend', 'budget'])\n\ndf['variance'] = df['actual_spend'] - df['budget']\ndf['over_under_pct'] = ((df['variance'] / df['budget']) * 100).round(2)\n\nresult = df[['quarter', 'variance', 'over_under_pct']]\nresult",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 81,
+      "skill": "supervisor-routing",
+      "latency_s": 19.792,
+      "generated": "{\n  \"plan_summary\": \"Phân tích tình hình tuyển dụng để xác định phòng ban ưu tiên cho Q1 2025\",\n  \"steps\": [\n    {\n      \"step\": 1,\n      \"agent\": \"sql\",\n      \"task\": \"Lấy thông tin về số lượng nhân viên hiện tại và dự kiến cần tuyển của từng phòng ban cho Q1 2025\",\n      \"depends_on\": [],\n      \"skill_type\": \"text-to-sql\"\n    },\n    {\n      \"step\": 2,\n      \"agent\": \"python\",\n      \"task\": \"Tính toán tỷ lệ thiếu hụt nhân sự và xác định phòng ban nào cần tuyển dụng nhiều nhất, thêm cột đánh dấu",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 82,
+      "skill": "text-to-sql",
+      "latency_s": 7.317,
+      "generated": "SELECT\n    id,\n    customer_id,\n    product_id,\n    region,\n    quantity,\n    unit_price,\n    discount_rate,\n    amount,\n    order_date,\n    payment_method\nFROM orders\nWHERE year = 2024\n  AND status IN ('completed', 'processing')\nORDER BY amount DESC\nLIMIT 10",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 83,
+      "skill": "text-to-sql",
+      "latency_s": 12.838,
+      "generated": "WITH department_budget AS (\n    SELECT\n        d.id,\n        d.name,\n        d.budget,\n        COUNT(e.id) AS headcount\n    FROM departments d\n    LEFT JOIN employees e ON d.id = e.department_id\n    WHERE e.status = 'active'\n    GROUP BY d.id, d.name, d.budget\n),\nefficiency_ratio AS (\n    SELECT\n        db.id,\n        db.name,\n        db.budget,\n        db.headcount,\n        CASE WHEN db.budget > 0 THEN db.headcount / db.budget ELSE 0 END AS efficiency\n    FROM department_budget db\n)\nSELECT\n    ",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 84,
+      "skill": "text-to-sql",
+      "latency_s": 6.542,
+      "generated": "SELECT COUNT(*) \nFROM orders\nWHERE region = 'Miền Nam'\n  AND amount > 5000000\n  AND year = 2024\n  AND quarter = 3\n  AND status IN ('completed', 'processing');",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 85,
+      "skill": "data-analysis",
+      "latency_s": 5.24,
+      "generated": "import pandas as pd\nimport numpy as np\n\ndf = df.copy()\ndf = df.dropna(subset=['stock_quantity', 'unit_cost'])\ndf['holding_cost'] = (df['stock_quantity'] * df['unit_cost'] * 0.20 / 12).round(2)\ndf",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 86,
+      "skill": "data-analysis",
+      "latency_s": 12.615,
+      "generated": "import pandas as pd\nimport numpy as np\nfrom scipy import stats\n\ndf = df.copy()\ndf = df.dropna(subset=['amount'])\n\naverage_order_value = df.groupby('region')['amount'].mean().reset_index()\n\nconfidence_intervals = []\nfor region, group in df.groupby('region'):\n    n = len(group)\n    mean = group['amount'].mean()\n    se = group['amount'].sem()\n    margin_of_error = stats.t.ppf(0.975, n-1) * se\n    ci_lower = mean - margin_of_error\n    ci_upper = mean + margin_of_error\n    confidence_intervals.append",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 87,
+      "skill": "error-reflection",
+      "latency_s": 6.937,
+      "generated": "{\n  \"root_cause\": \"The SQL query is referencing a column named 'department' which does not exist in the 'employees' table. The correct column name is 'department_id'.\",\n  \"error_category\": \"schema_mismatch\",\n  \"fix_strategy\": \"Replace 'department' with 'department_id' in the SQL query.\",\n  \"corrected_context\": \"SELECT department_id, AVG(salary) FROM employees GROUP BY department_id\"\n}",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 88,
+      "skill": "data-analysis",
+      "latency_s": 4.589,
+      "generated": "import pandas as pd\nimport numpy as np\n\ndf = df.copy()\ndf = df.dropna(subset=['monthly_revenue'])\n\ncv = df['monthly_revenue'].std() / df['monthly_revenue'].mean()\nresult = cv.round(2)\nresult",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 89,
+      "skill": "data-analysis",
+      "latency_s": 11.969,
+      "generated": "import pandas as pd\nimport numpy as np\n\ndf = df.copy()\ndf = df.dropna(subset=['month', 'revenue'])\n\n# Convert month to datetime if not already\ndf['month'] = pd.to_datetime(df['month'], format='%B')\n\n# Group by month and calculate average revenue\nseasonal_index = df.groupby(df['month'].dt.month)['revenue'].mean().reset_index()\n\n# Rename columns for clarity\nseasonal_index.columns = ['month_number', 'average_revenue']\n\n# Calculate seasonal index relative to the overall average revenue\noverall_avera",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 90,
+      "skill": "data-analysis",
+      "latency_s": 5.109,
+      "generated": "import pandas as pd\n\ndf = df.copy()\ndf = df.dropna(subset=['customer_id', 'categories_purchased'])\n\ncross_sell_rate = (df['customer_id'].nunique() / len(df)) * 100\nresult = pd.DataFrame({'cross_sell_rate': [cross_sell_rate]})\nresult",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 91,
+      "skill": "text-to-sql",
+      "latency_s": 12.255,
+      "generated": "WITH recent_returns AS (\n    SELECT\n        COUNT(*) AS return_count\n    FROM orders\n    WHERE order_date >= CURRENT_DATE - INTERVAL '60 days'\n      AND status = 'refunded'\n),\ntotal_transactions AS (\n    SELECT\n        COUNT(*) AS transaction_count\n    FROM orders\n    WHERE order_date >= CURRENT_DATE - INTERVAL '60 days'\n      AND product_id IN (SELECT id FROM products WHERE category = 'Electronics')\n)\nSELECT\n    CASE \n        WHEN tt.transaction_count > 0 THEN CAST(rt.return_count AS DECIMAL) /",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 92,
+      "skill": "supervisor-routing",
+      "latency_s": 21.24,
+      "generated": "{\n  \"plan_summary\": \"Phân tích mẫu thanh toán của khách hàng Enterprise ở Miền Bắc năm 2024\",\n  \"steps\": [\n    {\n      \"step\": 1,\n      \"agent\": \"sql\",\n      \"task\": \"Lấy dữ liệu thanh toán từ bảng orders cho khách hàng Enterprise ở Miền Bắc năm 2024, bao gồm thông tin về số tiền và ngày thanh toán\",\n      \"depends_on\": [],\n      \"skill_type\": \"text-to-sql\"\n    },\n    {\n      \"step\": 2,\n      \"agent\": \"python\",\n      \"task\": \"Phân tích dữ liệu thanh toán để xác định xu hướng và mô hình thanh toá",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 93,
+      "skill": "text-to-sql",
+      "latency_s": 7.203,
+      "generated": "SELECT\n    AVG(e.salary) - (SELECT AVG(salary) FROM employees WHERE department_id = (SELECT id FROM departments WHERE name = 'Kỹ thuật')) AS salary_difference\nFROM employees e\nWHERE e.level = 'Senior' AND e.department_id = (SELECT id FROM departments WHERE name = 'Kỹ thuật')",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 94,
+      "skill": "text-to-sql",
+      "latency_s": 10.047,
+      "generated": "WITH q3_sales AS (\n    SELECT\n        product_id,\n        SUM(quantity) AS total_quantity\n    FROM orders\n    WHERE year = 2024\n      AND quarter = 3\n      AND status IN ('completed', 'processing')\n    GROUP BY product_id\n)\nSELECT\n    p.category,\n    q.total_quantity\nFROM q3_sales q\nJOIN products p ON q.product_id = p.id\nWHERE p.category = 'Food & Beverage'\nORDER BY q.total_quantity DESC\nLIMIT 1",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 95,
+      "skill": "data-analysis",
+      "latency_s": 4.907,
+      "generated": "import pandas as pd\n\ndf = df.copy()\ndf = df.dropna(subset=['category', 'revenue'])\n\ntotal_revenue = df['revenue'].sum()\ndf['market_share_proxy'] = (df['revenue'] / total_revenue) * 100\ndf",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 96,
+      "skill": "text-to-sql",
+      "latency_s": 9.463,
+      "generated": "WITH city_revenue AS (\n    SELECT\n        c.city,\n        SUM(o.amount) AS total_revenue\n    FROM orders o\n    JOIN customers c ON o.customer_id = c.id\n    WHERE o.year = 2024\n      AND o.status IN ('completed', 'processing')\n    GROUP BY c.city\n)\nSELECT\n    city,\n    ROUND(total_revenue) AS total_revenue\nFROM city_revenue\nORDER BY total_revenue DESC\nLIMIT 5",
+      "passed": true,
+      "heuristic_pass": true,
+      "exec_pass": true,
+      "heuristic_msg": "ok",
+      "exec_msg": "ok"
+    },
+    {
+      "idx": 97,
+      "skill": "supervisor-routing",
+      "latency_s": 19.453,
+      "generated": "{\n  \"plan_summary\": \"So sánh hiệu suất của từng phòng ban dựa trên doanh thu đóng góp và số lượng nhân viên\",\n  \"steps\": [\n    {\n      \"step\": 1,\n      \"agent\": \"sql\",\n      \"task\": \"Lấy tổng doanh thu đóng góp (revenue_contribution) và số lượng nhân viên (headcount) theo từng phòng ban, chỉ tính đơn completed và processing\",\n      \"depends_on\": [],\n      \"skill_type\": \"text-to-sql\"\n    },\n    {\n      \"step\": 2,\n      \"agent\": \"python\",\n      \"task\": \"Tính toán hiệu suất của từng phòng ban bằng ",
+      "passed": true,
+      "detail": "ok"
+    },
+    {
+      "idx": 98,
+      "skill": "insight-generation",
+      "latency_s": 13.959,
+      "generated": "{\n  \"finding\": \"Kho Miền Bắc có hiệu quả vận chuyển tốt nhất với avg transfer size 420 units, trong khi kho Tây Nguyên có avg transfer size 85 units, thấp hơn nhiều.\",\n  \"evidence\": [\n    \"Avg transfer size Kho Miền Bắc: 420 units vs Kho Tây Nguyên: 85 units\",\n    \"Avg transfer size toàn bộ kho: 215 units\"\n  ],\n  \"anomaly\": {\n    \"type\": \"negative_outlier\",\n    \"detail\": \"Kho Tây Nguyên có avg transfer size nhỏ nhất, cho thấy việc giao hàng bị phân tán và không hiệu quả.\"\n  },\n  \"action\": \"Kiểm ",
+      "passed": true,
+      "detail": "ok"
+    }
+  ]
+}

@@ -15,6 +15,8 @@ class MultiAgentState(TypedDict):
 
     # ── Supervisor ─────────────────────────────────────────
     execution_plan: list[dict[str, Any]]
+    dependency_graph: NotRequired[dict[str, list[str]]]
+    ready_agents: NotRequired[list[str]]
     current_agent: str
     completed_agents: list[str]
 
@@ -46,6 +48,8 @@ def make_initial_state(query: str, info_box: dict[str, Any]) -> MultiAgentState:
         query=query,
         info_box=info_box,
         execution_plan=[],
+        dependency_graph={},
+        ready_agents=[],
         current_agent="supervisor",
         completed_agents=[],
         agent_outputs={},

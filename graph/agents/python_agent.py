@@ -144,6 +144,7 @@ def python_agent_node(state: MultiAgentState) -> MultiAgentState:
                 **state.get("shared_metadata", {}),
                 "python_row_count": len(df_out),
                 "python_stats": stats,
+                "python_result": {"code": code, "stats": stats},
             },
             "action_trace": trace,
             "status": "running",

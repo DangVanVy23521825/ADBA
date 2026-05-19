@@ -7,7 +7,8 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Literal
+from collections import defaultdict, deque
+from typing import Any, Literal
 
 from graph.state import MultiAgentState
 from graph.utils import append_trace
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 # agent_error_counts increases after a retry.
 MAX_REFLECTOR_PASSES_PER_AGENT = 8
 MAX_SUPERVISOR_RETRIES = 3
+SPECIALIST_AGENTS = {"sql", "python", "viz", "insight"}
 
 # ── Prompt ────────────────────────────────────────────────────────────────────
 
@@ -32,6 +34,67 @@ SUPERVISOR_SYSTEM_PROMPT: str = _PROMPT_PATH.read_text(encoding="utf-8")
 def _build_system_prompt(info_box: dict) -> str:
     """Render the prompt template with the current schema info_box."""
     return SUPERVISOR_SYSTEM_PROMPT.replace("{info_box}", json.dumps(info_box, ensure_ascii=False))
+
+
+def build_dependency_graph(plan: list[dict[str, Any]]) -> dict[str, list[str]]:
+    """Return JSON-safe dependency graph keyed by agent name."""
+    return {str(step.get("agent", "")): list(step.get("depends_on", [])) for step in plan}
+
+
+def resolve_ready_agents(
+    plan: list[dict[str, Any]],
+    completed_agents: list[str],
+    blocked_agents: set[str] | None = None,
+) -> list[str]:
+    """Return all dependency-satisfied agents in stable step order.
+
+    The graph can expose multiple ready agents for future parallel dispatch. The
+    current LangGraph wiring still consumes the first item for sequential runs.
+    """
+    completed = set(completed_agents)
+    blocked = blocked_agents or set()
+    ready: list[str] = []
+    for step in sorted(plan, key=lambda s: int(s.get("step", 0))):
+        agent = str(step.get("agent", ""))
+        if agent in completed or agent in blocked:
+            continue
+        deps = step.get("depends_on", [])
+        if all(dep in completed for dep in deps):
+            ready.append(agent)
+    return ready
+
+
+def validate_dependency_graph(plan: list[dict[str, Any]]) -> dict[str, list[str]]:
+    """Validate a full DAG from plain dict plan and return its adjacency map."""
+    agents = [str(step.get("agent", "")) for step in plan]
+    known = set(agents)
+    graph = build_dependency_graph(plan)
+
+    for agent, deps in graph.items():
+        unknown = set(deps) - known
+        if unknown:
+            raise ValueError(f"agent '{agent}' depends on unknown agents: {sorted(unknown)}")
+
+    indegree = {agent: 0 for agent in agents}
+    successors: dict[str, list[str]] = defaultdict(list)
+    for agent, deps in graph.items():
+        for dep in deps:
+            indegree[agent] += 1
+            successors[dep].append(agent)
+
+    queue = deque([agent for agent in agents if indegree[agent] == 0])
+    visited: list[str] = []
+    while queue:
+        agent = queue.popleft()
+        visited.append(agent)
+        for successor in successors[agent]:
+            indegree[successor] -= 1
+            if indegree[successor] == 0:
+                queue.append(successor)
+
+    if len(visited) != len(agents):
+        raise ValueError("execution_plan contains a dependency cycle")
+    return graph
 
 
 # ── Node ──────────────────────────────────────────────────────────────────────
@@ -111,6 +174,8 @@ def supervisor_node(state: MultiAgentState) -> MultiAgentState:
 
     # Convert back to plain dicts for LangGraph state (must be JSON-safe).
     plan_dicts = [step.model_dump() for step in validated.steps]
+    dependency_graph = validate_dependency_graph(plan_dicts)
+    ready_agents = resolve_ready_agents(plan_dicts, state.get("completed_agents", []) + ["supervisor"])
 
     trace = append_trace(state, "supervisor", "parse_intent",
                          f"Plan generated: {validated.agents_sequence()}", "ok")
@@ -119,6 +184,8 @@ def supervisor_node(state: MultiAgentState) -> MultiAgentState:
     return {
         **state,
         "execution_plan": plan_dicts,
+        "dependency_graph": dependency_graph,
+        "ready_agents": ready_agents,
         "current_agent": "supervisor",
         "completed_agents": state.get("completed_agents", []) + ["supervisor"],
         "agent_outputs": {
@@ -139,16 +206,16 @@ def route_next_agent(state: MultiAgentState) -> Literal[
 
     Rules:
       1. status == 'failed' or 'success' → END.
-      2. Scan execution_plan in order for the first unstarted agent whose
-         dependencies are all satisfied.
-      3. Specialist stuck failing: agent_outputs[name].status == 'error' OR
+      2. Resolve the full dependency graph and expose all currently ready agents
+         in state/shared_metadata for future parallel dispatch.
+      3. Sequentially dispatch the first ready agent by step order.
+      4. Specialist stuck failing: agent_outputs[name].status == 'error' OR
          agent_error_counts[name] >= 3. Then decide whether to call reflector
          again vs skip the step — see shared_metadata.reflect_error_snapshot and
          reflect_passes_per_agent (maintained by reflector_agent_node). A new
          failure tick (incrementing agent_error_counts) clears staleness relative
          to the previous snapshot so reflector runs again until the budget is
          exhausted.
-      4. Runnable agent whose deps ok → dispatch that specialist.
       5. No runnable agent → END.
     """
     if state["status"] in {"failed", "success"}:
@@ -158,6 +225,14 @@ def route_next_agent(state: MultiAgentState) -> Literal[
     plan = state.get("execution_plan", [])
     completed = set(state.get("completed_agents", []))
     error_counts = state.get("agent_error_counts", {})
+    blocked_agents: set[str] = set()
+
+    try:
+        dependency_graph = validate_dependency_graph(plan)
+    except Exception as exc:
+        logger.error("Invalid dependency graph: %s", exc)
+        from langgraph.graph import END
+        return END
 
     for step in plan:
         agent: str = step.get("agent", "")
@@ -192,11 +267,21 @@ def route_next_agent(state: MultiAgentState) -> Literal[
                     "Agent '%s' still failing with no new error_count since last reflector — skipping",
                     agent,
                 )
+            blocked_agents.add(agent)
             continue
 
-        # Dependency check
-        deps: list[str] = step.get("depends_on", [])
-        if all(dep in completed for dep in deps):
+    ready_agents = resolve_ready_agents(plan, list(completed), blocked_agents)
+    state["dependency_graph"] = dependency_graph
+    state["ready_agents"] = ready_agents
+    state["shared_metadata"] = {
+        **state.get("shared_metadata", {}),
+        "dependency_graph": dependency_graph,
+        "ready_agents": ready_agents,
+        "parallel_ready": len(ready_agents) > 1,
+    }
+
+    for agent in ready_agents:
+        if agent in SPECIALIST_AGENTS:
             return agent  # type: ignore[return-value]
 
     from langgraph.graph import END

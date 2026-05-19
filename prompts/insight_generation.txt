@@ -7,6 +7,7 @@ Original user query: {query}
 SQL executed: {sql}
 Data statistics: {stats}
 Anomalies detected: {anomalies}
+Chart metadata: {chart_description}
 
 ## OUTPUT FORMAT
 Return ONLY valid JSON matching this exact structure. No markdown, no explanation.

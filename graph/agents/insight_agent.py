@@ -5,6 +5,7 @@ Insight Agent — generate structured business insight from all agent outputs.
 from __future__ import annotations
 
 import logging
+import json
 from pathlib import Path
 
 from graph.state import MultiAgentState
@@ -36,12 +37,18 @@ def insight_agent_node(state: MultiAgentState) -> MultiAgentState:
 
     query: str = state["query"]
 
-    # Gather context from previous agents
-    sql_info = state.get("agent_outputs", {}).get("sql", {})
-    sql_text = sql_info.get("sql", state.get("shared_metadata", {}).get("sql_query", "N/A"))
+    # Gather JSON-serializable context from previous agents.
+    agent_outputs = state.get("agent_outputs", {})
+    shared_metadata = state.get("shared_metadata", {})
+    sql_info = agent_outputs.get("sql", {})
+    sql_result = state.get("sql_result") or shared_metadata.get("sql_result") or sql_info
+    sql_text = sql_info.get("sql", shared_metadata.get("sql_query", "N/A"))
 
-    python_info = state.get("agent_outputs", {}).get("python", {})
-    stats = python_info.get("stats", state.get("shared_metadata", {}).get("python_stats", {}))
+    python_info = agent_outputs.get("python", {})
+    python_result = state.get("python_result") or shared_metadata.get("python_result") or python_info
+    stats = python_info.get("stats", shared_metadata.get("python_stats", {}))
+    chart_metadata = state.get("chart_metadata") or shared_metadata.get("chart_metadata") or {}
+    chart_description = json.dumps(chart_metadata, ensure_ascii=False)
 
     anomalies_info = "None detected"
     df_state = state.get("shared_dataframe")
@@ -53,19 +60,31 @@ def insight_agent_node(state: MultiAgentState) -> MultiAgentState:
             num_cols = df.select_dtypes(include="number").columns.tolist()
             anomaly_results = []
             for col in num_cols:
-                result = detect_anomaly(df, col)
+                result = detect_anomaly(df, col, method="sigma", sigma_threshold=2.0)
                 if result["anomaly_count"] > 0:
                     anomaly_results.append({"column": col, **result})
             if anomaly_results:
-                anomalies_info = str(anomaly_results)
+                anomalies_info = json.dumps(anomaly_results, ensure_ascii=False)
         except Exception:
             pass
 
+    insight_context = {
+        "query": query,
+        "sql_result": sql_result,
+        "python_result": python_result,
+        "stats": stats,
+        "anomalies": anomalies_info,
+        "chart_metadata": chart_metadata,
+        "dataframe_shape": (state.get("shared_dataframe") or {}).get("shape"),
+        "dataframe_columns": (state.get("shared_dataframe") or {}).get("columns"),
+    }
+
     system_prompt = (INSIGHT_SYSTEM_PROMPT
-                     .replace("{query}", query)
-                     .replace("{sql}", str(sql_text))
-                     .replace("{stats}", str(stats))
-                     .replace("{anomalies}", str(anomalies_info)))
+                      .replace("{query}", query)
+                      .replace("{sql}", str(sql_text))
+                      .replace("{stats}", str(stats))
+                      .replace("{anomalies}", str(anomalies_info))
+                      .replace("{chart_description}", chart_description))
 
     trace = append_trace(state, "insight", "generate_insight",
                          f"Query: {query}", "started")
@@ -86,9 +105,13 @@ def insight_agent_node(state: MultiAgentState) -> MultiAgentState:
             "completed_agents": state.get("completed_agents", []) + ["insight"],
             "agent_outputs": {
                 **state.get("agent_outputs", {}),
-                "insight": {"status": "ok", "output": validated.model_dump()},
+                "insight": {"status": "ok", "output": validated.model_dump(), "context": insight_context},
             },
             "insight": validated.model_dump(),
+            "shared_metadata": {
+                **shared_metadata,
+                "insight_context": insight_context,
+            },
             "action_trace": trace,
             "status": "success",
         }

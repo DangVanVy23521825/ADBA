@@ -34,7 +34,7 @@ Usage
 
 Dependencies
 ------------
-  pip install ollama psycopg2-binary pydantic
+  pip install ollama psycopg2-binary pydantic python-dotenv
 """
 
 from __future__ import annotations
@@ -48,10 +48,18 @@ import sys
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote_plus
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(ROOT / ".env")
+except ImportError:
+    pass
 
 import psycopg2
 from pydantic import ValidationError
@@ -68,10 +76,25 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 EVAL_MODEL      = os.getenv("EVAL_MODEL", "qwen2.5-coder:7b-instruct-q5_K_M")
 OLLAMA_NUM_CTX  = int(os.getenv("OLLAMA_NUM_CTX", "4096"))
 
-POSTGRES_URL = os.getenv(
-    "POSTGRES_URL",
-    "postgresql://adba_user:adba@localhost:5432/adba_db",
-)
+def _effective_postgres_url() -> str:
+    """Use POSTGRES_URL if set; else build from POSTGRES_* (Docker defaults).
+
+    Matches docker-compose.yml: adba_db / adba_user / POSTGRES_PASSWORD.
+    """
+    direct = os.getenv("POSTGRES_URL", "").strip()
+    if direct:
+        return direct
+    user = os.getenv("POSTGRES_USER", "adba_user")
+    password = os.getenv("POSTGRES_PASSWORD", "adba_password")
+    host = os.getenv("POSTGRES_HOST", "localhost")
+    port = os.getenv("POSTGRES_PORT", "5432")
+    db = os.getenv("POSTGRES_DB", "adba_db")
+    user_q = quote_plus(user)
+    pw_q = quote_plus(password)
+    return f"postgresql://{user_q}:{pw_q}@{host}:{port}/{db}"
+
+
+POSTGRES_URL = _effective_postgres_url()
 
 # Per-skill inference temperature (same as production agents)
 SKILL_TEMPERATURES: dict[str, float] = {
@@ -423,7 +446,7 @@ def main() -> None:
     parser.add_argument("--limit",    type=int, default=0,
                         help="Evaluate only first N samples (0 = all)")
     parser.add_argument("--output",   default=str(OUTPUT_FILE),
-                        help="Path to save results JSON")
+                        help="Path to save results JSON (use --output to avoid overwriting baseline)")
     parser.add_argument("--test-file", default=str(TEST_FILE),
                         help="Path to test.jsonl")
     args = parser.parse_args()

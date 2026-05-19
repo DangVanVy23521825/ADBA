@@ -132,6 +132,7 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
                 **state.get("shared_metadata", {}),
                 "sql_row_count": len(df),
                 "sql_query": sql,
+                "sql_result": {"sql": sql, "row_count": len(df)},
             },
             "action_trace": trace,
             "status": "running",

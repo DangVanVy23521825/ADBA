@@ -3,7 +3,6 @@
 
 <!--
 ADBA — Autonomous Data & Business Intelligence Agent
-Multi-agent LangGraph pipeline for NL→SQL, analytics, viz & structured insights.
 -->
 
 [![Contributors][contributors-shield]][contributors-url]
@@ -16,7 +15,7 @@ Multi-agent LangGraph pipeline for NL→SQL, analytics, viz & structured insight
 <br />
 <div align="center">
   <a href="https://github.com/DangVanVy23521825/ADBA">
-    <img src="https://img.shields.io/badge/ADBA-multi--agent-111827?style=for-the-badge&labelColor=1f2937" alt="ADBA logo badge" />
+    <img src="https://img.shields.io/badge/ADBA-multi--agent-111827?style=for-the-badge&labelColor=1f2937" alt="ADBA" />
   </a>
 
   <h3 align="center">ADBA · Autonomous Data & Business Intelligence Agent</h3>
@@ -66,9 +65,6 @@ Multi-agent LangGraph pipeline for NL→SQL, analytics, viz & structured insight
 ADBA nhận câu hỏi **tiếng Việt / tiếng Anh** → Supervisor lập **ExecutionPlan** JSON → các specialist truy vấn **PostgreSQL**, phân tích **pandas**, vẽ biểu đồ, rồi **Insight Agent** sinh output có cấu trúc (**finding · evidence · action**) validate bởi **Pydantic**. **Reflector** xử lý lỗi và retry.
 
 Nền tảng lý thuyết: *Autonomous Data Agents* (Fu et al., 2025, [arXiv:2509.18710](https://arxiv.org/abs/2509.18710)) — phần **multi-agent collaboration** được triển khai trong code.
-
-<!-- Nếu có screenshot Streamlit: thêm file docs/images/screenshot.png và bỏ comment dòng dưới -->
-<!-- [![ADBA Screen Shot][product-screenshot]](#) -->
 
 ```mermaid
 flowchart LR
@@ -174,7 +170,7 @@ PYTHONPATH=. python eval/eval_compare.py
 
 Chi tiết PEFT: [`eval/README_finetuned_eval.md`](eval/README_finetuned_eval.md) · Notebook merge trên Kaggle: [`training/kaggle_merge_lora_export.ipynb`](training/kaggle_merge_lora_export.ipynb).
 
-_For specification in Vietnamese:_ [`docs/ADBA_Project_Specification_vi.md`](docs/ADBA_Project_Specification_vi.md)
+*Đặc tả tiếng Việt:* [`docs/ADBA_Project_Specification_vi.md`](docs/ADBA_Project_Specification_vi.md)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -225,7 +221,7 @@ Thêm file **`LICENSE`** cho mã nguồn repo nếu bạn chọn giấy phép c�
 
 ## Contact
 
-**Đặng Văn Vỹ** · [Hugging Face](https://huggingface.co/dangvanvy) · dangvanvy112@gmail.com
+**Đặng Văn Vỹ** · [Hugging Face](https://huggingface.co/dangvanvy) · [dangvanvy112@gmail.com](mailto:dangvanvy112@gmail.com)
 
 Project Link: [https://github.com/DangVanVy23521825/ADBA](https://github.com/DangVanVy23521825/ADBA)
 
@@ -236,7 +232,7 @@ Project Link: [https://github.com/DangVanVy23521825/ADBA](https://github.com/Dan
 * [Fu et al. — Autonomous Data Agents, arXiv:2509.18710](https://arxiv.org/abs/2509.18710)
 * [Qwen Team](https://huggingface.co/Qwen)
 * [LangGraph](https://github.com/langchain-ai/langgraph)
-* [othneildrew / Best-README-Template](https://github.com/othneildrew/Best-README-Template) — layout & shields pattern
+* [othneildrew / Best-README-Template](https://github.com/othneildrew/Best-README-Template)
 * [Img Shields](https://shields.io)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -244,7 +240,6 @@ Project Link: [https://github.com/DangVanVy23521825/ADBA](https://github.com/Dan
 ---
 
 <!-- MARKDOWN LINKS & IMAGES -->
-<!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
 
 [contributors-shield]: https://img.shields.io/github/contributors/DangVanVy23521825/ADBA.svg?style=for-the-badge
 [contributors-url]: https://github.com/DangVanVy23521825/ADBA/graphs/contributors
@@ -272,5 +267,3 @@ Project Link: [https://github.com/DangVanVy23521825/ADBA](https://github.com/Dan
 [Hf-badge-small]: https://img.shields.io/badge/PEFT%2FHF-FFD21F?style=for-the-badge&logo=huggingface&logoColor=000
 [Pydantic-badge]: https://img.shields.io/badge/Pydantic-v2-E92063?style=for-the-badge
 [Pydantic-url]: https://docs.pydantic.dev/
-
-<!-- [product-screenshot]: docs/images/screenshot.png -->

@@ -19,6 +19,9 @@ build/
 .env.local
 *.pem
 
+# Cursor / local agent instructions (không đẩy lên GitHub)
+AGENTS.md
+
 # IDE
 .idea/
 .vscode/

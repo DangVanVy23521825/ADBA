@@ -1,247 +1,276 @@
+<!-- Improved compatibility of back to top link: See: https://github.com/othneildrew/Best-README-Template/pull/73 -->
+<a id="readme-top"></a>
 
+<!--
+ADBA — Autonomous Data & Business Intelligence Agent
+Multi-agent LangGraph pipeline for NL→SQL, analytics, viz & structured insights.
+-->
 
-# ADBA
+[![Contributors][contributors-shield]][contributors-url]
+[![Forks][forks-shield]][forks-url]
+[![Stargazers][stars-shield]][stars-url]
+[![Issues][issues-shield]][issues-url]
+[![License][license-shield]][license-url]
+[![Hugging Face Models][hf-shield]][hf-url]
 
-### Autonomous Data & Business Intelligence Agent
+<br />
+<div align="center">
+  <a href="https://github.com/DangVanVy23521825/ADBA">
+    <img src="https://img.shields.io/badge/ADBA-multi--agent-111827?style=for-the-badge&labelColor=1f2937" alt="ADBA logo badge" />
+  </a>
 
-**Hệ thống đa-agent** nhận câu hỏi tiếng Việt / tiếng Anh → lập kế hoạch → SQL · Python · Viz → **business insight** có thể hành động.
+  <h3 align="center">ADBA · Autonomous Data & Business Intelligence Agent</h3>
 
-[Python](https://www.python.org/)
-[LangGraph](https://github.com/langchain-ai/langgraph)
-[PostgreSQL](https://www.postgresql.org/)
-[Ollama](https://ollama.com/)
+  <p align="center">
+    Hệ thống <strong>đa-agent</strong> (Supervisor + SQL · Python · Viz · Insight · Reflector) trên <strong>LangGraph</strong>, <strong>PostgreSQL</strong> và <strong>Ollama</strong>.
+    <br />
+    <a href="docs/ADBA_Project_Specification_vi.md"><strong>Đặc tả dự án (VI) »</strong></a>
+    <br />
+    <br />
+    <a href="https://huggingface.co/dangvanvy/adba-qwen-merged">Merged model (HF)</a>
+    ·
+    <a href="https://github.com/DangVanVy23521825/ADBA/issues/new?labels=bug">Report Bug</a>
+    ·
+    <a href="https://github.com/DangVanVy23521825/ADBA/issues/new?labels=enhancement">Request Feature</a>
+  </p>
+</div>
 
-[Hugging Face · merged model](#-fine-tuned-model-hugging-face) · [Đặc tả chi tiết](docs/ADBA_Project_Specification_vi.md) · [AGENTS.md](AGENTS.md)
+<details>
+  <summary><b>Table of Contents</b></summary>
+  <ol>
+    <li>
+      <a href="#about-the-project">About The Project</a>
+      <ul>
+        <li><a href="#built-with">Built With</a></li>
+      </ul>
+    </li>
+    <li>
+      <a href="#getting-started">Getting Started</a>
+      <ul>
+        <li><a href="#prerequisites">Prerequisites</a></li>
+        <li><a href="#installation">Installation</a></li>
+      </ul>
+    </li>
+    <li><a href="#usage">Usage</a></li>
+    <li><a href="#fine-tuned-model-hugging-face">Fine-tuned model</a></li>
+    <li><a href="#roadmap">Roadmap</a></li>
+    <li><a href="#contributing">Contributing</a></li>
+    <li><a href="#license">License</a></li>
+    <li><a href="#contact">Contact</a></li>
+    <li><a href="#acknowledgments">Acknowledgments</a></li>
+  </ol>
+</details>
 
+## About The Project
 
+ADBA nhận câu hỏi **tiếng Việt / tiếng Anh** → Supervisor lập **ExecutionPlan** JSON → các specialist truy vấn **PostgreSQL**, phân tích **pandas**, vẽ biểu đồ, rồi **Insight Agent** sinh output có cấu trúc (**finding · evidence · action**) validate bởi **Pydantic**. **Reflector** xử lý lỗi và retry.
 
-**Mục lục**
+Nền tảng lý thuyết: *Autonomous Data Agents* (Fu et al., 2025, [arXiv:2509.18710](https://arxiv.org/abs/2509.18710)) — phần **multi-agent collaboration** được triển khai trong code.
 
-- [Giới thiệu](#giới-thiệu-dự-án)
-- [Tính năng](#tính-năng-chính)
-- [Kiến trúc](#kiến-trúc)
-- [Stack](#built-with)
-- [Cài đặt](#getting-started)
-- [Chạy & đánh giá](#usage)
-- [Fine-tuned model](#-fine-tuned-model-hugging-face)
-- [Roadmap](#roadmap)
-- [Đóng góp](#contributing)
-- [Giấy phép](#license)
-- [Liên hệ](#contact)
-- [Lời cảm ơn](#acknowledgments)
-
-
-
-
-
----
-
-## Giới thiệu dự án
-
-**ADBA** (Autonomous Data & Business Intelligence Agent) là pipeline **LangGraph** gồm một **Supervisor** và các specialist (**SQL**, **Python**, **Viz**, **Insight**, **Reflector**): trích xuất dữ liệu từ PostgreSQL, phân tích với pandas, vẽ biểu đồ, và sinh **insight có cấu trúc** (finding · evidence · action).
-
-Ý tưởng nền tảng xuất phát từ bài báo *Autonomous Data Agents* (Fu et al., 2025, [arXiv:2509.18710](https://arxiv.org/abs/2509.18710)); phần **multi-agent collaboration** được triển khai đầy đủ trong code.
-
-([back to top](#readme-top))
-
----
-
-## Tính năng chính
-
-
-| Khối                | Mô tả                                                                            |
-| ------------------- | -------------------------------------------------------------------------------- |
-| **Supervisor**      | Sinh **ExecutionPlan** JSON (agent, task, `depends_on`)                          |
-| **SQL Agent**       | Text-to-SQL + thực thi PostgreSQL an toàn                                        |
-| **Python Agent**    | Transform / anomaly với pandas trong sandbox giới hạn                            |
-| **Viz Agent**       | matplotlib → chart (pipeline UI)                                                 |
-| **Insight Agent**   | Output JSON validate **Pydantic** (`InsightOutput`)                              |
-| **Reflector Agent** | Phân loại lỗi & ngữ cảnh sửa khi retry                                           |
-| **Perception**      | `info_box` từ introspection schema (`perception/`)                               |
-| **Training / Eval** | SFT data pipeline, MLX/Unsloth notebooks, **eval_runner** / **eval_peft_runner** |
-
-
-([back to top](#readme-top))
-
----
-
-## Kiến trúc
+<!-- Nếu có screenshot Streamlit: thêm file docs/images/screenshot.png và bỏ comment dòng dưới -->
+<!-- [![ADBA Screen Shot][product-screenshot]](#) -->
 
 ```mermaid
 flowchart LR
-  U([User query]) --> S[Supervisor]
+  U([User]) --> S[Supervisor]
   S --> R{Router}
-  R --> SQL[SQL Agent]
-  R --> PY[Python Agent]
-  R --> VZ[Viz Agent]
+  R --> SQL[SQL]
+  R --> PY[Python]
+  R --> VZ[Viz]
   R --> RF[Reflector]
   SQL --> R
   PY --> R
   VZ --> R
   RF --> R
-  R --> IN[Insight Agent]
-  IN --> OUT([Table · Chart · Insight])
+  R --> IN[Insight]
+  IN --> OUT([UI / API])
 ```
 
+Luồng graph: [`graph/multi_agent.py`](graph/multi_agent.py) · agents: [`graph/agents/`](graph/agents/).
 
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-Luồng thực tế được định nghĩa trong `[graph/multi_agent.py](graph/multi_agent.py)` và các node trong `[graph/agents/](graph/agents/)`.
+### Built With
 
-([back to top](#readme-top))
+* [![Python][Python-badge]][Python-url]
+* [![LangGraph][LangGraph-badge]][LangGraph-url]
+* [![PostgreSQL][Postgres-badge]][Postgres-url]
+* [![Streamlit][Streamlit-badge]][Streamlit-url]
+* [![Ollama][Ollama-badge]][Ollama-url]
+* [![Hugging Face][Hf-badge-small]][hf-url]
+* [![Pydantic][Pydantic-badge]][Pydantic-url]
 
----
-
-## Built With
-
-- [LangChain](https://www.langchain.com/) · **LangGraph**
-- **Ollama** (+ tuỳ chọn OpenAI fallback cho một số agent)
-- **PostgreSQL 15**
-- **Streamlit** (`[app.py](app.py)`)
-- **Pydantic v2**, **pandas**, **matplotlib**
-- **Training**: MLX-LM / notebooks QLoRA (Kaggle, Windows GPU)
-- **Eval**: Hugging Face **PEFT** + Postgres (`[eval/](eval/)`)
-
-([back to top](#readme-top))
-
----
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Getting Started
 
-### Yêu cầu
+Clone repo, tạo venv, bật Postgres (Docker), seed dữ liệu, chạy Ollama với đủ context.
 
-- **Python 3.11+**
-- **Docker** (PostgreSQL)
-- **Ollama** — khuyến nghị `OLLAMA_NUM_CTX=4096`
-- Biến môi trường — copy và chỉnh:
+### Prerequisites
 
-Tạo file `**.env`** theo `[AGENTS.md](AGENTS.md)` (không commit `.env`).
+* **Python 3.11+**
+* **Docker** (cho PostgreSQL)
+* **Ollama** — nên đặt `OLLAMA_NUM_CTX=4096`
 
+### Installation
 
-| Biến                                | Ý nghĩa                                         |
-| ----------------------------------- | ----------------------------------------------- |
-| `POSTGRES_URL`                      | Chuỗi kết nối PostgreSQL                        |
-| `PRIMARY_MODEL` / `OLLAMA_BASE_URL` | Model & endpoint Ollama                         |
-| `HF_TOKEN`                          | Khi dùng model private trên Hugging Face        |
-| `OPENAI_API_KEY`                    | Fallback (tuỳ cấu hình `model/model_client.py`) |
+1. Clone repository
 
+   ```bash
+   git clone https://github.com/DangVanVy23521825/ADBA.git
+   cd ADBA
+   ```
 
-### Cài đặt
+2. Virtualenv & dependencies
 
-```bash
-git clone https://github.com/DangVanVy23521825/ADBA.git
-cd adba
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate    # Windows: .venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
 
-python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
+3. Tạo `.env` (không commit): xem biến trong [`model/model_config.py`](model/model_config.py), [`eval/eval_runner.py`](eval/eval_runner.py) và Docker Compose — tối thiểu `POSTGRES_URL`, `PRIMARY_MODEL`, `OLLAMA_BASE_URL`.
 
-pip install -r requirements.txt
+4. Database
 
-docker compose up -d
-./scripts/apply_schemas_docker.sh   # hoặc script DDL trong repo / docs
-python data/seed/seed_data.py
+   ```bash
+   docker compose up -d
+   ./scripts/apply_schemas_docker.sh
+   python data/seed/seed_data.py
+   python perception/extract_info_box.py
+   ```
 
-python perception/extract_info_box.py
-```
+5. **Ollama (gợi ý)**
 
-**Gợi ý Ollama (Mac / Linux)**
+   ```bash
+   export OLLAMA_NUM_CTX=4096
+   ollama pull qwen2.5-coder:7b-instruct-q5_K_M
+   ```
 
-```bash
-export OLLAMA_NUM_CTX=4096
-ollama pull qwen2.5-coder:7b-instruct-q5_K_M
-```
-
-
-
-([back to top](#readme-top))
-
----
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Usage
 
-### Streamlit UI
+**Streamlit**
 
 ```bash
 export PYTHONPATH=.
 streamlit run app.py
 ```
 
-### Kiểm thử & đánh giá
+**Tests**
 
 ```bash
 PYTHONPATH=. pytest tests/ -v
+```
 
-# Baseline (Ollama + Postgres)
+**Eval**
+
+```bash
 PYTHONPATH=. python eval/eval_runner.py --limit 10
-
-# Fine-tuned adapter PEFT (GPU khuyến nghị)
 PYTHONPATH=. python eval/eval_peft_runner.py --adapter training/checkpoint-50 --limit 10
-
-# So sánh baseline vs finetuned (sau khi có hai file JSON kết quả)
 PYTHONPATH=. python eval/eval_compare.py
 ```
 
-Chi tiết PEFT / CUDA / Mac CPU: `[eval/README_finetuned_eval.md](eval/README_finetuned_eval.md)`.
+Chi tiết PEFT: [`eval/README_finetuned_eval.md`](eval/README_finetuned_eval.md) · Notebook merge trên Kaggle: [`training/kaggle_merge_lora_export.ipynb`](training/kaggle_merge_lora_export.ipynb).
 
-### Notebook merge LoRA → `merged_hf` (Kaggle GPU)
+_For specification in Vietnamese:_ [`docs/ADBA_Project_Specification_vi.md`](docs/ADBA_Project_Specification_vi.md)
 
-`[training/kaggle_merge_lora_export.ipynb](training/kaggle_merge_lora_export.ipynb)`
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-([back to top](#readme-top))
+## Fine-tuned model (Hugging Face)
 
----
+**[dangvanvy/adba-qwen-merged](https://huggingface.co/dangvanvy/adba-qwen-merged)** — Qwen2.5-Coder-7B-Instruct merged với LoRA (ADBA). Repo private → cần `HF_TOKEN`. Tuân thủ license model gốc [Qwen2.5-Coder-7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct).
 
-## 🤗 Fine-tuned model (Hugging Face)
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-Phiên bản **merged** (base **Qwen2.5-Coder-7B-Instruct** + LoRA huấn luyện cho ADBA) được publish để tái sử dụng inference / vLLM:
+## Roadmap
 
-`**[dangvanvy/adba-qwen-merged](https://huggingface.co/dangvanvy/adba-qwen-merged)`**
+- [x] LangGraph multi-agent (Supervisor + specialists + Reflector)
+- [x] Insight JSON (Pydantic) + eval / PEFT runners
+- [x] Merged weights trên Hugging Face Hub
+- [ ] Docker sandbox cứng cho Python agent
+- [ ] CI eval smoke + routing metrics
+- [ ] Deploy inference (vLLM / GPU cloud) + HTTPS
 
-- Repo có thể **private** → cần `HF_TOKEN` khi `from_pretrained`.
-- Tuân thủ **license và điều khoản** của model gốc Qwen — không được suy diễn rộng hơn điều khoản nhà phát hành cho phép.
+Xem [Issues](https://github.com/DangVanVy23521825/ADBA/issues).
 
-([back to top](#readme-top))
-
----
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Contributing
 
-Mọi đóng góp đều được hoan nghênh.
+Mọi PR / issue đều welcome.
 
-1. Fork repo
-2. Tạo branch (`git checkout -b feature/featureTenHay`)
-3. Commit (`git commit -m 'feat: mô tả ngắn'`)
-4. Push (`git push origin feature/featureTenHay`)
-5. Mở Pull Request
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit (`git commit -m 'feat: add AmazingFeature'`)
+4. Push (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
-Không commit **secrets** (`.env`), và không đưa **weights lớn** (checkpoint LoRA đầy đủ, DB dump khổng lồ) vào Git — dùng `.gitignore`, Hugging Face Hub hoặc artifact riêng.
+**Lưu ý:** không commit `.env`, weights lớn, hoặc dump DB nặng — dùng `.gitignore` và Hub / artifact riêng.
 
-([back to top](#readme-top))
+### Top contributors
 
----
+<a href="https://github.com/DangVanVy23521825/ADBA/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=DangVanVy23521825/ADBA" alt="contributors" />
+</a>
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## License
 
-- **Source code** của repo này: đặt trong file `**LICENSE`** khi bạn chọn giấy phép cụ thể (MIT / Apache-2.0 / …).
-- **Weights fine-tuned / merged** phải tuân thủ license của **[Qwen/Qwen2.5-Coder-7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct)** và các điều khoản Alibaba/Qwen applicable — không được lan truyền trái license.
+Thêm file **`LICENSE`** cho mã nguồn repo nếu bạn chọn giấy phép cụ thể. **Weights** fine-tuned / merged phải tuân thủ điều khoản **Qwen / Alibaba** applicable.
 
-([back to top](#readme-top))
-
----
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Contact
 
-**Đặng Văn Vỹ** — `[dangvanvy](https://huggingface.co/dangvanvy)` · Email: *dangvanvy112@gmail.com* 
+**Đặng Văn Vỹ** · [Hugging Face](https://huggingface.co/dangvanvy) · dangvanvy112@gmail.com
 
-Project Link: `[https://github.com/DangVanVy23521825/ADBA](https://github.com/DangVanVy23521825/ADBA)`
+Project Link: [https://github.com/DangVanVy23521825/ADBA](https://github.com/DangVanVy23521825/ADBA)
 
-([back to top](#readme-top))
-
----
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Acknowledgments
 
-- [Fu et al. — Autonomous Data Agents, arXiv:2509.18710](https://arxiv.org/abs/2509.18710)
-- [Qwen Team — Qwen2.5-Coder](https://huggingface.co/Qwen)
-- [LangGraph](https://github.com/langchain-ai/langgraph)
+* [Fu et al. — Autonomous Data Agents, arXiv:2509.18710](https://arxiv.org/abs/2509.18710)
+* [Qwen Team](https://huggingface.co/Qwen)
+* [LangGraph](https://github.com/langchain-ai/langgraph)
+* [othneildrew / Best-README-Template](https://github.com/othneildrew/Best-README-Template) — layout & shields pattern
+* [Img Shields](https://shields.io)
 
-([back to top](#readme-top))
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+---
+
+<!-- MARKDOWN LINKS & IMAGES -->
+<!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
+
+[contributors-shield]: https://img.shields.io/github/contributors/DangVanVy23521825/ADBA.svg?style=for-the-badge
+[contributors-url]: https://github.com/DangVanVy23521825/ADBA/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/DangVanVy23521825/ADBA.svg?style=for-the-badge
+[forks-url]: https://github.com/DangVanVy23521825/ADBA/network/members
+[stars-shield]: https://img.shields.io/github/stars/DangVanVy23521825/ADBA.svg?style=for-the-badge
+[stars-url]: https://github.com/DangVanVy23521825/ADBA/stargazers
+[issues-shield]: https://img.shields.io/github/issues/DangVanVy23521825/ADBA.svg?style=for-the-badge
+[issues-url]: https://github.com/DangVanVy23521825/ADBA/issues
+[license-shield]: https://img.shields.io/github/license/DangVanVy23521825/ADBA.svg?style=for-the-badge
+[license-url]: https://github.com/DangVanVy23521825/ADBA/blob/main/LICENSE
+[hf-shield]: https://img.shields.io/badge/Hugging_Face-adba--qwen--merged-FFD21F?style=for-the-badge&logo=huggingface&logoColor=000
+[hf-url]: https://huggingface.co/dangvanvy/adba-qwen-merged
+
+[Python-badge]: https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white
+[Python-url]: https://www.python.org/
+[LangGraph-badge]: https://img.shields.io/badge/LangGraph-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white
+[LangGraph-url]: https://github.com/langchain-ai/langgraph
+[Postgres-badge]: https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white
+[Postgres-url]: https://www.postgresql.org/
+[Streamlit-badge]: https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white
+[Streamlit-url]: https://streamlit.io/
+[Ollama-badge]: https://img.shields.io/badge/Ollama-000000?style=for-the-badge&logo=ollama&logoColor=white
+[Ollama-url]: https://ollama.com/
+[Hf-badge-small]: https://img.shields.io/badge/PEFT%2FHF-FFD21F?style=for-the-badge&logo=huggingface&logoColor=000
+[Pydantic-badge]: https://img.shields.io/badge/Pydantic-v2-E92063?style=for-the-badge
+[Pydantic-url]: https://docs.pydantic.dev/
+
+<!-- [product-screenshot]: docs/images/screenshot.png -->

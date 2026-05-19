@@ -35,6 +35,7 @@ logs/
 
 # ADBA project specific
 adapters/
+training/checkpoint-50/
 *.gguf
 data/raw_dataset.jsonl
 data/rejected_dataset.jsonl

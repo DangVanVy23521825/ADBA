@@ -21,12 +21,12 @@ ADBA — Autonomous Data & Business Intelligence Agent
   <h3 align="center">ADBA · Autonomous Data & Business Intelligence Agent</h3>
 
   <p align="center">
-    Hệ thống <strong>đa-agent</strong> (Supervisor + SQL · Python · Viz · Insight · Reflector) trên <strong>LangGraph</strong>, <strong>PostgreSQL</strong> và <strong>Ollama</strong>.
+    A <strong>multi-agent</strong> system (Supervisor + SQL · Python · Viz · Insight · Reflector) built on <strong>LangGraph</strong>, <strong>PostgreSQL</strong>, and <strong>Ollama</strong>.
     <br />
-    <a href="docs/ADBA_Project_Specification_vi.md"><strong>Đặc tả dự án (VI) »</strong></a>
+    <a href="docs/ADBA_Project_Specification_vi.md"><strong>Project Specification (VI) »</strong></a>
     <br />
     <br />
-    <a href="https://huggingface.co/dangvanvy/adba-qwen-merged">Merged model (HF)</a>
+    <a href="https://huggingface.co/dangvanvy/adba-qwen-merged">Merged Model (HF)</a>
     ·
     <a href="https://github.com/DangVanVy23521825/ADBA/issues/new?labels=bug">Report Bug</a>
     ·
@@ -62,9 +62,9 @@ ADBA — Autonomous Data & Business Intelligence Agent
 
 ## About The Project
 
-ADBA nhận câu hỏi **tiếng Việt / tiếng Anh** → Supervisor lập **ExecutionPlan** JSON → các specialist truy vấn **PostgreSQL**, phân tích **pandas**, vẽ biểu đồ, rồi **Insight Agent** sinh output có cấu trúc (**finding · evidence · action**) validate bởi **Pydantic**. **Reflector** xử lý lỗi và retry.
+ADBA is a **multi-agent analytics system** that transforms **Vietnamese and English** questions into executable workflows. A Supervisor agent generates an **ExecutionPlan**, routes tasks to specialist agents for **PostgreSQL querying**, **pandas analysis**, and **visualization**, while an **Insight Agent** produces structured outputs (**finding · evidence · action**) validated with **Pydantic**. A **Reflector** agent monitors failures and performs retries when necessary.
 
-Nền tảng lý thuyết: *Autonomous Data Agents* (Fu et al., 2025, [arXiv:2509.18710](https://arxiv.org/abs/2509.18710)) — phần **multi-agent collaboration** được triển khai trong code.
+The project is inspired by *Autonomous Data Agents* (Fu et al., 2025, [arXiv:2509.18710](https://arxiv.org/abs/2509.18710)), with the paper's **multi-agent collaboration paradigm** implemented in practice.
 
 ```mermaid
 flowchart LR
@@ -82,7 +82,7 @@ flowchart LR
   IN --> OUT([UI / API])
 ```
 
-Luồng graph: [`graph/multi_agent.py`](graph/multi_agent.py) · agents: [`graph/agents/`](graph/agents/).
+Graph Flows: [`graph/multi_agent.py`](graph/multi_agent.py) · agents: [`graph/agents/`](graph/agents/).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -100,13 +100,13 @@ Luồng graph: [`graph/multi_agent.py`](graph/multi_agent.py) · agents: [`graph
 
 ## Getting Started
 
-Clone repo, tạo venv, bật Postgres (Docker), seed dữ liệu, chạy Ollama với đủ context.
+Clone the repository, create a venv, enable Postgres (Docker), seed data, and run Ollama with the full context.
 
 ### Prerequisites
 
 * **Python 3.11+**
-* **Docker** (cho PostgreSQL)
-* **Ollama** — nên đặt `OLLAMA_NUM_CTX=4096`
+* **Docker** (for PostgreSQL)
+* **Ollama** — should be `OLLAMA_NUM_CTX=4096`
 
 ### Installation
 
@@ -125,7 +125,7 @@ Clone repo, tạo venv, bật Postgres (Docker), seed dữ liệu, chạy Ollama
    pip install -r requirements.txt
    ```
 
-3. Tạo `.env` (không commit): xem biến trong [`model/model_config.py`](model/model_config.py), [`eval/eval_runner.py`](eval/eval_runner.py) và Docker Compose — tối thiểu `POSTGRES_URL`, `PRIMARY_MODEL`, `OLLAMA_BASE_URL`.
+3. Create `.env` (no commit): see the variables in [`model/model_config.py`](model/model_config.py), [`eval/eval_runner.py`](eval/eval_runner.py), and Docker Compose — with at least `POSTGRES_URL`, `PRIMARY_MODEL`, `OLLAMA_BASE_URL`.
 
 4. Database
 
@@ -136,7 +136,7 @@ Clone repo, tạo venv, bật Postgres (Docker), seed dữ liệu, chạy Ollama
    python perception/extract_info_box.py
    ```
 
-5. **Ollama (gợi ý)**
+5. **Ollama (recommended)**
 
    ```bash
    export OLLAMA_NUM_CTX=4096
@@ -168,44 +168,44 @@ PYTHONPATH=. python eval/eval_peft_runner.py --adapter training/checkpoint-50 --
 PYTHONPATH=. python eval/eval_compare.py
 ```
 
-Chi tiết PEFT: [`eval/README_finetuned_eval.md`](eval/README_finetuned_eval.md) · Notebook merge trên Kaggle: [`training/kaggle_merge_lora_export.ipynb`](training/kaggle_merge_lora_export.ipynb).
+PEFT Details: [`eval/README_finetuned_eval.md`](eval/README_finetuned_eval.md) · Notebook merge on Kaggle: [`training/kaggle_merge_lora_export.ipynb`](training/kaggle_merge_lora_export.ipynb).
 
-*Đặc tả tiếng Việt:* [`docs/ADBA_Project_Specification_vi.md`](docs/ADBA_Project_Specification_vi.md)
+*Vietnamese_SPEC:* [`docs/ADBA_Project_Specification_vi.md`](docs/ADBA_Project_Specification_vi.md)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Fine-tuned model (Hugging Face)
 
-**[dangvanvy/adba-qwen-merged](https://huggingface.co/dangvanvy/adba-qwen-merged)** — Qwen2.5-Coder-7B-Instruct merged với LoRA (ADBA). Repo private → cần `HF_TOKEN`. Tuân thủ license model gốc [Qwen2.5-Coder-7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct).
+**[dangvanvy/adba-qwen-merged](https://huggingface.co/dangvanvy/adba-qwen-merged)** — Qwen2.5-Coder-7B-Instruct merged with LoRA (ADBA). Repo private → need `HF_TOKEN`. Comply with the original license model [Qwen2.5-Coder-7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Roadmap
 
-- [x] LangGraph multi-agent (Supervisor + specialists + Reflector)
-- [x] Insight JSON (Pydantic) + eval / PEFT runners
-- [x] Merged weights trên Hugging Face Hub
-- [ ] Docker sandbox cứng cho Python agent
-- [ ] CI eval smoke + routing metrics
-- [ ] Deploy inference (vLLM / GPU cloud) + HTTPS
+- [x] LangGraph multi-agent workflow (Supervisor + Specialists + Reflector)
+- [x] Structured Insight JSON (Pydantic) + Evaluation / PEFT pipelines
+- [x] Merged model weights published on Hugging Face Hub
+- [ ] Secure Docker sandbox for Python execution
+- [ ] CI evaluation smoke tests and routing metrics
+- [ ] Production inference deployment (vLLM / GPU cloud) with HTTPS
 
-Xem [Issues](https://github.com/DangVanVy23521825/ADBA/issues).
+See [Issues](https://github.com/DangVanVy23521825/ADBA/issues).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Contributing
 
-Mọi PR / issue đều welcome.
+Contributions, issues, and feature requests are welcome.
 
 1. Fork the Project
 2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit (`git commit -m 'feat: add AmazingFeature'`)
-4. Push (`git push origin feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'feat: add AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-**Lưu ý:** không commit `.env`, weights lớn, hoặc dump DB nặng — dùng `.gitignore` và Hub / artifact riêng.
+**Note:** Please do not commit `.env` files, large model weights, or database dumps. Use `.gitignore` and dedicated artifact repositories (e.g., Hugging Face Hub) when appropriate.
 
-### Top contributors
+### Top Contributors
 
 <a href="https://github.com/DangVanVy23521825/ADBA/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=DangVanVy23521825/ADBA" alt="contributors" />
@@ -215,7 +215,7 @@ Mọi PR / issue đều welcome.
 
 ## License
 
-Thêm file **`LICENSE`** cho mã nguồn repo nếu bạn chọn giấy phép cụ thể. **Weights** fine-tuned / merged phải tuân thủ điều khoản **Qwen / Alibaba** applicable.
+If you choose a specific license for this repository, please add a **`LICENSE`** file. Fine-tuned and merged model weights must comply with the applicable licensing terms of **Qwen / Alibaba**.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

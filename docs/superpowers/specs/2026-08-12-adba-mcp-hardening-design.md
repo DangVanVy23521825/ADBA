@@ -140,16 +140,53 @@ records — preview trở thành nguồn duy nhất, prompt nhỏ và ổn đị
 `DatasetStore` là LRU trong RAM, key theo `query_id`, dọn sạch khi query kết thúc. Không Redis, không
 persist.
 
-### Lý do chọn MCP (nói thẳng)
+### Connection profile — gom ba biến toàn cục thành một ranh giới
+
+Hiện tại "hệ thống đang nói chuyện với database nào" bị rải ra ba chỗ không liên quan nhau:
+
+| Chỗ | Nội dung | Vấn đề |
+|---|---|---|
+| `graph/tools/sql_tool.py:19` | `DATABASE_URL` | Biến môi trường toàn cục |
+| `graph/tools/sql_tool.py:27-31` | `_ALLOWED_TABLES` | **9 tên bảng hardcode trong source** |
+| `perception/info_box_*.json` | Mô tả schema | File sinh sẵn cho đúng 3 domain |
+
+Gom thành một object `ConnectionProfile` duy nhất mang `dsn` + `allowed_tables` + `info_box`, truyền
+xuống thay vì đọc từ global. **Vẫn đúng một profile, vẫn một tenant** — không thêm tính năng nào,
+chỉ đặt ranh giới đúng chỗ.
+
+Kèm theo: `_ALLOWED_TABLES` **lấy từ introspection thay vì hardcode**.
+`perception/extract_info_box.py` đã kết nối DB và đọc được danh sách bảng — hiện tại thông tin đó
+đang bị chép tay lần thứ hai vào `sql_tool.py` và sẽ lệch nhau ngay khi schema đổi. Một nguồn sự thật
+thay vì hai.
+
+Đây là thay đổi **cấu trúc, không phải tính năng**: rẻ khi làm ở pha 1, đắt khi phải bóc ngược sau
+này. Xem mục 10 về lý do giữ cửa mở.
+
+### Lý do chọn MCP
 
 Cần một ranh giới RPC **dù thế nào**, vì phải cô lập Python exec sang container khác (L3). MCP chỉ là
-chọn một chuẩn có sẵn thay vì tự chế giao thức — gần như miễn phí khi đã phải làm việc đó. Nó mua
-**cô lập + khả năng đổi datasource/model**. Nó **không** giảm latency; kỳ vọng ngược lại là sai.
+chọn một chuẩn có sẵn thay vì tự chế giao thức — gần như miễn phí khi đã phải làm việc đó. Nó **không**
+giảm latency; kỳ vọng ngược lại là sai.
+
+Giá trị của ranh giới này **phụ thuộc vào việc dự án dừng ở đâu**:
+
+| Nếu ADBA dừng ở… | Giá trị MCP |
+|---|---|
+| Một lần deploy nội bộ duy nhất | Thấp — chỉ là cô lập sandbox, tự chế RPC cũng xong |
+| Nhiều khách hàng / nhiều datasource | **Cao** — đây đồng thời là seam cô lập theo tenant và điểm hoán đổi datasource |
+
+Spec này viết cho trường hợp thứ nhất nên MCP xếp cuối ở mục 7. Nhưng nếu hướng on-prem/outsourcing
+ở mục 10 thành hiện thực thì **pha 3 nên được nâng lên trước pha 2**, vì ranh giới đó là thứ mọi việc
+đa khách hàng sẽ dựng lên trên.
 
 ### Cố ý để ngoài phạm vi
 
-Không expose schema/`info_box` thành MCP resource (giữ ở `perception/`); không tách thành nhiều MCP
-server; không OpenTelemetry; không đụng vào supervisor hay bất kỳ prompt nào.
+Không tách thành nhiều MCP server; không OpenTelemetry; không đụng vào supervisor hay bất kỳ prompt
+nào; không auth/RBAC/metering (xem mục 10.4).
+
+**Một ngoại lệ so với bản duyệt đầu:** `info_box` giờ nằm trong `ConnectionProfile` thay vì được đọc
+thẳng từ `perception/`. Vẫn **không** expose thành MCP resource — vẫn là file sinh sẵn, chỉ đi qua
+profile.
 
 ---
 
@@ -319,7 +356,18 @@ tại chỉ là học văn phong của generator.
 BEAVER chạy ở chế độ **chỉ node SQL** (không qua full pipeline) vì schema của nó khác schema ADBA —
 mục đích là đo năng lực sinh SQL, không phải đo pipeline. Cần load schema BEAVER vào một database
 riêng; nếu chi phí dựng vượt quá pha 0 thì hạ xuống chạy `EXPLAIN`-only, chấp nhận metric yếu hơn.
-Đây là phần duy nhất của pha 0 được phép cắt giảm nếu cần.
+
+**`beaver_exec_accuracy` mang hai ý nghĩa, không chỉ một.** Ngoài việc kiểm tra contamination, nó là
+**chỉ báo go/no-go cho khả năng chuyển giao giữa các schema** (mục 10.4). Đọc kết quả như sau:
+
+| Kết quả | Diễn giải |
+|---|---|
+| Gần mức LoRA trên golden set nội bộ | Fine-tune học được năng lực SQL tổng quát → chuyển giao được sang schema lạ |
+| Gần mức base model (84.4%) | Fine-tune chủ yếu học schema/văn phong của chính mình → **không** chuyển giao; mọi khách hàng mới cần train lại |
+| Thấp hơn cả base model | Fine-tune đã overfit tới mức làm hỏng năng lực tổng quát — cần xem lại dữ liệu train |
+
+Vì tầm quan trọng này, **BEAVER không còn là phần được phép cắt giảm của pha 0** như bản duyệt đầu.
+Nếu buộc phải cắt vì chi phí dựng database, cắt xuống `EXPLAIN`-only chứ không bỏ hẳn.
 
 **Cách chấm — assertion trên artifact, không phải văn xuôi.** Exact-match trên văn bản insight là vô
 vọng vì output LLM dao động. Metric chính là **execution accuracy** theo cách Spider/BIRD làm cho
@@ -351,7 +399,7 @@ và 2 gánh gần hết giá trị production. Dừng sau pha 2 vẫn có hệ t
 | Pha | Nội dung | Quy mô | Rollback |
 |---|---|---|---|
 | **0** | `eval_e2e.py` + golden set + subset BEAVER + **đo baseline kiến trúc hiện tại**. Không sửa production code. | Vừa | — |
-| **1** | An toàn, không cần MCP: read-only role, SQL guard 3 lớp, `_extract_sql` fail-closed, `fork`→`spawn` + env rỗng, hạ timeout. | Nhỏ | git revert |
+| **1** | An toàn, không cần MCP: read-only role, SQL guard 3 lớp, `_extract_sql` fail-closed, `fork`→`spawn` + env rỗng, hạ timeout. **Kèm `ConnectionProfile`** (mục 3) — gom `DATABASE_URL`/`_ALLOWED_TABLES`/`info_box`, lấy allowed_tables từ introspection. | Nhỏ | git revert |
 | **2** | Ngân sách: `deadline_ts`, node `finalize`, thang partial, trần call, sửa bug 5.5, trace JSONL. | Vừa | git revert |
 | **3** | MCP server + handle pattern + container cô lập, sau cờ `ADBA_TOOLS_BACKEND=inproc\|mcp`. | Lớn | đổi env var |
 
@@ -387,11 +435,16 @@ Pha 1 và 2 độc lập kỹ thuật nên song song được, nhưng làm tuầ
 | Worst-case wall clock | ≤ 60s, không có ngoại lệ |
 | Query trả về `failed` (không có output nào) | ≤ 5% |
 | Mutation SQL chạm tới DB | 0, kiểm bằng test đối kháng gồm cả data-modifying CTE |
+| Tên bảng hardcode trong source | 0 — `allowed_tables` sinh từ introspection, một nguồn sự thật |
+| `beaver_exec_accuracy` | Không đặt ngưỡng — đây là **số đo để quyết định**, không phải chỉ tiêu phải đạt (xem 6.2 và 10.4) |
 | Test hiện có | `tests/unit/` và `tests/integration/` pass không sửa đổi |
 
 ---
 
-## 10. Phương án đã cân nhắc và loại bỏ
+## 10. Phương án đã cân nhắc — loại bỏ hoặc hoãn
+
+Ghi lại kèm lý do để không phải tranh luận lại từ đầu. Mục 10.4 tuy ngoài phạm vi nhưng **có chi phối
+ba quyết định trong spec**, nên không thể bỏ đi.
 
 ### 10.1 Single agent + MCP tools (thay 5 node bằng 1 agent tool-calling)
 
@@ -433,3 +486,46 @@ applied track. Ghi lại ở đây để cân nhắc sau khi deploy xong.
 
 Phần duy nhất được giữ lại từ nhánh này: **BEAVER vào golden set** (mục 6.2), vì nó giải quyết một
 vấn đề có thật của số liệu hiện tại bất kể có viết báo hay không.
+
+### 10.4 Hướng thương mại — SaaS, on-prem, outsourcing
+
+**Không nằm trong phạm vi đợt này**, nhưng ghi lại vì nó chi phối ba quyết định đã đưa vào spec
+(`ConnectionProfile` ở mục 3, thứ tự ưu tiên MCP ở mục 3, cách đọc BEAVER ở mục 6.2).
+
+#### Đánh giá mức phù hợp
+
+| Hình thái | Mức phù hợp | Lý do |
+|---|---|---|
+| SaaS ngang ("hỏi đáp trên database của bạn") | **Thấp** | Mảng đông; cần tổng quát hoá qua schema lạ — đúng chỗ lợi thế fine-tune biến mất; khách phải cấp quyền đọc DB sản xuất; 7B thua model frontier trên schema chưa từng thấy; kinh tế GPU không có biên chi phí tiệm cận 0 |
+| On-prem / self-hosted licensing | **Cao** | Điểm bán: dữ liệu không rời hạ tầng khách, không chi phí token, chạy trên GPU của họ, audit được. Hợp với khối có yêu cầu nội địa hoá dữ liệu. |
+| Outsourcing / làm dự án | **Cao, doanh thu sớm nhất** | Fine-tune riêng từng khách trở thành hạng mục tính tiền được, thay vì trở ngại về khả năng mở rộng |
+
+Điểm đáng chú ý: giá trị cốt lõi của on-prem — dữ liệu không rời hạ tầng, chi phí kiểm soát được,
+audit được — **chính là những gì pha 1 và pha 2 đang xây** (read-only role, cô lập sandbox, trace
+JSONL, suy giảm có kiểm soát). Spec này vô tình là checklist enterprise-readiness.
+
+#### Tài sản tái sử dụng thật
+
+Không phải hệ thống ADBA, mà là **dây chuyền biến một schema bất kỳ thành model 7B chuyên biệt**:
+
+```
+extract_info_box.py  →  training/generate_data.py  →  validate_dataset.py  →  LoRA  →  eval_runner.py
+   (introspect DB)         (sinh mẫu)              (lọc: 1393 → 1325)                (chấm bằng thực thi)
+```
+
+Ở outsourcing đây là hạng mục tính tiền trực tiếp; ở on-prem là quy trình onboarding; ở SaaS ngang
+thì vô dụng vì không thể fine-tune riêng từng khách với biên lợi nhuận SaaS.
+
+#### Khoảng cách còn lại (chưa làm, ghi để biết quy mô)
+
+- Đa tenant thật: pool `ConnectionProfile`, cô lập sandbox theo tenant, hạn mức tài nguyên
+- Auth / RBAC / metering / rate limit / quản lý secret theo tenant — hiện **không có gì**;
+  `app.py` chỉ dùng `st.session_state` (theo phiên trình duyệt, không phải theo người dùng)
+- `app.py` là UI demo Streamlit, không phải UI sản phẩm
+- `action_trace` là thứ duy nhất trong nhóm này đã có nền — dùng được làm audit log
+
+#### Điều kiện kích hoạt
+
+Chỉ xem xét lại sau khi có `beaver_exec_accuracy` từ pha 0. Nếu con số đó cho thấy fine-tune không
+chuyển giao được sang schema lạ thì on-prem và outsourcing vẫn khả thi (train lại cho từng khách là
+việc tính tiền được), nhưng SaaS ngang bị loại dứt điểm.

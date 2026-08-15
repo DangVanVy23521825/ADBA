@@ -58,3 +58,6 @@ database_check.txt
 
 testing.py
 
+
+# Worktree cô lập do Claude Code quản lý
+.claude/worktrees/

@@ -18,6 +18,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from graph.state import make_initial_state
 from graph.multi_agent import build_multi_agent_graph
+from perception.connection_profile import ALL_TABLES, build_profile
+from tests.fixtures.mini_schema import MINI_TABLES
 from tests.integration import (
     INFO_BOX,
     CHART_CODE_BAR,
@@ -27,6 +29,12 @@ from tests.integration import (
     DF_SALARY_DIST,
     DF_REVENUE_BY_REGION,
     VALID_INSIGHT,
+)
+
+TEST_PROFILE = build_profile(
+    dsn="postgresql://u:p@h:5432/d",
+    tables=MINI_TABLES,
+    grants={"test_user": frozenset({ALL_TABLES})},
 )
 
 PYTHON_CODE_YOY = (
@@ -60,6 +68,7 @@ def _complex_plan(sql_t, py_t, viz_t, ins_t):
 def _state(plan, query="Complex test query"):
     s = make_initial_state(query, INFO_BOX)
     s["execution_plan"] = plan
+    s["shared_metadata"] = {"profile": TEST_PROFILE, "user": "test_user"}
     return s
 
 

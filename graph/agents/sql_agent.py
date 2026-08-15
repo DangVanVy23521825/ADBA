@@ -98,7 +98,8 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
 
         # ── Execution ────────────────────────────────────────────
         try:
-            df = execute_sql(sql)
+            meta = state.get("shared_metadata", {})
+            df = execute_sql(sql, profile=meta["profile"], user=meta["user"])
         except Exception as exc:
             error_context = str(exc)
             logger.warning("SQL Agent execution error (attempt %d): %s", attempt, error_context)

@@ -14,6 +14,9 @@ import psycopg2
 import psycopg2.extras
 import psycopg2.sql
 
+from perception.connection_profile import ConnectionProfile, permitted_tables
+from perception.sql_tables import tables_in_sql
+
 logger = logging.getLogger(__name__)
 
 DATABASE_URL = os.getenv(
@@ -22,13 +25,36 @@ DATABASE_URL = os.getenv(
 )
 SQL_TIMEOUT_MS = int(os.getenv("SQL_TIMEOUT_MS", "30000"))
 
-# Whitelist of allowed table names (prevents injection via f-string alternative)
+# Guards against injection via f-string table-name interpolation.
 _TABLE_NAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
-_ALLOWED_TABLES = frozenset({
-    "customers", "products", "orders",
-    "warehouses", "stock", "stock_movements",
-    "departments", "employees", "payroll",
-})
+
+
+class TableNotPermittedError(PermissionError):
+    """Câu SQL chạm bảng ngoài quyền của người dùng."""
+
+
+def assert_tables_permitted(sql: str, profile: ConnectionProfile, user: str) -> frozenset[str]:
+    """Chặn trước khi chạy. Ném TableNotPermittedError nếu vi phạm.
+
+    Tập quyền dẫn ra TẠI ĐÂY từ profile + danh tính. Nó không phải tham số
+    của hàm, và không được biến thành tham số: khi tool tách qua MCP, một
+    tham số như vậy sẽ nằm trong payload lời gọi, tức là bên bị ràng buộc
+    tự khai ràng buộc của mình. Xem spec mục 3.4.1.
+
+    Fail closed: SQL không parse ra bảng nào cũng bị từ chối.
+    """
+    touched = tables_in_sql(sql)
+    if not touched:
+        raise TableNotPermittedError(
+            "Không đọc được tên bảng nào từ câu SQL — từ chối để an toàn."
+        )
+    allowed = permitted_tables(profile, user)
+    if forbidden := (touched - allowed):
+        raise TableNotPermittedError(
+            f"Câu hỏi này chạm dữ liệu bạn không được cấp quyền. "
+            f"(nội bộ: {sorted(forbidden)})"
+        )
+    return touched
 
 
 def get_db_connection():
@@ -38,14 +64,18 @@ def get_db_connection():
 
 def execute_sql(
     sql: str,
+    profile: ConnectionProfile,
+    user: str,
     params: tuple | None = None,
     timeout_ms: int = SQL_TIMEOUT_MS,
 ) -> pd.DataFrame:
-    """Execute a SELECT query and return results as a pandas DataFrame.
+    """Chạy một câu SELECT, trả DataFrame.
 
-    Uses parameterized queries when `params` is provided.
+    Kiểm quyền trước khi mở kết nối. Không có tham số nào cho phép bên gọi
+    nới rộng tập bảng được chạm (spec tiêu chí 11).
     """
-    conn = get_db_connection()
+    assert_tables_permitted(sql, profile, user)
+    conn = psycopg2.connect(profile.dsn)
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("SET LOCAL statement_timeout = %s", (timeout_ms,))
@@ -59,17 +89,19 @@ def execute_sql(
         conn.close()
 
 
-def get_table_sample(table: str, limit: int = 5) -> pd.DataFrame:
-    """Return a sample of rows from `table`. Table name is validated against
-    a whitelist of known schema tables."""
-    if table not in _ALLOWED_TABLES or not _TABLE_NAME_RE.match(table):
-        raise ValueError(f"Table name '{table}' is not in the allowed whitelist.")
+def get_table_sample(
+    table: str,
+    profile: ConnectionProfile,
+    user: str,
+    limit: int = 5,
+) -> pd.DataFrame:
+    """Return a sample of rows from `table`, gated by the caller's permissions."""
+    if not _TABLE_NAME_RE.match(table):
+        raise ValueError(f"Tên bảng không hợp lệ: {table!r}")
     if not isinstance(limit, int) or limit < 1:
         raise ValueError("limit must be a positive integer")
-    query = psycopg2.sql.SQL("SELECT * FROM {} LIMIT %s").format(
-        psycopg2.sql.Identifier(table)
-    )
-    return execute_sql(query, (limit,))
+    query = f"SELECT * FROM {table} LIMIT %s"  # noqa: S608 — tên bảng đã qua regex
+    return execute_sql(query, profile=profile, user=user, params=(limit,))
 
 
 def explain_query_plan(sql: str) -> dict[str, Any]:

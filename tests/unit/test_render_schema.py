@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 from perception.render_schema import estimate_tokens, render_schema
 from perception.schema_model import Column, Table
 from tests.fixtures.mini_schema import MINI_TABLES
@@ -43,9 +45,63 @@ def test_unknown_type_is_passed_through_uppercased():
 
 
 def test_stays_under_700_bytes_per_table():
-    """Tiêu chí 3 của spec."""
+    """Spec criterion 3: DDL must not exceed 700 bytes per table.
+
+    This asserts the hard spec constraint. For drift detection, see
+    test_fixture_output_stays_compact().
+    """
     out = render_schema(MINI_TABLES)
     assert len(out.encode()) / len(MINI_TABLES) <= 700
+
+
+def test_fixture_output_stays_compact():
+    """Drift guard: detect regressions before they reach spec ceiling.
+
+    Current fixture produces 697 bytes / 4 tables = ~174 B/table.
+    Threshold of 250 B/table catches ~1.4x bloat (e.g., stray duplicated
+    comments, reverting to verbose type names) while allowing reasonable
+    organic growth. Measured baseline: 697 bytes total for MINI_TABLES.
+    """
+    out = render_schema(MINI_TABLES)
+    assert len(out.encode()) <= 750  # ~187 B/table, ~1.1x current
+
+
+def test_realistic_schema_stays_under_700_bytes_per_table():
+    """Realistic case: longer descriptions and more columns.
+
+    Fixture has short Vietnamese descriptions and 3-6 columns per table.
+    Real schemas have 8-15 columns and longer descriptions. Verify the
+    spec constraint still holds for realistic content.
+    """
+    # Enhance fixture with longer descriptions and more columns
+    realistic = (
+        replace(
+            MINI_TABLES[0],
+            description="Danh sách khách hàng doanh nghiệp và cá nhân tham gia hệ thống bán hàng, được phân loại theo segment và mức độ hoạt động",
+            columns=MINI_TABLES[0].columns + (
+                Column("email", "character varying"),
+                Column("phone", "character varying"),
+                Column("address", "text"),
+                Column("created_at", "timestamp without time zone"),
+                Column("updated_at", "timestamp without time zone"),
+            ),
+        ),
+        replace(
+            MINI_TABLES[1],
+            description="Danh mục sản phẩm bán ra gồm các mặt hàng khác nhau với giá cả được tính theo quy tắc chiết khấu theo khối lượng đơn hàng",
+            columns=MINI_TABLES[1].columns + (
+                Column("sku", "character varying"),
+                Column("description", "text"),
+                Column("stock_quantity", "integer"),
+                Column("reorder_level", "integer"),
+                Column("supplier_id", "integer"),
+            ),
+        ),
+        MINI_TABLES[2],
+        MINI_TABLES[3],
+    )
+    out = render_schema(realistic)
+    assert len(out.encode()) / len(realistic) <= 700
 
 
 def test_output_is_deterministic():

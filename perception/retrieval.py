@@ -25,8 +25,10 @@ def _normalize_vietnamese(text: str) -> str:
     """Tách dấu tiếng Việt thành combining marks, rồi bỏ đi.
 
     bảng → bang, lương → luong, nhân → nhan, viên → vien
-    Dùng NFD decomposition để tách base letters từ accents.
+    đơn → don, Đơn → don (xử lý ký tự đặc biệt không có NFD decomposition)
     """
+    # Map đ/Đ to d (LATIN LETTER D WITH STROKE has no NFD decomposition)
+    text = text.replace("đ", "d").replace("Đ", "d")
     # NFD decompose: ả → a + combining-grave
     nfd = unicodedata.normalize("NFD", text)
     # Strip combining marks (category Mn): accents, diacritics

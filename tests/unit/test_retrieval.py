@@ -73,6 +73,31 @@ def test_tokenizer_handles_vietnamese_diacritics():
     assert result == {"bang", "luong", "nhan", "vien"}
 
 
+def test_tokenizer_handles_d_with_stroke():
+    """Tokenizer must handle đ/Đ (LATIN LETTER D WITH STROKE).
+
+    This character has no NFD decomposition, so it requires explicit mapping.
+    đơn hàng → {don, hang}, not {on, hang}
+    Đơn hàng → {don, hang} (uppercase and lowercase both map to d)
+    """
+    # Lowercase đ
+    result = _tokens("đơn hàng")
+    assert result == {"don", "hang"}
+    # Uppercase Đ
+    result = _tokens("Đơn hàng")
+    assert result == {"don", "hang"}
+
+
+def test_tokenizer_handles_orders_description_with_d_stroke():
+    """Test orders table description which contains Đơn (uppercase D-stroke).
+
+    From mini_schema: "Đơn hàng bán cho khách" should tokenize to real words.
+    """
+    # This is the exact description from tests/fixtures/mini_schema.py:30
+    result = _tokens("Đơn hàng bán cho khách")
+    assert result == {"don", "hang", "ban", "cho", "khach"}
+
+
 def test_lexical_payroll_scores_higher_than_customers_on_payroll_query():
     """Payroll description should score strictly higher than customers on
     payroll-related queries. This test catches when false positives occur

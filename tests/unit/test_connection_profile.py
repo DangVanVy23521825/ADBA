@@ -41,6 +41,43 @@ def test_payroll_is_not_reachable_without_an_explicit_grant():
     assert "payroll" not in permitted_tables(p, "sales")
 
 
+def test_grant_present_but_empty_gives_nothing():
+    """Có mục trong grants nhưng tập quyền rỗng vẫn đi vào nhánh mặc định đóng."""
+    p = _profile({"sales": frozenset()})
+    assert permitted_tables(p, "sales") == frozenset()
+
+
+def test_grants_mapping_cannot_be_widened_in_place():
+    """profile.grants phải bị khóa cứng — không ai chèn thêm user sau khi build.
+
+    dataclass(frozen=True) chỉ chặn `profile.grants = ...`, không chặn
+    `profile.grants["x"] = ...` trên dict thường bên trong. Phải dùng
+    MappingProxyType để cả thao tác tại chỗ cũng bị chặn — cùng cách
+    Table.foreign_keys tự khóa ở schema_model.py.
+    """
+    p = _profile({"sales": frozenset({"orders"})})
+    with pytest.raises(TypeError):
+        p.grants["attacker"] = frozenset({ALL_TABLES})
+
+
+def test_mutating_callers_original_grant_after_build_does_not_change_access():
+    """Caller mutate tập quyền gốc sau khi build_profile trả về không được rò vào profile.
+
+    Nếu build_profile chỉ lưu tham chiếu tới đúng object của caller (không
+    convert sang frozenset của riêng mình), caller mutate set gốc thì
+    permitted_tables đọc thấy ngay — không cần build lại profile, guard bảo
+    mật tụt xuống lời hứa.
+    """
+    original = {"orders"}
+    grants = {"sales": original}
+    p = build_profile(dsn=DSN, tables=MINI_TABLES, grants=grants)
+    assert permitted_tables(p, "sales") == frozenset({"orders"})
+
+    original.add("payroll")
+
+    assert permitted_tables(p, "sales") == frozenset({"orders"})
+
+
 def test_fingerprint_is_stable_across_calls():
     assert schema_fingerprint(MINI_TABLES) == schema_fingerprint(MINI_TABLES)
 

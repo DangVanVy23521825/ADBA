@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from types import MappingProxyType
 
 from perception.render_schema import estimate_tokens, render_schema
 from perception.schema_model import Table
@@ -67,13 +68,20 @@ def build_profile(
 
     Đây không phải fallback động: một nhánh code, một công tắc, quyết một
     lần. Xem spec mục 3.3 và mục 10.3.
+
+    grants được đóng băng sâu — cả mapping ngoài (MappingProxyType) lẫn từng
+    tập quyền bên trong (frozenset) — cùng cách Table.foreign_keys tự khóa
+    ở schema_model.py. Nếu chỉ dict(grants) nông thì profile.grants vẫn là
+    dict thường (gán thẳng phần tử được) và giá trị vẫn là object gốc của
+    caller (caller mutate sau khi trả về thì permitted_tables đọc thấy ngay,
+    không cần build lại profile) — ranh giới bảo mật tụt xuống lời hứa.
     """
     tables = tuple(tables)
     size = estimate_tokens(render_schema(tables))
     return ConnectionProfile(
         dsn=dsn,
         tables=tables,
-        grants=dict(grants),
+        grants=MappingProxyType({u: frozenset(v) for u, v in grants.items()}),
         schema_mode="full" if size <= threshold_tokens else "retrieval",
         fingerprint=schema_fingerprint(tables),
     )

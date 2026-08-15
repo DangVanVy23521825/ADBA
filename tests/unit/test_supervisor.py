@@ -25,15 +25,12 @@ from langgraph.graph import END
 
 from graph.agents.supervisor import route_next_agent, supervisor_node
 from graph.state import MultiAgentState, make_initial_state
+from perception.schema_context import SchemaContext
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
-INFO_BOX = {
-    "schemas": {
-        "orders": {"columns": ["id", "region", "amount", "order_date"]},
-    }
-}
+SCHEMA_CONTEXT = SchemaContext()
 
 PLAN_SIMPLE = [
     {"step": 1, "agent": "sql",
@@ -75,7 +72,7 @@ PLAN_NO_VIZ = [
 def _state(plan=None, completed=None, status="running", error_counts=None,
            last_error=None, agent_outputs=None, shared_metadata=None) -> MultiAgentState:
     """Build a minimal state dict for routing tests."""
-    s = make_initial_state("test query", INFO_BOX)
+    s = make_initial_state("test query", SCHEMA_CONTEXT)
     s["execution_plan"] = plan or []
     s["completed_agents"] = completed or []
     s["status"] = status
@@ -200,7 +197,7 @@ class TestSupervisorNode:
         mock_instance.invoke_json.return_value = self.VALID_PLAN_DICT
         MockClient.return_value = mock_instance
 
-        s = make_initial_state("Tổng doanh thu theo region 2024", INFO_BOX)
+        s = make_initial_state("Tổng doanh thu theo region 2024", SCHEMA_CONTEXT)
         result = supervisor_node(s)
 
         assert result["status"] == "running"
@@ -217,7 +214,7 @@ class TestSupervisorNode:
         mock_instance.invoke_json.side_effect = RuntimeError("Ollama down")
         MockClient.return_value = mock_instance
 
-        s = make_initial_state("test", INFO_BOX)
+        s = make_initial_state("test", SCHEMA_CONTEXT)
         result = supervisor_node(s)
 
         assert result["status"] == "failed"
@@ -232,7 +229,7 @@ class TestSupervisorNode:
         mock_instance.invoke_json.return_value = {"bad": "structure"}
         MockClient.return_value = mock_instance
 
-        s = make_initial_state("test", INFO_BOX)
+        s = make_initial_state("test", SCHEMA_CONTEXT)
         result = supervisor_node(s)
 
         assert result["status"] == "failed"

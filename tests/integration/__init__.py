@@ -10,23 +10,25 @@ import matplotlib
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from perception.connection_profile import ALL_TABLES, build_profile
+from perception.schema_context import resolve_schema_context
+from tests.fixtures.mini_schema import MINI_TABLES
+
 matplotlib.use("Agg")
 
 
-INFO_BOX = {
-    "schemas": {
-        "orders": {
-            "columns": ["id", "customer_id", "product_id", "region", "amount",
-                        "quantity", "order_date", "quarter", "year", "status"],
-        },
-        "products": {
-            "columns": ["id", "name", "category", "unit_price", "cost"],
-        },
-        "customers": {
-            "columns": ["id", "name", "email", "city", "segment", "region"],
-        },
-    }
-}
+_SCHEMA_PROFILE = build_profile(
+    dsn="postgresql://u:p@h:5432/d",
+    tables=MINI_TABLES,
+    grants={"test_user": frozenset({ALL_TABLES})},
+)
+
+# Shared SchemaContext for full-graph integration tests — content doesn't
+# matter here since ModelClient is mocked at every agent, but the state
+# needs a real SchemaContext to build prompts against.
+SCHEMA_CONTEXT = resolve_schema_context(
+    _SCHEMA_PROFILE, "test", permitted=frozenset(t.name for t in MINI_TABLES),
+)
 
 # ── Sample DataFrames for SQL agent outputs ──────────────────────────────────
 

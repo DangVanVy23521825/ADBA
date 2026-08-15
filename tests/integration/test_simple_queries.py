@@ -21,7 +21,7 @@ from graph.multi_agent import build_multi_agent_graph
 from perception.connection_profile import ALL_TABLES, build_profile
 from tests.fixtures.mini_schema import MINI_TABLES
 from tests.integration import (
-    INFO_BOX,
+    SCHEMA_CONTEXT,
     DF_REVENUE_BY_REGION,
     DF_TOP_PRODUCTS,
     DF_EMPLOYEE_COUNT,
@@ -71,7 +71,7 @@ def _simple_plan(sql_task: str) -> list[dict]:
 
 
 def _state(plan: list[dict], query: str = "Test query") -> dict:
-    s = make_initial_state(query, INFO_BOX)
+    s = make_initial_state(query, SCHEMA_CONTEXT)
     s["execution_plan"] = plan
     s["shared_metadata"] = {"profile": TEST_PROFILE, "user": "test_user"}
     return s

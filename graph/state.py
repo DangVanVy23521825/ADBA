@@ -6,12 +6,14 @@ from __future__ import annotations
 
 from typing import Any, NotRequired, TypedDict
 
+from perception.schema_context import SchemaContext
+
 
 class MultiAgentState(TypedDict):
 
     # ── Input ──────────────────────────────────────────────
     query: str
-    info_box: dict[str, Any]
+    schema_context: SchemaContext
 
     # ── Supervisor ─────────────────────────────────────────
     execution_plan: list[dict[str, Any]]
@@ -42,11 +44,11 @@ class MultiAgentState(TypedDict):
     status: str
 
 
-def make_initial_state(query: str, info_box: dict[str, Any]) -> MultiAgentState:
+def make_initial_state(query: str, schema_context: SchemaContext) -> MultiAgentState:
     """Return a fresh state dict for a new query."""
     return MultiAgentState(
         query=query,
-        info_box=info_box,
+        schema_context=schema_context,
         execution_plan=[],
         dependency_graph={},
         ready_agents=[],

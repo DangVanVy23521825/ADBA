@@ -23,9 +23,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from graph.agents.sql_agent import _extract_sql, sql_agent_node
 from graph.state import make_initial_state
 from perception.connection_profile import build_profile
+from perception.schema_context import SchemaContext
 from tests.fixtures.mini_schema import MINI_TABLES
 
-INFO_BOX = {"schemas": {"orders": {"columns": ["id", "region", "amount"]}}}
+SCHEMA_CONTEXT = SchemaContext()
 
 TEST_PROFILE = build_profile(
     dsn="postgresql://u:p@h:5432/d",
@@ -49,7 +50,7 @@ PLAN_NO_SQL = [
 
 
 def _state(plan=None):
-    s = make_initial_state("test", INFO_BOX)
+    s = make_initial_state("test", SCHEMA_CONTEXT)
     s["execution_plan"] = plan or []
     s["shared_metadata"] = {"profile": TEST_PROFILE, "user": "test_user"}
     return s

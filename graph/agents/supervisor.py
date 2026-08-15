@@ -4,7 +4,6 @@ Supervisor Agent — parse query, produce ExecutionPlan, validate via Pydantic.
 
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 from collections import defaultdict, deque
@@ -13,6 +12,7 @@ from typing import Any, Literal
 from graph.state import MultiAgentState
 from graph.utils import append_trace
 from model.model_client import ModelClient
+from perception.schema_context import SchemaContext
 from schemas.plan_schema import ExecutionPlan
 
 logger = logging.getLogger(__name__)
@@ -31,9 +31,9 @@ _PROMPT_PATH = Path(__file__).resolve().parents[2] / "prompts" / "supervisor_rou
 SUPERVISOR_SYSTEM_PROMPT: str = _PROMPT_PATH.read_text(encoding="utf-8")
 
 
-def _build_system_prompt(info_box: dict) -> str:
-    """Render the prompt template with the current schema info_box."""
-    return SUPERVISOR_SYSTEM_PROMPT.replace("{info_box}", json.dumps(info_box, ensure_ascii=False))
+def build_system_prompt(schema_context: SchemaContext) -> str:
+    """Render the prompt template with this turn's rendered schema slice."""
+    return SUPERVISOR_SYSTEM_PROMPT.replace("{schema}", schema_context.rendered_text)
 
 
 def build_dependency_graph(plan: list[dict[str, Any]]) -> dict[str, list[str]]:
@@ -106,14 +106,14 @@ def supervisor_node(state: MultiAgentState) -> MultiAgentState:
     raising, so the graph can route to the reflector if needed.
     """
     query: str = state["query"]
-    info_box: dict = state.get("info_box", {})
+    schema_context = state["schema_context"]
     logger.info("Supervisor: planning for query '%s'", query)
 
     trace = append_trace(state, "supervisor", "parse_intent",
                          f"Planning query: {query}", "started")
 
     client = ModelClient(agent_type="supervisor")
-    system_prompt = _build_system_prompt(info_box)
+    system_prompt = build_system_prompt(schema_context)
     last_exc: Exception | None = None
 
     for attempt in range(1, MAX_SUPERVISOR_RETRIES + 1):

@@ -17,8 +17,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from graph.agents.reflector_agent import reflector_agent_node
 from graph.state import make_initial_state
+from perception.schema_context import SchemaContext
 
-INFO_BOX = {"schemas": {}}
+SCHEMA_CONTEXT = SchemaContext()
 
 PLAN_SQL = [
     {"step": 1, "agent": "sql",
@@ -35,7 +36,7 @@ DIAGNOSIS = {
 
 
 def _state():
-    s = make_initial_state("test", INFO_BOX)
+    s = make_initial_state("test", SCHEMA_CONTEXT)
     s["execution_plan"] = PLAN_SQL
     s["last_error"] = {
         "agent": "sql",

@@ -3,8 +3,6 @@ SQL Agent — generate and execute PostgreSQL queries with self-repair retry loo
 """
 
 from __future__ import annotations
-import json
-
 
 import logging
 import re
@@ -14,6 +12,7 @@ from graph.state import MultiAgentState
 from graph.tools.sql_tool import execute_sql, explain_query_plan
 from graph.utils import append_trace, df_to_state
 from model.model_client import ModelClient
+from perception.schema_context import SchemaContext
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +40,34 @@ def _extract_sql(text: str) -> str:
     return text
 
 
+def build_system_prompt(schema_context: SchemaContext) -> str:
+    """Render template với lát schema của lượt này.
+
+    Few-shot để rỗng trong pha 1; plan 3 (onboarding) sẽ đổ vào.
+    """
+    few = "\n\n".join(
+        f"Task: {fs['question']}\nOutput:\n{fs['sql']}"
+        for fs in schema_context.few_shots
+    )
+    return (SQL_SYSTEM_PROMPT
+            .replace("{few_shots}", few)
+            .replace("{schema}", schema_context.rendered_text))
+
+
+def _public_error_message(exc: Exception) -> str:
+    """Strip the internal-only segment (table names) off an exception's text.
+
+    assert_tables_permitted() (graph/tools/sql_tool.py) appends a
+    "(nội bộ: [...])" segment to TableNotPermittedError carrying the exact
+    forbidden table names — useful for logs, never for anything that ends
+    up in state (trace observations, last_error, agent_outputs), since
+    those can reach the UI. Applied unconditionally: messages without the
+    marker pass through unchanged, so this is safe for every exception
+    type this loop can see, not just TableNotPermittedError.
+    """
+    return str(exc).split("(nội bộ:")[0].strip()
+
+
 def _find_sql_step(state: MultiAgentState) -> dict | None:
     """Find the sql step in the execution plan."""
     for step in state.get("execution_plan", []):
@@ -65,8 +92,8 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
         }
 
     task: str = step.get("task", "")
-    info_box: dict = state.get("info_box", {})
-    system_prompt = SQL_SYSTEM_PROMPT.replace("{info_box}", json.dumps(info_box, ensure_ascii=False))
+    schema_context = state["schema_context"]
+    system_prompt = build_system_prompt(schema_context)
 
     trace = append_trace(state, "sql", "generate_sql",
                          f"Task: {task}", "started")
@@ -101,8 +128,12 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
             meta = state.get("shared_metadata", {})
             df = execute_sql(sql, profile=meta["profile"], user=meta["user"])
         except Exception as exc:
-            error_context = str(exc)
-            logger.warning("SQL Agent execution error (attempt %d): %s", attempt, error_context)
+            # Log the full exception (may include internal detail, e.g. the
+            # forbidden-table list on TableNotPermittedError) server-side only.
+            logger.warning("SQL Agent execution error (attempt %d): %s", attempt, exc)
+            # Anything stored in state below can reach the UI via action_trace
+            # or last_error — sanitize before it enters state.
+            error_context = _public_error_message(exc)
             trace = append_trace(state, "sql", "execute_sql",
                                  f"Attempt {attempt} error: {error_context}", "error")
             continue

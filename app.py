@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import base64
 import io
+import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -27,6 +29,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from graph.multi_agent import run_graph
 from graph.state import MultiAgentState
+from graph.tools.sql_tool import TableNotPermittedError
+from perception.connection_profile import ALL_TABLES, build_profile, permitted_tables
+from perception.retrieval import LexicalRetriever
+from perception.schema_context import resolve_schema_context
+from perception.schema_model import tables_from_info_box
 from schemas.insight_schema import InsightOutput
 from schemas.plan_schema import ExecutionPlan
 
@@ -222,16 +229,29 @@ if prompt := st.chat_input("Ask a question about your data..."):
     with st.chat_message("assistant"):
         with st.spinner("Planning and executing agents..."):
             try:
-                # Load info_box from latest extraction
-                info_box_path = Path(__file__).parent / "info_box_latest.json"
-                if info_box_path.exists():
-                    import json
-                    info_box = json.loads(info_box_path.read_text())
-                else:
-                    info_box = {"schemas": {}}
-                    st.warning("No info_box found. Using empty schema context.")
+                # Build the ConnectionProfile from the current schema extraction.
+                info_box_path = Path(__file__).parent / "perception" / "info_box_all.json"
+                tables = tables_from_info_box(json.loads(info_box_path.read_text()))
+                dsn = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
+                if not dsn:
+                    raise RuntimeError(
+                        "DATABASE_URL (or POSTGRES_URL) is not set — cannot build a ConnectionProfile."
+                    )
+                profile = build_profile(
+                    dsn=dsn,
+                    tables=tables,
+                    # TODO(plan-4): placeholder grant — real auth lands in plan 4 (spec mục 4).
+                    grants={"local": frozenset({ALL_TABLES})},
+                )
+                user = "local"
 
-                result = run_graph(query=prompt, info_box=info_box)
+                # Resolve the per-question schema slice (retrieval or full, per profile.schema_mode).
+                ctx = resolve_schema_context(
+                    profile, prompt, permitted_tables(profile, user),
+                    retriever=LexicalRetriever(tables),
+                )
+
+                result = run_graph(query=prompt, schema_context=ctx, profile=profile, user=user)
                 st.session_state.last_result = result
 
                 # Display results
@@ -244,6 +264,14 @@ if prompt := st.chat_input("Ask a question about your data..."):
                 if plan:
                     summary = f"Plan: {result.get('status', 'done')}. " + summary
                 st.session_state.messages.append({"role": "assistant", "content": summary})
+
+            except TableNotPermittedError as exc:
+                # Strip the "(nội bộ: [...])" segment — it carries the exact
+                # forbidden table names, which are themselves information the
+                # user must not receive. See graph/tools/sql_tool.py.
+                error_msg = str(exc).split("(nội bộ:")[0].strip()
+                st.error(error_msg)
+                st.session_state.messages.append({"role": "assistant", "content": error_msg})
 
             except Exception as e:
                 error_msg = f"Error: {str(e)}"

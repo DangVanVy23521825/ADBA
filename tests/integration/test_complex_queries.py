@@ -21,7 +21,7 @@ from graph.multi_agent import build_multi_agent_graph
 from perception.connection_profile import ALL_TABLES, build_profile
 from tests.fixtures.mini_schema import MINI_TABLES
 from tests.integration import (
-    INFO_BOX,
+    SCHEMA_CONTEXT,
     CHART_CODE_BAR,
     CHART_CODE_GENERIC,
     DF_Q4_COMPARISON,
@@ -66,7 +66,7 @@ def _complex_plan(sql_t, py_t, viz_t, ins_t):
 
 
 def _state(plan, query="Complex test query"):
-    s = make_initial_state(query, INFO_BOX)
+    s = make_initial_state(query, SCHEMA_CONTEXT)
     s["execution_plan"] = plan
     s["shared_metadata"] = {"profile": TEST_PROFILE, "user": "test_user"}
     return s

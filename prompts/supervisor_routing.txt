@@ -27,7 +27,7 @@ query itself. The sql agent receives the task and writes its own SQL.
 Write task like:
   ✓ "Lấy tổng doanh thu theo region cho Q4 2024, chỉ tính đơn completed và processing"
   ✓ "So sánh tổng doanh thu Q4 2024 và Q4 2023 theo region — dùng CTE để tách 2 kỳ"
-  ✗ "SELECT region, SUM(amount) FROM orders WHERE year=2024 ..."  ← SQL thuộc về sql agent
+  ✗ "SELECT <cols> FROM <table> WHERE ..."  ← SQL thuộc về sql agent
 
 This keeps the plan readable and decouples the Supervisor from SQL syntax.
 If the sql agent prompt changes later, the plan stays valid.
@@ -37,7 +37,7 @@ Invalid step:
 {
   "step": 1,
   "agent": "sql",
-  "task": "SELECT region, SUM(amount) FROM orders WHERE year=2024 GROUP BY region",
+  "task": "SELECT <cols>, SUM(<measure>) FROM <table> WHERE ... GROUP BY <cols>",
   "depends_on": [],
   "skill_type": "text-to-sql"
 }
@@ -50,13 +50,10 @@ Corrected step:
 {
   "step": 1,
   "agent": "sql",
-  "task": "Tổng hợp doanh thu theo region năm 2024, chỉ gồm đơn completed/processing",
+  "task": "Tổng hợp <chỉ số> theo <chiều> cho <kỳ>",
   "depends_on": [],
   "skill_type": "text-to-sql"
 }
-
-## SCHEMA CONTEXT
-{info_box}
 
 ## OUTPUT FORMAT
 Return ONLY valid JSON. No markdown fences, no explanation.
@@ -142,6 +139,9 @@ Output:
     }
   ]
 }
+
+## SCHEMA CONTEXT
+{schema}
 
 ## NOW GENERATE
 

@@ -30,6 +30,15 @@ class Table:
     row_count: int | None = None
     description: str = ""
 
+    def __post_init__(self) -> None:
+        """Wrap foreign_keys in MappingProxyType to ensure immutability.
+
+        Works even with frozen=True via object.__setattr__.
+        Idempotent: wrapping an already-wrapped mapping is safe.
+        """
+        if not isinstance(self.foreign_keys, MappingProxyType):
+            object.__setattr__(self, "foreign_keys", MappingProxyType(self.foreign_keys))
+
     def references(self) -> frozenset[str]:
         """Tên các bảng mà bảng này trỏ tới qua khóa ngoại."""
         return frozenset(ref.split("(")[0] for ref in self.foreign_keys.values())

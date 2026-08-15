@@ -79,3 +79,22 @@ def test_tables_are_immutable():
         assert isinstance(exc, (AttributeError, TypeError))
     else:
         raise AssertionError("Table phải bất biến")
+
+
+def test_foreign_keys_are_immutable_even_when_directly_constructed():
+    """Verify foreign_keys dict cannot be mutated in place, even on directly-constructed Table.
+
+    This guards against the shared MINI_TABLES fixture being corrupted by
+    one test mutating the dict and breaking all downstream tests.
+    """
+    t = Table(
+        name="test",
+        columns=(Column("id", "integer"),),
+        foreign_keys={"customer_id": "customers(id)"},
+    )
+    try:
+        t.foreign_keys["hacked"] = "evil(x)"
+    except TypeError as exc:
+        assert "does not support item assignment" in str(exc)
+    else:
+        raise AssertionError("foreign_keys phải bất biến ngay cả khi xây dựng trực tiếp")

@@ -1,0 +1,12 @@
+{"question": "Tổng doanh thu theo region năm 2024", "sql": "SELECT region, SUM(amount) FROM orders WHERE year = 2024 GROUP BY region"}
+{"question": "Top 5 sản phẩm bán chạy nhất theo doanh thu", "sql": "SELECT p.name, SUM(o.amount) AS rev FROM orders o JOIN products p ON o.product_id = p.id GROUP BY p.name ORDER BY rev DESC LIMIT 5"}
+{"question": "Số lượng nhân viên theo từng phòng ban", "sql": "SELECT d.name, COUNT(*) FROM employees e JOIN departments d ON e.department_id = d.id GROUP BY d.name"}
+{"question": "Doanh thu theo tháng trong năm 2024", "sql": "SELECT DATE_PART('month', order_date) AS m, SUM(amount) FROM orders WHERE year = 2024 GROUP BY m"}
+{"question": "Giá trị đơn hàng trung bình theo region", "sql": "SELECT region, AVG(amount) FROM orders GROUP BY region"}
+{"question": "Số lượng khách hàng theo phân khúc", "sql": "SELECT segment, COUNT(*) FROM customers GROUP BY segment"}
+{"question": "Sản phẩm có tồn kho dưới ngưỡng tối thiểu", "sql": "SELECT p.name, s.quantity FROM stock s JOIN products p ON s.product_id = p.id WHERE s.quantity < s.min_threshold"}
+{"question": "Tổng doanh thu theo quý năm 2024", "sql": "SELECT quarter, SUM(amount) FROM orders WHERE year = 2024 GROUP BY quarter"}
+{"question": "Lương trung bình theo phòng ban", "sql": "SELECT d.name, AVG(p.base_salary) FROM payroll p JOIN employees e ON p.employee_id = e.id JOIN departments d ON e.department_id = d.id GROUP BY d.name"}
+{"question": "So sánh doanh thu Q4 2024 vs Q4 2023 theo region", "sql": "SELECT region, year, SUM(amount) FROM orders WHERE quarter = 4 AND year IN (2023, 2024) GROUP BY region, year"}
+{"question": "Lượng hàng luân chuyển theo kho", "sql": "SELECT w.name, SUM(m.quantity) FROM stock_movements m JOIN warehouses w ON m.to_warehouse_id = w.id GROUP BY w.name"}
+{"question": "Sản phẩm chưa bán trong 180 ngày qua", "sql": "SELECT p.name FROM products p LEFT JOIN orders o ON o.product_id = p.id AND o.order_date > CURRENT_DATE - 180 WHERE o.id IS NULL"}

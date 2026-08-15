@@ -109,7 +109,7 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
 
         # ── Success ───────────────────────────────────────────────
         try:
-            plan = explain_query_plan(sql)
+            plan = explain_query_plan(sql, profile=meta["profile"], user=meta["user"])
             cost = plan.get("total_cost_estimate", "?")
         except Exception:
             plan = {}

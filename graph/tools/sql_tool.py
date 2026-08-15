@@ -13,20 +13,23 @@ import pandas as pd
 import psycopg2
 import psycopg2.extras
 import psycopg2.sql
+import sqlparse
 
 from perception.connection_profile import ConnectionProfile, permitted_tables
 from perception.sql_tables import tables_in_sql
 
 logger = logging.getLogger(__name__)
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    os.getenv("POSTGRES_URL", "postgresql://adba_user:adba@localhost:5432/adba_db"),
-)
 SQL_TIMEOUT_MS = int(os.getenv("SQL_TIMEOUT_MS", "30000"))
 
 # Guards against injection via f-string table-name interpolation.
 _TABLE_NAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+# execute_sql là bộ thực thi chỉ-đọc: bất kỳ câu nào không phải SELECT (hoặc
+# WITH ... SELECT) đều bị từ chối, bất kể tập bảng nó chạm là gì. Đây không
+# phải giới hạn của parser — UPDATE/INSERT/DELETE không bao giờ được chạy qua
+# đường này, kể cả khi mọi bảng liên quan đều nằm trong quyền người dùng.
+_READ_ONLY_STATEMENT_TYPE = "SELECT"
 
 
 class TableNotPermittedError(PermissionError):
@@ -41,8 +44,22 @@ def assert_tables_permitted(sql: str, profile: ConnectionProfile, user: str) -> 
     tham số như vậy sẽ nằm trong payload lời gọi, tức là bên bị ràng buộc
     tự khai ràng buộc của mình. Xem spec mục 3.4.1.
 
-    Fail closed: SQL không parse ra bảng nào cũng bị từ chối.
+    Chỉ-đọc: bất kỳ statement nào không phải SELECT (kể cả WITH ... SELECT)
+    bị từ chối ngay, không xét tới bảng nó chạm — một UPDATE mang subquery
+    SELECT trong biểu thức (vd. `UPDATE payroll SET x = (SELECT y FROM
+    orders)`) chỉ để lộ `orders` cho tables_in_sql, không phải `payroll` —
+    bảng thật sự bị ghi. Kiểm loại statement chặn đúng lớp lỗi đó mà không
+    cần dạy tables_in_sql hiểu đích UPDATE/INSERT/DELETE.
+
+    Fail closed: SQL không parse ra bảng nào, hoặc không parse ra statement
+    nào cả, cũng bị từ chối.
     """
+    statements = sqlparse.parse(sql)
+    if not statements or any(s.get_type() != _READ_ONLY_STATEMENT_TYPE for s in statements):
+        raise TableNotPermittedError(
+            "Chỉ cho phép câu SELECT (kể cả WITH ... SELECT) — "
+            "câu này không parse được hoặc không chỉ đọc."
+        )
     touched = tables_in_sql(sql)
     if not touched:
         raise TableNotPermittedError(
@@ -55,11 +72,6 @@ def assert_tables_permitted(sql: str, profile: ConnectionProfile, user: str) -> 
             f"(nội bộ: {sorted(forbidden)})"
         )
     return touched
-
-
-def get_db_connection():
-    """Return a new psycopg2 connection from DATABASE_URL."""
-    return psycopg2.connect(DATABASE_URL)
 
 
 def execute_sql(
@@ -104,9 +116,15 @@ def get_table_sample(
     return execute_sql(query, profile=profile, user=user, params=(limit,))
 
 
-def explain_query_plan(sql: str) -> dict[str, Any]:
-    """Run EXPLAIN on a SQL query and return the plan as a dict."""
-    conn = get_db_connection()
+def explain_query_plan(sql: str, profile: ConnectionProfile, user: str) -> dict[str, Any]:
+    """Run EXPLAIN on a SQL query and return the plan as a dict.
+
+    Same guard as execute_sql, same profile-derived DSN — EXPLAIN reveals
+    table/index names via the plan text, so it is not exempt from the
+    permission check just because it doesn't return rows.
+    """
+    assert_tables_permitted(sql, profile, user)
+    conn = psycopg2.connect(profile.dsn)
     try:
         with conn.cursor() as cur:
             cur.execute("EXPLAIN " + sql)

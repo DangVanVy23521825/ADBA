@@ -39,6 +39,18 @@ trần `full`. Việc thêm `description` tiếng Việt vào info_box (hoặc d
 câu hỏi/embedding) là hướng cải thiện rõ ràng cho retriever kế tiếp, và
 mốc 0.250 / 2.0 ở trên là vạch xuất phát nó phải vượt qua.
 
+Câu hỏi 4 ("Doanh thu theo tháng trong năm 2024") dùng
+`EXTRACT(MONTH FROM order_date)` — đúng cú pháp mà `prompts/text_to_sql.txt`
+chỉ dẫn model sinh ra. Bản đầu của golden set từng né cú pháp này (đổi
+sang `DATE_PART`) để lách qua một lỗi thật trong `perception/sql_tables.py`:
+`FROM` bên trong `EXTRACT(field FROM src)` từng bị bộ quét nhận nhầm là mở
+đầu mệnh đề nguồn, khiến `order_date` bị thêm nhầm vào tập bảng đúng như
+thể nó là một bảng. Lỗi đã được sửa tại gốc (xem `perception/sql_tables.py`
+và `tests/unit/test_sql_tables.py`); golden set khôi phục lại `EXTRACT` để
+phép đo phản ánh đúng cú pháp SQL mà hệ thống thực sự sinh ra. Hai con số
+trong bảng trên không đổi so với bản né tránh, vì cả hai đều quy về cùng
+tập bảng đúng `{orders}` cho câu 4.
+
 ## Ba bộ dữ liệu ngoài
 
 Xem Task 11 của plan. Bảng cấu hình nằm ở đó và được `eval/describe_dataset.py`

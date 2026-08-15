@@ -9,12 +9,18 @@ Không gọi LLM, không cần database.
 from __future__ import annotations
 
 import sqlparse
-from sqlparse.sql import Identifier, IdentifierList, Parenthesis, TokenList
+from sqlparse.sql import Function, Identifier, IdentifierList, Parenthesis, TokenList
 from sqlparse.tokens import CTE, DML, Keyword
 
 _SOURCE_KEYWORDS = {"FROM", "JOIN", "INNER JOIN", "LEFT JOIN", "RIGHT JOIN",
                     "FULL JOIN", "CROSS JOIN", "LEFT OUTER JOIN",
                     "RIGHT OUTER JOIN", "FULL OUTER JOIN"}
+
+# Hàm SQL chuẩn dùng FROM (hoặc từ khoá tương tự) làm dấu tách đối số, KHÔNG
+# phải mệnh đề nguồn: EXTRACT(field FROM src), SUBSTRING(str FROM n FOR m),
+# TRIM(... FROM str), OVERLAY(str PLACING s FROM n). Trong ngoặc của đúng
+# các hàm này, FROM không được coi là bắt đầu danh sách bảng.
+_FROM_ARG_FUNCTIONS = {"EXTRACT", "SUBSTRING", "TRIM", "OVERLAY"}
 
 
 def _real_name(identifier: Identifier) -> str | None:
@@ -48,13 +54,21 @@ def _cte_names(statement: TokenList) -> set[str]:
     return names
 
 
-def _collect(node: TokenList, out: set[str]) -> None:
+def _collect(node: TokenList, out: set[str], suppress_keywords: bool = False) -> None:
+    """suppress_keywords=True nghĩa là đang ở mức trên cùng của ngoặc đối số
+    một hàm trong _FROM_ARG_FUNCTIONS — FROM ở mức đó là dấu tách đối số,
+    không phải mệnh đề nguồn, nên bị bỏ qua. Bất kỳ TokenList lồng bên
+    trong (ví dụ subquery) đều reset cờ về False vì nó mở ra một ngữ cảnh
+    SQL mới, độc lập với hàm bọc ngoài — subquery trong đối số hàm vẫn
+    phải được quét bình thường.
+    """
     expecting_source = False
     for token in node.tokens:
         if token.is_whitespace:
             continue
 
-        if token.ttype is Keyword and token.value.upper() in _SOURCE_KEYWORDS:
+        if (not suppress_keywords and token.ttype is Keyword
+                and token.value.upper() in _SOURCE_KEYWORDS):
             expecting_source = True
             continue
 
@@ -78,6 +92,19 @@ def _collect(node: TokenList, out: set[str]) -> None:
                 expecting_source = False
                 continue
             expecting_source = False
+
+        if isinstance(token, Function):
+            fn_name = (token.get_real_name() or "").upper()
+            if fn_name in _FROM_ARG_FUNCTIONS:
+                # Chỉ ngoặc đối số trực tiếp của hàm này bị chặn FROM; đi
+                # tiếp vào các phần khác (ví dụ Identifier tên hàm) bình
+                # thường, không chặn gì cả.
+                for sub in token.tokens:
+                    if isinstance(sub, Parenthesis):
+                        _collect(sub, out, suppress_keywords=True)
+                    elif isinstance(sub, TokenList):
+                        _collect(sub, out)
+                continue
 
         if isinstance(token, TokenList):
             _collect(token, out)

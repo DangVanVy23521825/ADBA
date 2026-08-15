@@ -12,6 +12,7 @@ LexicalRetriever là mốc so sánh, cố ý không phụ thuộc torch. Bản e
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Iterable, Sequence
 from typing import Protocol
 
@@ -20,9 +21,25 @@ from perception.schema_model import Table
 _WORD = re.compile(r"[a-z0-9]+")
 
 
+def _normalize_vietnamese(text: str) -> str:
+    """Tách dấu tiếng Việt thành combining marks, rồi bỏ đi.
+
+    bảng → bang, lương → luong, nhân → nhan, viên → vien
+    Dùng NFD decomposition để tách base letters từ accents.
+    """
+    # NFD decompose: ả → a + combining-grave
+    nfd = unicodedata.normalize("NFD", text)
+    # Strip combining marks (category Mn): accents, diacritics
+    return "".join(c for c in nfd if unicodedata.category(c) != "Mn")
+
+
 def _tokens(text: str) -> set[str]:
-    """Tách token, cắt cả snake_case: base_salary → {base, salary}."""
-    return set(_WORD.findall(text.lower()))
+    """Tách token, cắt cả snake_case: base_salary → {base, salary}.
+
+    Xử lý tiếng Việt: bảng lương nhân viên → {bang, luong, nhan, vien}
+    """
+    normalized = _normalize_vietnamese(text.lower())
+    return set(_WORD.findall(normalized))
 
 
 class Retriever(Protocol):

@@ -106,13 +106,14 @@ Bước 1 mở rộng từ `perception/extract_info_box.py` đã có.
 ```
 câu hỏi + danh tính user
   │
-  ├─ resolve_schema_context(profile, question, user)      ◄── mới; hàm thuần, không gọi LLM, <100ms
-  │     mode=full      → toàn bộ schema đã render
+  ├─ permitted_tables(profile, user)                      ◄── BẢO MẬT. Không phụ thuộc câu hỏi.
+  │
+  ├─ resolve_schema_context(profile, question, permitted) ◄── NỘI DUNG PROMPT. Hàm thuần, <100ms
+  │     mode=full      → toàn bộ schema đã render (trong phạm vi permitted)
   │     mode=retrieval → top-K theo embedding
   │                      → mở rộng 1 bước theo cạnh FK
-  │                      → lọc bảng user không có quyền
   │                      → retrieve top-2 few-shot từ examples.jsonl
-  │     ⇒ SchemaContext{ tables[], rendered_text, few_shots[], allowed_tables }
+  │     ⇒ SchemaContext{ retrieved_tables[], rendered_text, few_shots[] }
   │
   ├─ run_graph(query, schema_context)
   │     supervisor  ← rendered_text
@@ -120,7 +121,7 @@ câu hỏi + danh tính user
   │     python / viz / insight  ← không cần schema
   │     reflector
   │
-  └─ execute_sql(..., allowed_tables=schema_context.allowed_tables)
+  └─ execute_sql(..., permitted_tables)   ◄── KHÔNG phải retrieved_tables. Xem 3.4.1.
 ```
 
 **Retrieval chạy một lần mỗi câu hỏi, không phải mỗi node.** Nó **không** là node LangGraph: nó deterministic, không gọi LLM, không có kiểu lỗi cần retry. Biến nó thành node là mua thêm một hop và một nhánh lỗi để đổi lấy không gì cả. Nó chạy trước `make_initial_state()`.
@@ -142,7 +143,7 @@ Spec `2026-08-12` đã đưa ra `ConnectionProfile` gom `dsn` + `allowed_tables`
 | Trường | Trước | Sau |
 |---|---|---|
 | `dsn` | biến môi trường toàn cục | giữ nguyên trong profile |
-| `allowed_tables` | frozenset 9 tên hardcode (`sql_tool.py:27-31`) | **động, theo từng query** — xem dưới |
+| `allowed_tables` | frozenset 9 tên hardcode (`sql_tool.py:27-31`) | **tách làm hai** — `permitted_tables(user)` và `retrieved_tables(question)`, xem 3.4.1 |
 | `info_box` | file JSON tĩnh | `schema.yaml` + `index.npz` + `examples.jsonl` + fingerprint |
 
 **Biểu diễn DDL thay cho `json.dumps`.** Hai nơi tiêu thụ hiện dump JSON thô — đó là nguồn gốc của **3,7 KB/bảng** (đo được: `info_box_all.json` = 33.497 B cho 9 bảng). Render dạng DDL:
@@ -161,7 +162,25 @@ CREATE TABLE orders (
 
 Con số 140 token/bảng là cơ sở cho mọi ước tính ngân sách trong spec này (mục 3.3, mục 5.1). Nó phải được đo lại trên schema thật ở pha 1 chứ không giữ nguyên như giả định.
 
-**`allowed_tables` đổi bản chất, không chỉ đổi nguồn.** Sau thay đổi nó bằng đúng tập bảng đã nằm trong prompt của lượt đó. Guard và prompt sinh ra từ **cùng một nguồn** — chúng không thể lệch nhau, và tập cho phép hẹp lại theo từng câu hỏi thay vì mở toàn bộ schema. Đây là cải thiện an toàn thực chất so với whitelist tĩnh.
+### 3.4.1 Hai tập bảng, khác bản chất — không được gộp
+
+`_ALLOWED_TABLES` tĩnh hiện tại phải tách thành **hai** khái niệm, không phải một khái niệm động:
+
+| Tập | Bản chất | Phụ thuộc | Ai dẫn ra |
+|---|---|---|---|
+| `permitted_tables(user)` | **Bảo mật.** Ranh giới thật. | Danh tính người dùng. Ổn định giữa các câu hỏi. | Bên thực thi SQL, tự dẫn từ profile + danh tính. **Không nhận từ bên gọi.** |
+| `retrieved_tables(question)` | **Nội dung prompt.** Không phải cơ chế bảo mật. | Câu hỏi. Đổi mỗi lượt. | Retriever, phía client |
+
+Bản duyệt đầu của spec này đặt `allowed_tables = retrieved ∩ permitted` rồi dùng cho **cả hai** việc. Trong tiến trình thì vô hại vì cùng một code, nhưng nó hỏng ngay khi tool tách qua ranh giới RPC/MCP (spec `2026-08-12` pha 3): lúc đó `allowed_tables` phải đi trong payload lời gọi, tức là **bên bị ràng buộc tự khai ràng buộc của mình**. Guard tụt xuống thành "bất cứ thứ gì client nói". Đây là lỗi thiết kế, đã sửa.
+
+Quy tắc sau khi tách:
+
+- `execute_sql` chỉ thực thi `permitted_tables`. Khi sang MCP, tham số này **không** nằm trong payload — server tự dẫn ra từ profile cộng danh tính phiên.
+- `retrieved_tables` chỉ dùng để dựng prompt. Nó thu hẹp thứ model *nhìn thấy*, không thu hẹp thứ model *được phép chạm*.
+
+Tách ra thì **đúng hơn và cũng tốt hơn**: trước đây nếu retrieval sót một bảng mà model vẫn đoán đúng tên, guard sẽ chặn — một thất bại giả. Sau khi tách thì câu đó chạy được, vì bảng đó vốn nằm trong quyền của người dùng. Kiểu lỗi `retrieval_miss` (mục 5.2) nhẹ đi một bậc.
+
+**Đánh đổi được chấp nhận có ý thức:** SQL có thể chạm một bảng nằm trong quyền nhưng không được retrieve. Đó không phải leo thang đặc quyền — người dùng vốn được xem bảng đó — nên nó không phải sự cố bảo mật, chỉ là tín hiệu retrieval chưa tốt. Ghi vào trace để `verify_profile.py` đếm.
 
 ### 3.5 Tách prompt template ba đường
 
@@ -210,15 +229,21 @@ Embedding model chạy in-process trên CPU (đề xuất `multilingual-e5-small
 
 Kế thừa toàn bộ bốn lớp phòng thủ SQL và cô lập sandbox từ spec `2026-08-12`. Bổ sung phân quyền theo người dùng, ba lớp:
 
-| Lớp | Cơ chế | Ship kèm sản phẩm? |
-|---|---|---|
-| 1 | Retriever lọc bảng theo quyền → model **không nhìn thấy** bảng bị cấm | Có |
-| 2 | `execute_sql` dùng `allowed_tables` từ cùng `SchemaContext` → model bịa tên bảng thì thực thi từ chối | Có |
-| 3 | Grant cấp cột/dòng trong Postgres | Không — khách tự cấu hình |
+| Lớp | Cơ chế | Là ranh giới bảo mật? | Ship kèm? |
+|---|---|---|---|
+| 1 | `permitted_tables(user)` giới hạn phạm vi retriever → model **không nhìn thấy** bảng ngoài quyền | Có | Có |
+| 2 | `execute_sql` thực thi `permitted_tables` do chính nó dẫn ra → model bịa tên bảng thì từ chối | **Có — lớp quyết định** | Có |
+| 3 | Grant cấp cột/dòng trong Postgres | Có | Không — khách tự cấu hình |
+| — | `retrieved_tables(question)` thu hẹp prompt theo câu hỏi | **Không.** Chỉ là nội dung prompt. | Có |
 
-Lớp 1 là lớp mạnh nhất và gần như miễn phí: không có cách nào sinh SQL đọc `payroll` nếu `payroll` chưa từng xuất hiện trong context.
+Điểm mấu chốt sau khi tách ở mục 3.4.1: **lớp 2 là lớp chịu trách nhiệm**, vì nó là lớp duy nhất còn đứng vững khi tool tách qua RPC. Lớp 1 làm model không *nhìn thấy* bảng cấm — hữu ích và gần như miễn phí, nhưng nó là biện pháp giảm bề mặt, không phải bảo đảm. Đừng bao giờ suy luận an toàn từ "bảng đó không có trong prompt".
 
-`app.py` hiện không có xác thực (chỉ `st.session_state` phạm vi phiên trình duyệt). Bản on-prem cần tối thiểu: định danh người dùng, và ánh xạ người dùng → tập bảng được phép. Thiết kế chi tiết của lớp xác thực nằm ngoài spec này; spec này chỉ định nghĩa **điểm cắm**: `resolve_schema_context(profile, question, user)` nhận `user` và lọc theo đó.
+Dòng cuối bảng có mặt để nói rõ điều dễ nhầm nhất: retrieval **không** phải cơ chế phân quyền, dù nó trông giống.
+
+`app.py` hiện không có xác thực (chỉ `st.session_state` phạm vi phiên trình duyệt). Bản on-prem cần tối thiểu: định danh người dùng, và ánh xạ người dùng → `permitted_tables`. Thiết kế chi tiết của lớp xác thực nằm ngoài spec này; spec này định nghĩa **hai điểm cắm**:
+
+- `permitted_tables(profile, user)` — nguồn sự thật về quyền, được cả retriever và `execute_sql` gọi độc lập
+- `resolve_schema_context(profile, question, permitted)` — nhận phạm vi đã bị giới hạn, không tự quyết định quyền
 
 ---
 
@@ -248,7 +273,9 @@ DBA của khách thêm cột, đổi tên bảng, và profile vẫn mô tả sch
 Kèm theo là một yêu cầu thiết kế thật: **`schema.yaml` phải merge được.** Refresh chỉ re-annotate bảng mới hoặc đã đổi, giữ nguyên mọi mục có `reviewed_by: human`. Nếu refresh xóa công sức của khách thì họ sẽ không sửa lần thứ hai, và chất lượng chú giải — tức trần accuracy — tụt vĩnh viễn.
 
 **`retrieval_miss`.**
-Reflector báo `error_category: schema_mismatch` → gọi lại `resolve_schema_context(..., must_include=[bảng thiếu])`. Mở rộng có mục tiêu, không phải fallback full-schema. Một lượt, rẻ.
+Nhẹ đi sau khi tách hai tập bảng (mục 3.4.1). Nếu model đoán đúng tên một bảng bị retrieval bỏ sót và bảng đó nằm trong `permitted_tables`, câu truy vấn **chạy được** — guard không chặn nữa. Chỉ ghi vào trace như tín hiệu retrieval kém.
+
+Khi model không đoán ra và SQL báo lỗi: reflector báo `error_category: schema_mismatch` → gọi lại `resolve_schema_context(..., must_include=[bảng thiếu])`. Mở rộng có mục tiêu, không phải fallback full-schema. Một lượt, rẻ.
 
 **`annotation_unreviewed`.**
 Câu trả lời dựa trên bảng khách chưa duyệt chú giải → không phải lỗi, nhưng hiện cảnh báo kèm câu trả lời. Đây cũng là đòn bẩy khiến họ chịu duyệt YAML.
@@ -340,7 +367,8 @@ Gần như toàn bộ phần mới là hàm thuần không gọi LLM, nên unit-
 | `resolve_schema_context()` | top-K, mở rộng FK 1 bước, lọc quyền, công tắc `full`/`retrieval`, `must_include` |
 | Merge `schema.yaml` khi refresh | **Giữ nguyên mục `reviewed_by: human`** — thứ hỏng âm thầm nhất |
 | Fingerprint schema | Phát hiện `profile_stale` khi thêm/xóa/đổi tên cột |
-| `execute_sql` guard | Chặn bảng ngoài `allowed_tables` động |
+| `execute_sql` guard | Chặn bảng ngoài `permitted_tables`; **và** không chặn bảng nằm trong `permitted` nhưng ngoài `retrieved` (mục 3.4.1) |
+| `permitted_tables()` | Dẫn ra độc lập với câu hỏi và với kết quả retrieval; không nhận tập quyền từ bên gọi |
 | Loại trừ `sample_rows` khỏi `profile/` | Kiểm bằng test, không bằng quy ước |
 
 Phần phụ thuộc LLM chỉ còn chất lượng chú giải và chất lượng SQL — hai thứ đó thuộc eval, không thuộc test. **Không viết test đòi model trả lời đúng.**
@@ -352,7 +380,7 @@ Phần phụ thuộc LLM chỉ còn chất lượng chú giải và chất lư�
 | Pha | Nội dung | Điều kiện ra |
 |---|---|---|
 | **0** | Harness eval tầng 1: parse SQL mẫu → tập bảng đúng; tải Spider/BIRD/BEAVER, ghi cấu hình thực tế | Đo được recall của một retriever giả (random / full) làm mốc |
-| **1** | `render_schema()` DDL; tách `prompts/*.txt` ba đường; chuyển `{info_box}` xuống cuối; `SchemaContext` + `resolve_schema_context()`; `ConnectionProfile` mở rộng; `allowed_tables` động | Golden set ADBA hiện tại **không hồi quy**; recall tầng 1 đo được trên cả ba benchmark |
+| **1** | `render_schema()` DDL; tách `prompts/*.txt` ba đường; chuyển `{info_box}` xuống cuối; `SchemaContext` + `resolve_schema_context()`; `ConnectionProfile` mở rộng; **tách `permitted_tables` / `retrieved_tables` (3.4.1)** | Golden set ADBA hiện tại **không hồi quy**; recall tầng 1 đo được trên cả ba benchmark |
 | **2** | Train lại LoRA đa schema: chế độ mới của `generate_data.py`, dịch phương ngữ SQLite→Postgres, train, eval | Golden set ADBA không hồi quy **và** `beaver_exec_accuracy` cải thiện so với base |
 | **3** | Đường onboarding: `extract_schema` → `annotate_schema` → merge YAML → `build_profile` → `verify_profile`; `refresh_profile` | Chạy trọn trên một schema thứ hai (không phải ADBA) và ra `report.md` |
 | **4** | Đóng gói on-prem: `docker-compose.onprem.yml`, tắt egress, model ship kèm, điểm cắm xác thực, lọc quyền trong retriever | Cài được trên một máy sạch không có internet |
@@ -390,6 +418,7 @@ Các pha của spec `2026-08-12` (hardening, MCP boundary) chạy song song và 
 8. Bundle on-prem khởi động và trả lời được câu hỏi trên máy không có internet.
 9. Không có `sample_rows` trong `profile/` — kiểm bằng test.
 10. `refresh_profile.py` giữ nguyên 100% mục `reviewed_by: human` — kiểm bằng test.
+11. `execute_sql` không có tham số nào cho phép bên gọi nới rộng tập bảng được chạm. Tập quyền chỉ dẫn ra từ profile + danh tính — kiểm bằng test, và kiểm lại khi tool tách qua MCP.
 
 ---
 
@@ -420,3 +449,26 @@ Thêm một hop và một nhánh lỗi để đổi lấy không gì cả — n�
 ### 10.5 SaaS ngang (khách trỏ DB lên cloud của bạn)
 
 Đánh giá ở mục 10.4 spec `2026-08-12` giữ nguyên: độ phù hợp thấp. Thiết kế trong spec này đi ngược hướng đó một cách có chủ ý — không egress, một profile mỗi bundle, model ship kèm. Nếu về sau đổi ý thì phần lớn công việc ở đây vẫn dùng lại được (retrieval, chú giải, phân quyền), nhưng phần đóng gói thì không.
+
+### 10.6 Gộp SQL + Python + Viz thành một Analyst Agent tool-calling
+
+**Đã đo, không phải suy đoán.** Spike ngày 2026-08-15 trên `qwen2.5-coder:7b-instruct-q5_K_M` (base, chưa fine-tune), 12 câu hỏi trên schema ADBA, vòng lặp JSON 3 tool + `finish`, 3 biến thể giao thức.
+
+| Tier | Tool cần dùng | Kết quả |
+|---|---|---|
+| 2 bước, tham số scalar | `query_postgres`, `render_chart` | **5/7 pass**, parse JSON 100% |
+| 3 bước, có payload code | thêm `run_pandas` | **0/5 pass** qua cả ba biến thể giao thức |
+
+Ba kiểu hỏng, đều tái lập được:
+
+- **Không gắn được payload code.** Code trong JSON → JSON hỏng (dùng `"""` của Python). Code trong fence sau JSON → bỏ quên hẳn khối code. Thông báo lỗi có kèm ví dụ đúng, lặp ba lần, không lần nào sửa được.
+- **Thử lại nhưng không thích nghi.** Một câu lặp đúng một truy vấn hỏng sáu lần, không đổi một ký tự. Một câu khác thì tự sửa lỗi SQL thành công. Tự sửa **không nhất quán**.
+- **Không biết dừng đúng lúc.** Một câu không bao giờ gọi `finish`; một câu gọi `finish` sau một lỗi mà chưa làm gì — trả lời như thể đã xong.
+
+**Kết luận:** với lớp model hiện tại thì loại bỏ. Vấn đề không phải kiến trúc mà là model — Qwen2.5-**Coder** mạnh ở sinh code đúng trong một lượt, yếu ở duy trì giao thức nhiều lượt. Kiến trúc 5 node đang dùng nó đúng chỗ nó giỏi, và 96,9% là bằng chứng.
+
+**Điều kiện mở lại:** một spike riêng trên base agentic (`Qwen2.5-7B-Instruct` bản không-Coder, hoặc dòng Qwen3-8B), sau khi pha 2 xong. Nhớ chi phí kèm theo: **đổi base thì LoRA và bản merged hiện tại bỏ đi hoàn toàn** — câu hỏi kiến trúc và câu hỏi chọn model là một.
+
+**Phần được tách ra và giữ lại:** bỏ node supervisor. Không gian đầu ra của nó chỉ có hai lựa chọn (`prompts/supervisor_routing.txt` quy tắc 5–6) mà đang tốn một lượt LLM đầy đủ, và router là nguyên nhân tồn tại của bug `supervisor.py:274-281`. Thay bằng luật hoặc classifier rẻ. Việc này **độc lập** với chuyện gộp và không dính rủi ro vừa đo được — nhưng nó thuộc spec `2026-08-12`, không thuộc spec này.
+
+Giới hạn của phép đo: n=5 ở tier khó, một model, temperature 0,1, một bộ prompt. Chưa kiểm được liệu fine-tune trên định dạng tool-call có sửa được hai kiểu hỏng đầu hay không.

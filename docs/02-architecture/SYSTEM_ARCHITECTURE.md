@@ -246,7 +246,7 @@ riêng qua MCP, và egress bị chặn ở tầng mạng. Chi tiết:
 | `app.py` | 1 | 1 | 271 | Streamlit UI — điểm vào duy nhất cho người dùng cuối |
 | `data` | 12 | 1 | 68.524 | DDL 3 domain, seed, và dataset huấn luyện/đánh giá (JSONL) |
 | `docker-compose.yml` | 1 | 0 | 47 | — |
-| `docs` | 5 | 0 | — | Bộ tài liệu dự án (chính file này) |
+| `docs` | 16 | 0 | — | Bộ tài liệu dự án (chính file này) |
 | `eval` | 4 | 3 | 1.071 | Runner đo baseline / PEFT và so sánh hai lần chạy |
 | `graph` | 16 | 16 | 1.907 | LangGraph: state, các node agent, và tool thực thi |
 | `model` | 3 | 3 | 265 | ModelClient (Ollama local-first, fallback OpenAI) + tham số theo agent |
@@ -254,10 +254,11 @@ riêng qua MCP, và egress bị chặn ở tầng mạng. Chi tiết:
 | `prompts` | 5 | 0 | 551 | System prompt của từng skill, dạng file text tách khỏi code |
 | `requirements.txt` | 1 | 0 | 17 | — |
 | `schemas` | 3 | 3 | 735 | Pydantic contract: ExecutionPlan (Supervisor) và InsightOutput (Insight) |
-| `scripts` | 4 | 2 | 721 | Tiện ích vận hành: áp schema, kiểm tra kết nối, sinh tài liệu |
+| `scripts` | 7 | 3 | 1.644 | Tiện ích vận hành: áp schema, kiểm tra kết nối, sinh tài liệu |
 | `tests` | 9 | 9 | 1.925 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
 | `training` | 13 | 5 | 3.795 | Sinh dữ liệu, LoRA/QLoRA notebook, checkpoint và kết quả |
 | `.cursorrules` | 1 | 0 | 0 | — |
+| `.github` | 1 | 0 | 29 | CI/CD — unit test, build & push image lên GHCR |
 | `.gitignore` | 1 | 0 | 0 | — |
 
 <!-- AUTO:end id=repo-map -->
@@ -332,10 +333,10 @@ kèm giá trị thật; `env.example` là bản mẫu.
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `3d2b768` — chore: ignore .claude/worktrees/ (worktree cô lập) |
+| Commit nguồn gần nhất | `53dec53` — docs: bộ tài liệu dự án + đường ống tự cập nhật theo commit |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-08-15 |
-| Số commit nguồn | 18 |
+| Ngày commit | 2026-08-16 |
+| Số commit nguồn | 19 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

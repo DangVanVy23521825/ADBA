@@ -76,10 +76,10 @@ Chi tiết cơ chế, cách thêm khối mới, cách xử lý sự cố: [DOCS_
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `3d2b768` — chore: ignore .claude/worktrees/ (worktree cô lập) |
+| Commit nguồn gần nhất | `53dec53` — docs: bộ tài liệu dự án + đường ống tự cập nhật theo commit |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-08-15 |
-| Số commit nguồn | 18 |
+| Ngày commit | 2026-08-16 |
+| Số commit nguồn | 19 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

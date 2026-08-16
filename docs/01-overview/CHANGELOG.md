@@ -78,6 +78,7 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 **Tài liệu**
 
+- bộ tài liệu dự án + đường ống tự cập nhật theo commit — `53dec53` (2026-08-16, Đặng Văn Vỹ)
 - plan triển khai — đường ống schema context (pha 0+1) — `642bc51` (2026-08-15, Đặng Văn Vỹ)
 - spec — tách permitted_tables khỏi retrieved_tables; ghi kết quả spike — `9bfeb37` (2026-08-15, Đặng Văn Vỹ)
 - spec — agent chạy nội bộ trên schema của khách hàng — `4c90f63` (2026-08-15, Đặng Văn Vỹ)
@@ -137,10 +138,10 @@ Cập nhật `PRIMARY_MODEL` trong `.env`, `ollama pull <model>`, rồi chạy l
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `3d2b768` — chore: ignore .claude/worktrees/ (worktree cô lập) |
+| Commit nguồn gần nhất | `53dec53` — docs: bộ tài liệu dự án + đường ống tự cập nhật theo commit |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-08-15 |
-| Số commit nguồn | 18 |
+| Ngày commit | 2026-08-16 |
+| Số commit nguồn | 19 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

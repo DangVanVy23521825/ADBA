@@ -4,7 +4,9 @@
     "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
     "license": "CC BY-SA 4.0",
     "license_url": "https://example.invalid/license",
-    "may_ship": true,
+    "commercial_use": true,
+    "may_redistribute": true,
+    "fetch_mode": "http",
     "notes": "Mục đã được người xác nhận — dùng để test đường thành công."
   },
   "pending_license": {
@@ -12,15 +14,29 @@
     "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
     "license": null,
     "license_url": "https://example.invalid/license",
-    "may_ship": null,
+    "commercial_use": null,
+    "may_redistribute": null,
+    "fetch_mode": "http",
     "notes": "Chưa xác nhận — phải bị từ chối trước khi chạm mạng."
   },
   "no_ship": {
     "url": "https://example.invalid/noship.zip",
     "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "license": "CC BY-SA 4.0",
+    "license_url": "https://example.invalid/license",
+    "commercial_use": true,
+    "may_redistribute": false,
+    "fetch_mode": "http",
+    "notes": "Dùng được kể cả cho sản phẩm, nhưng không đóng gói kèm bản giao khách."
+  },
+  "research_only": {
+    "url": "https://example.invalid/research.zip",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
     "license": "CC BY-NC-ND 4.0",
     "license_url": "https://example.invalid/license",
-    "may_ship": false,
-    "notes": "Dùng được nội bộ, cấm đóng gói kèm sản phẩm."
+    "commercial_use": false,
+    "may_redistribute": false,
+    "fetch_mode": "http",
+    "notes": "Cho phép tham chiếu nội bộ, cấm dùng cho mục đích thương mại."
   }
 }

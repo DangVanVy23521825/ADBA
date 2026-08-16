@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from graph.agents.sql_agent import _extract_sql, sql_agent_node
 from graph.state import make_initial_state
+from graph.tools.sql_tool import TableNotPermittedError
 from perception.connection_profile import build_profile
 from perception.schema_context import SchemaContext
 from tests.fixtures.mini_schema import MINI_TABLES
@@ -151,6 +152,47 @@ class TestSqlAgentNode:
         result = sql_agent_node(s)
         assert result["status"] == "failed"
         assert result["last_error"]["agent"] == "sql"
+
+    @patch("graph.agents.sql_agent.execute_sql")
+    @patch("graph.agents.sql_agent.ModelClient")
+    def test_table_not_permitted_error_never_leaks_the_internal_segment(
+        self, MockClient, mock_execute,
+    ):
+        """Permanent regression test for the leak-path finding (Task 8/10 review).
+
+        assert_tables_permitted() (graph/tools/sql_tool.py) raises
+        TableNotPermittedError with a public part and a "(nội bộ: [...])"
+        segment carrying the exact forbidden table names — table names are
+        themselves information the user must not receive. sql_agent_node
+        sanitizes via _public_error_message() before anything enters state,
+        because that state (last_error, action_trace, agent_outputs) can
+        reach the UI via app.py or travel through reflector_agent_node into
+        its own LLM prompt and trace entry. This test guards against that
+        sanitization being silently reverted (e.g. "simplified" back to
+        `error_context = str(exc)`), by asserting the forbidden table name
+        and the internal-segment marker are absent from every state field
+        that carries the error message forward.
+        """
+        mock_instance = MagicMock()
+        mock_instance.invoke.return_value = "SELECT * FROM payroll"
+        MockClient.return_value = mock_instance
+        mock_execute.side_effect = TableNotPermittedError(
+            "Câu hỏi này chạm dữ liệu bạn không được cấp quyền. "
+            "(nội bộ: ['payroll'])"
+        )
+
+        s = _state(PLAN_SQL_INSIGHT)
+        result = sql_agent_node(s)
+
+        assert result["status"] == "running"  # retries exhausted, not a crash
+        haystacks = [
+            str(result["last_error"]),
+            str(result["action_trace"]),
+            str(result["agent_outputs"]),
+        ]
+        for text in haystacks:
+            assert "payroll" not in text, f"forbidden table name leaked: {text!r}"
+            assert "nội bộ" not in text, f"internal-segment marker leaked: {text!r}"
 
 
 if __name__ == "__main__":

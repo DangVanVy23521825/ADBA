@@ -32,8 +32,18 @@ SUPERVISOR_SYSTEM_PROMPT: str = _PROMPT_PATH.read_text(encoding="utf-8")
 
 
 def build_system_prompt(schema_context: SchemaContext) -> str:
-    """Render the prompt template with this turn's rendered schema slice."""
-    return SUPERVISOR_SYSTEM_PROMPT.replace("{schema}", schema_context.rendered_text)
+    """Render the prompt template with this turn's rendered schema slice.
+
+    The template's trailing "User query: {query}" line
+    (prompts/supervisor_routing.txt) is dropped rather than substituted:
+    supervisor_node always sends the real query as the user turn
+    (`user_prompt=query` below), so leaving the placeholder unsubstituted
+    would send a literal "{query}" to the model, and substituting it here
+    would send the query twice (system prompt and user turn). Dropping it
+    means the query reaches the model exactly once, via the user turn.
+    """
+    rendered = SUPERVISOR_SYSTEM_PROMPT.replace("{schema}", schema_context.rendered_text)
+    return rendered.replace("User query: {query}\n\n", "")
 
 
 def build_dependency_graph(plan: list[dict[str, Any]]) -> dict[str, list[str]]:

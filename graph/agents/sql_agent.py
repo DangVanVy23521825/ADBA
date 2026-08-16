@@ -44,14 +44,25 @@ def build_system_prompt(schema_context: SchemaContext) -> str:
     """Render template với lát schema của lượt này.
 
     Few-shot để rỗng trong pha 1; plan 3 (onboarding) sẽ đổ vào.
+
+    The template's trailing "Task: {task}" line (prompts/text_to_sql.txt)
+    is dropped rather than substituted: sql_agent_node always sends the
+    real task text as the user turn (`user_prompt = f"Task: {task}"` in the
+    retry loop below), so leaving the placeholder unsubstituted would send
+    a literal "{task}" to the model, and substituting it here would send
+    the task twice (system prompt and user turn). Dropping it means the
+    task text reaches the model exactly once, via the user turn — where it
+    already lived before this function's {schema}/{few_shots} wiring was
+    added.
     """
     few = "\n\n".join(
         f"Task: {fs['question']}\nOutput:\n{fs['sql']}"
         for fs in schema_context.few_shots
     )
-    return (SQL_SYSTEM_PROMPT
-            .replace("{few_shots}", few)
-            .replace("{schema}", schema_context.rendered_text))
+    rendered = (SQL_SYSTEM_PROMPT
+                .replace("{few_shots}", few)
+                .replace("{schema}", schema_context.rendered_text))
+    return rendered.replace("Task: {task}\n\n", "")
 
 
 def _public_error_message(exc: Exception) -> str:

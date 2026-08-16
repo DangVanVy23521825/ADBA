@@ -43,15 +43,23 @@ class ConnectionProfile:
 
 
 def schema_fingerprint(tables: Sequence[Table]) -> str:
-    """Hash của cấu trúc schema — tên bảng và tên/kiểu cột.
+    """Hash của cấu trúc schema — tên bảng và tên/kiểu/is_generated của cột.
 
     Cố ý bỏ qua row_count và description: row_count đổi mỗi ngày và mô tả
     do người sửa; cả hai đều không phải thay đổi schema. Chỉ thay đổi cấu
     trúc mới được kích hoạt profile_stale (spec mục 5.2).
+
+    is_generated CÓ tính vào hash — nó không cosmetic: một cột chuyển
+    thành GENERATED đổi hẳn SQL nào là hợp lệ trên cột đó (prompt SQL có
+    quy tắc riêng: cột GENERATED chỉ đọc, không được ghi), nên đó đúng là
+    thay đổi cấu trúc mà profile_stale phải bắt được.
     """
     parts = []
     for t in sorted(tables, key=lambda x: x.name):
-        cols = ",".join(f"{c.name}:{c.data_type}" for c in sorted(t.columns, key=lambda c: c.name))
+        cols = ",".join(
+            f"{c.name}:{c.data_type}:{c.is_generated}"
+            for c in sorted(t.columns, key=lambda c: c.name)
+        )
         pk = ",".join(sorted(t.primary_key))
         fk = ",".join(f"{k}->{v}" for k, v in sorted(t.foreign_keys.items()))
         parts.append(f"{t.name}|{cols}|{pk}|{fk}")

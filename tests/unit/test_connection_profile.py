@@ -111,6 +111,24 @@ def test_fingerprint_ignores_row_count():
     assert schema_fingerprint(same) == before
 
 
+def test_fingerprint_changes_when_a_column_becomes_generated():
+    """IMPORTANT 5 (final review): is_generated is not cosmetic.
+
+    A column becoming GENERATED changes what SQL is valid against it (the
+    SQL prompt template has a rule about exactly that: GENERATED columns are
+    read-only). A DBA making that change must invalidate the profile, same
+    as adding a column does — unlike row_count/description, which are
+    correctly excluded because they're volatile/cosmetic and not schema.
+    """
+    before = schema_fingerprint(MINI_TABLES)
+    t = MINI_TABLES[0]
+    flipped_col = Column(t.columns[0].name, t.columns[0].data_type, is_generated=True)
+    changed = (Table(name=t.name, columns=(flipped_col,) + t.columns[1:],
+                      primary_key=t.primary_key, foreign_keys=t.foreign_keys,
+                      row_count=t.row_count, description=t.description),) + MINI_TABLES[1:]
+    assert schema_fingerprint(changed) != before
+
+
 def test_small_schema_gets_full_mode():
     assert _profile().schema_mode == "full"
 

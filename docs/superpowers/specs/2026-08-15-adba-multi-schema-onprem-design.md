@@ -348,7 +348,37 @@ Tập bảng đúng **parse được từ SQL mẫu** bằng `sqlparse` (đã c�
 
 Cả ba đều kèm SQL mẫu nên **cả ba đo được tầng 1 ngay**. Bật tầng 1 trên cả ba từ đầu; tầng 2 chỉ trên BEAVER như spec `2026-08-12` đã chốt.
 
-> **Cần xác minh khi dựng harness:** số database, số bảng trung bình mỗi DB, và license của từng bộ. Các con số này không được chốt từ trí nhớ; **hạng mục đầu tiên của pha 0** là tải bộ dữ liệu và ghi lại cấu hình thực tế vào `eval/README_multischema.md`.
+> **Cần xác minh khi dựng harness:** số database và số bảng trung bình mỗi DB. Các con số này không được chốt từ trí nhớ; **hạng mục đầu tiên của pha 0** là tải bộ dữ liệu và ghi lại cấu hình thực tế vào `eval/README_multischema.md`.
+
+### 6.2.1 Điều kiện pháp lý khi sử dụng ba bộ
+
+Đây là **quyết định của chủ repo**, ghi lại để tra cứu — không phải tư vấn pháp lý. Nguồn sự thật khi chạy là `eval/benchmarks.json`; mục này giải thích *vì sao* các trường trong đó được đặt như vậy.
+
+| Bộ | License | Dùng cho mục đích thương mại | Đóng gói kèm bản giao khách |
+|---|---|---|---|
+| Spider | CC BY-SA 4.0 | **Được** | Không |
+| BIRD | CC BY-SA 4.0 | **Được** | Không |
+| BEAVER | **Chưa xác định** | **Không, cho tới khi xác định** | Không |
+
+**Hai trục, không phải một.** "Được dùng cho mục đích thương mại" và "được đóng gói kèm sản phẩm" là hai câu hỏi khác nhau, và một giấy phép có thể cho phép cái này mà cấm cái kia. Điều khoản NonCommercial chạm vào trục thứ nhất — nó hạn chế **cách dùng**, kể cả khi không hề phân phối lại gì. Vì thế `eval/benchmarks.json` có hai trường riêng, `commercial_use` và `may_redistribute`, và `eval/fetch_dataset.py` từ chối bất kỳ mục nào chưa quyết cả hai.
+
+**Vì sao cả ba đều `may_redistribute: false`.** Đây là **chính sách dự án, không phải hạn chế của giấy phép**. CC BY-SA 4.0 cho phép phân phối lại kèm ghi công và share-alike. Nhưng dữ liệu benchmark là công cụ đo lúc phát triển, không phải thành phần của sản phẩm — không có lý do gì để nó nằm trong bản giao khách, và điều khoản share-alike khi đi kèm một bản phân phối thương mại là thứ tốt nhất nên tránh hẳn.
+
+**Vì sao BEAVER bị treo.** Các nguồn công khai ghi mâu thuẫn: có nơi nêu CC BY-NC-ND 4.0, có nơi nêu MIT. Cho tới khi xác định được, BEAVER không được dùng. Nếu hóa ra là BY-NC-ND thì có **hai** hệ quả, không phải một:
+
+- **NC** cấm dùng cho mục đích thương mại — mà "đo để quyết định fine-tune có chuyển giao được sang schema khách hay không" chính là mục đích thương mại.
+- **ND** cấm tạo bản phái sinh — mà bước chuyển bộ dữ liệu sang `questions.jsonl` + `schemas.json` là một bản phái sinh, kể cả khi chỉ dùng nội bộ.
+
+Hệ quả thứ hai đáng chú ý vì nó chặn cả đường dùng nội bộ, thứ mà trực giác hay cho là an toàn.
+
+**Hệ quả lên `beaver_exec_accuracy`.** Mục 6.5 và mục 9 đặt chỉ số này làm số quyết định fine-tune có chuyển giao được hay không. Chừng nào license BEAVER chưa xác định, **chỉ số đó không có nguồn dữ liệu hợp lệ.** Hai lối đi khi tới lúc cần:
+
+1. BEAVER được xác nhận cho phép thương mại → giữ nguyên vai trò như spec mô tả.
+2. Không được → thay bằng BIRD làm nguồn đo chuyển giao. BIRD không có quy mô doanh nghiệp như BEAVER, nên phép đo yếu hơn và spec phải hạ kỳ vọng tương ứng, chứ không được giả vờ như vẫn đo được điều cũ.
+
+Quyết định này thuộc pha 2, cùng lúc chạy eval sau khi train lại.
+
+**Thi hành bằng code, không bằng tài liệu.** `require_commercial()` trong `eval/fetch_dataset.py` là cổng cho những chỗ số đo dẫn tới quyết định về sản phẩm. Một bộ chỉ cho phép nghiên cứu vẫn tải được để tham khảo, nhưng gọi qua cổng đó sẽ bị từ chối. Lý do tách như vậy: một dòng trong spec thì không ai đọc lúc chạy script, còn một trường trong manifest thì script đọc được và từ chối được.
 
 ### 6.3 Hệ quả lên dữ liệu train
 

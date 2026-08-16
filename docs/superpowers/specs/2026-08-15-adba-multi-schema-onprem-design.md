@@ -233,7 +233,7 @@ Kế thừa toàn bộ bốn lớp phòng thủ SQL và cô lập sandbox từ s
 
 | Lớp | Cơ chế | Là ranh giới bảo mật? | Ship kèm? |
 |---|---|---|---|
-| 1 | `permitted_tables(user)` giới hạn phạm vi retriever → model **không nhìn thấy** bảng ngoài quyền | Có | Có |
+| 1 | `permitted_tables(user)` **giao vào kết quả retrieval** → model không nhìn thấy bảng ngoài quyền | Có | Có |
 | 2 | `execute_sql` thực thi `permitted_tables` do chính nó dẫn ra → model bịa tên bảng thì từ chối | **Có — lớp quyết định** | Có |
 | 3 | Grant cấp cột/dòng trong Postgres | Có | Không — khách tự cấu hình |
 | — | `retrieved_tables(question)` thu hẹp prompt theo câu hỏi | **Không.** Chỉ là nội dung prompt. | Có |
@@ -242,10 +242,39 @@ Kế thừa toàn bộ bốn lớp phòng thủ SQL và cô lập sandbox từ s
 
 Dòng cuối bảng có mặt để nói rõ điều dễ nhầm nhất: retrieval **không** phải cơ chế phân quyền, dù nó trông giống.
 
+### 4.1 Lớp 1 lọc SAU khi tìm, không phải TRƯỚC — và hệ quả
+
+Bản duyệt đầu của spec này mô tả lớp 1 là *"giới hạn phạm vi retriever"*. Hiện thực không làm vậy, và mô tả trên đã được sửa cho khớp thực tế. Thứ tự thật trong `resolve_schema_context`:
+
+```
+hits   = retriever.search(question, k)          # xếp hạng trên TOÀN BỘ schema
+chosen = expand_by_foreign_keys(hits, tables)   # mở rộng 1 bước theo FK
+chosen &= permitted                              # giao với quyền — ở BƯỚC CUỐI
+```
+
+**Về bảo mật không có khác biệt.** Phép giao là thao tác tập hợp cuối cùng trên mọi nhánh, kể cả `must_include`, nên không bảng nào ngoài quyền lọt vào `SchemaContext`. Điều này đã được kiểm độc lập.
+
+**Về chất lượng thì có, và nó lệch theo hướng đáng lo.** Retriever xếp hạng trên toàn bộ schema rồi mới cắt theo quyền, nên một bảng hợp lệ của người dùng có thể bị đẩy khỏi top-K bởi những bảng mà chính người đó **không được xem**. Với schema 150 bảng và một người dùng được cấp 5 bảng, `k=8` có thể cho ra `chosen` rỗng — model không nhận được schema nào và không trả lời được câu hỏi mà người dùng hoàn toàn có quyền hỏi.
+
+Nghịch lý: **quyền càng hẹp thì hệ thống càng dễ vô dụng**, vì lý do nằm ở những bảng người dùng không hề thấy. Người dùng toàn quyền không bao giờ gặp.
+
+Điều này không biểu hiện trong bản triển khai hiện tại vì `app.py` cấp `ALL_TABLES` cho đúng một người dùng. Nó sẽ biểu hiện ngay ở khách hàng đầu tiên có phân quyền thật — tức đúng phân khúc spec này nhắm tới.
+
+**Quyết định: hoãn sang giai đoạn tích hợp embedding**, không sửa ở pha 1. Lý do là đây là quyết định về **giao thức `Retriever`**, không phải sửa lỗi cục bộ, và hai lối đi có hệ quả khác nhau:
+
+| Lối | Cách làm | Hệ quả |
+|---|---|---|
+| Dựng retriever trên lát đã lọc quyền | `LexicalRetriever(permitted_slice)` | Đơn giản. Chấp nhận được với lexical (chỉ là tập token), **không** chấp nhận được với embedding — phải tính lại toàn bộ vector mỗi khi đổi người dùng |
+| Thêm tham số ứng viên vào giao thức | `search(question, k, candidates=permitted)` | Index dựng một lần, lọc lúc tìm. Là hình dạng duy nhất còn dùng được khi bản embedding vào |
+
+Chọn sai bây giờ nghĩa là phải sửa lại giao thức sau, đúng lúc đã có hai hiện thực cùng phụ thuộc vào nó. Nên quyết định này thuộc về giai đoạn embedding và phải quyết **cùng lúc** với việc chọn model — không sớm hơn.
+
+Cho tới lúc đó, ràng buộc phải giữ: phép giao với `permitted` vẫn là thao tác tập hợp cuối cùng, bất kể phạm vi tìm kiếm được thu hẹp ở đâu.
+
 `app.py` hiện không có xác thực (chỉ `st.session_state` phạm vi phiên trình duyệt). Bản on-prem cần tối thiểu: định danh người dùng, và ánh xạ người dùng → `permitted_tables`. Thiết kế chi tiết của lớp xác thực nằm ngoài spec này; spec này định nghĩa **hai điểm cắm**:
 
 - `permitted_tables(profile, user)` — nguồn sự thật về quyền, được cả retriever và `execute_sql` gọi độc lập
-- `resolve_schema_context(profile, question, permitted)` — nhận phạm vi đã bị giới hạn, không tự quyết định quyền
+- `resolve_schema_context(profile, question, permitted)` — nhận tập quyền làm **cận trên** cho kết quả, không tự quyết định quyền. Hiện áp cận đó ở bước cuối; xem mục 4.1 về việc chuyển nó lên trước bước tìm kiếm.
 
 ---
 
@@ -386,8 +415,8 @@ Phần phụ thuộc LLM chỉ còn chất lượng chú giải và chất lư�
 | **0** | Harness eval tầng 1: parse SQL mẫu → tập bảng đúng; tải Spider/BIRD/BEAVER, ghi cấu hình thực tế | Đo được recall của một retriever giả (random / full) làm mốc |
 | **1** | `render_schema()` DDL; tách `prompts/*.txt` ba đường; chuyển `{info_box}` xuống cuối; `SchemaContext` + `resolve_schema_context()`; `ConnectionProfile` mở rộng; **tách `permitted_tables` / `retrieved_tables` (3.4.1)** | Golden set ADBA hiện tại **không hồi quy**; recall tầng 1 đo được trên cả ba benchmark |
 | **2** | Train lại LoRA đa schema: chế độ mới của `generate_data.py`, dịch phương ngữ SQLite→Postgres, train, eval | Golden set ADBA không hồi quy **và** `beaver_exec_accuracy` cải thiện so với base |
-| **3** | Đường onboarding: `extract_schema` → `annotate_schema` → merge YAML → `build_profile` → `verify_profile`; `refresh_profile` | Chạy trọn trên một schema thứ hai (không phải ADBA) và ra `report.md` |
-| **4** | Đóng gói on-prem: `docker-compose.onprem.yml`, tắt egress, model ship kèm, điểm cắm xác thực, lọc quyền trong retriever | Cài được trên một máy sạch không có internet |
+| **3** | Đường onboarding: `extract_schema` → `annotate_schema` → merge YAML → `build_profile` → `verify_profile`; `refresh_profile`. **Kèm tích hợp retriever embedding, và cùng lúc đó chốt lại giao thức `Retriever` để lọc quyền TRƯỚC bước tìm (mục 4.1)** | Chạy trọn trên một schema thứ hai (không phải ADBA) và ra `report.md`; retriever embedding **vượt mốc lexical** trên eval tầng 1; người dùng có quyền hẹp không còn nhận context rỗng |
+| **4** | Đóng gói on-prem: `docker-compose.onprem.yml`, tắt egress, model ship kèm, điểm cắm xác thực | Cài được trên một máy sạch không có internet |
 
 Pha 0 và 1 độc lập với việc train lại, và pha 1 có giá trị ngay cả nếu dừng ở đó (giảm token, bỏ hardcode, guard chặt hơn).
 

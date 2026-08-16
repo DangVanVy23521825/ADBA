@@ -95,6 +95,24 @@ tập bảng đúng `{orders}` cho câu 4.
 Xem Task 11 của plan. Bảng cấu hình nằm ở đó và được `eval/describe_dataset.py`
 sinh ra, không viết tay.
 
+**Chưa tải, chưa điền số.** Việc tải Spider/BIRD/BEAVER và xác định license
+có cho phép tải lẫn commit vào repo này hay không là quyết định của chủ sở
+hữu repo, không phải của tác nhân triển khai — dữ liệu bên thứ ba có license
+hạn chế commit nhầm vào git rất khó gỡ vì nó nằm lại trong lịch sử. Đây là
+điều kiện tiên quyết còn treo trước khi bảng dưới đây có số thật.
+
+Khi dữ liệu đã có và đã chuẩn hóa về `questions.jsonl` + `schemas.json`
+(xem định dạng ở Task 11), sinh từng dòng của bảng bằng:
+
+    python -m eval.describe_dataset --name <tên bộ> \
+        --questions <dir>/questions.jsonl --schemas <dir>/schemas.json
+
+| Bộ | Số DB | Số câu | Bảng/DB (TB) | Bảng/DB (max) | License |
+|---|---|---|---|---|---|
+| spider | | | | | |
+| bird | | | | | |
+| beaver | | | | | |
+
 ## Tầng 2 và 3
 
 Xem spec mục 6.1. Chưa hiện thực trong plan này.

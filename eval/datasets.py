@@ -45,6 +45,17 @@ def load_adba_golden(path: Path, info_box_path: Path) -> list[EvalRecord]:
     return records
 
 
+def load_normalized(jsonl_path: Path, schemas_path: Path) -> list[EvalRecord]:
+    """Đọc một bộ dữ liệu đã chuẩn hóa về hai file questions.jsonl + schemas.json.
+
+    Bản ghi trỏ tới db_id không có trong schemas.json sẽ bị bỏ qua — bộ dữ
+    liệu ngoài thường có câu hỏi cho database không kèm theo bản tải.
+    """
+    raw = json.loads(Path(schemas_path).read_text())
+    tables_by_db = {db_id: tables_from_info_box(box) for db_id, box in raw.items()}
+    return load_jsonl_generic(Path(jsonl_path), tables_by_db)
+
+
 def load_jsonl_generic(path: Path, tables_by_db: dict[str, Sequence[Table]]) -> list[EvalRecord]:
     """Đọc bộ đã chuẩn hóa sẵn: {"question", "sql", "db_id"} mỗi dòng.
 

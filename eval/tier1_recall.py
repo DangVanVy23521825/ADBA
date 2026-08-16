@@ -15,7 +15,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from eval.datasets import EvalRecord, load_adba_golden
+from eval.datasets import EvalRecord, load_adba_golden, load_normalized
 from perception.connection_profile import ALL_TABLES, build_profile
 from perception.retrieval import FullRetriever, LexicalRetriever
 from perception.schema_context import resolve_schema_context
@@ -100,14 +100,23 @@ def _resolver(strategy: str, k: int) -> Callable[[EvalRecord], frozenset[str]]:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Đo recall chọn bảng (eval tầng 1)")
-    ap.add_argument("--golden", type=Path, required=True, help="JSONL {question, sql}")
+    ap.add_argument("--golden", type=Path, required=False, help="JSONL {question, sql}")
     ap.add_argument("--info-box", type=Path, default=Path("perception/info_box_all.json"))
+    ap.add_argument("--normalized", type=Path,
+                     help="thư mục chứa questions.jsonl + schemas.json")
     ap.add_argument("--strategy", choices=["full", "lexical"], default="lexical")
     ap.add_argument("--k", type=int, default=8)
     ap.add_argument("--json", type=Path, help="ghi báo cáo dạng JSON ra đây")
     args = ap.parse_args()
 
-    records = load_adba_golden(args.golden, args.info_box)
+    if bool(args.golden) == bool(args.normalized):
+        ap.error("phải cung cấp đúng một trong hai cờ: --golden hoặc --normalized")
+
+    if args.normalized:
+        records = load_normalized(args.normalized / "questions.jsonl",
+                                   args.normalized / "schemas.json")
+    else:
+        records = load_adba_golden(args.golden, args.info_box)
     report = measure_recall(records, _resolver(args.strategy, args.k))
     print(f"[{args.strategy}, k={args.k}]")
     print(report.as_text())

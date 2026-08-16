@@ -59,3 +59,23 @@ def test_subquery_nested_inside_a_function_is_still_found():
     """Guards against 'fixing' the above by never recursing into functions."""
     sql = "SELECT COALESCE((SELECT MAX(id) FROM orders), 0) FROM customers"
     assert tables_in_sql(sql) == frozenset({"orders", "customers"})
+
+
+def test_multiple_ctes_in_one_with_clause_are_not_tables():
+    sql = """
+        WITH a AS (SELECT * FROM orders), b AS (SELECT * FROM products)
+        SELECT * FROM a JOIN b ON a.product_id = b.id
+    """
+    assert tables_in_sql(sql) == frozenset({"orders", "products"})
+
+
+def test_cte_declared_in_one_statement_does_not_shadow_a_real_table_in_another():
+    """CTE không sống qua khỏi statement khai báo nó trong PostgreSQL.
+
+    Nếu tên CTE bị gộp toàn cục trước khi trừ (thay vì trừ theo từng
+    statement), 'payroll' — bảng thật ở statement 2 — bị hiểu nhầm là CTE
+    của statement 1 và biến mất khỏi kết quả. Đây chính là hình dạng SQL
+    dùng để bypass permission guard qua PQexec đa-statement.
+    """
+    sql = "WITH payroll AS (SELECT 1 AS x) SELECT * FROM orders; SELECT * FROM payroll"
+    assert tables_in_sql(sql) == frozenset({"orders", "payroll"})

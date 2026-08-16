@@ -266,10 +266,11 @@ if prompt := st.chat_input("Ask a question about your data..."):
                 st.session_state.messages.append({"role": "assistant", "content": summary})
 
             except TableNotPermittedError as exc:
-                # Strip the "(nội bộ: [...])" segment — it carries the exact
-                # forbidden table names, which are themselves information the
-                # user must not receive. See graph/tools/sql_tool.py.
-                error_msg = str(exc).split("(nội bộ:")[0].strip()
+                # Read .public, not str(exc) — the exception's full message
+                # (via .forbidden) carries the exact forbidden table names,
+                # which are themselves information the user must not receive.
+                # See graph/tools/sql_tool.py.
+                error_msg = exc.public
                 st.error(error_msg)
                 st.session_state.messages.append({"role": "assistant", "content": error_msg})
 

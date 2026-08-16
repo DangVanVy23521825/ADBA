@@ -11,6 +11,7 @@ Tests:
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -20,9 +21,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from graph.agents.sql_agent import _extract_sql, sql_agent_node
+from graph.agents.sql_agent import _extract_sql, build_system_prompt, sql_agent_node
 from graph.state import make_initial_state
-from graph.tools.sql_tool import TableNotPermittedError
+from graph.tools.sql_tool import TableNotPermittedError, assert_tables_permitted
 from perception.connection_profile import build_profile
 from perception.schema_context import SchemaContext
 from tests.fixtures.mini_schema import MINI_TABLES
@@ -161,25 +162,30 @@ class TestSqlAgentNode:
         """Permanent regression test for the leak-path finding (Task 8/10 review).
 
         assert_tables_permitted() (graph/tools/sql_tool.py) raises
-        TableNotPermittedError with a public part and a "(nội bộ: [...])"
-        segment carrying the exact forbidden table names — table names are
-        themselves information the user must not receive. sql_agent_node
-        sanitizes via _public_error_message() before anything enters state,
-        because that state (last_error, action_trace, agent_outputs) can
-        reach the UI via app.py or travel through reflector_agent_node into
-        its own LLM prompt and trace entry. This test guards against that
-        sanitization being silently reverted (e.g. "simplified" back to
-        `error_context = str(exc)`), by asserting the forbidden table name
-        and the internal-segment marker are absent from every state field
-        that carries the error message forward.
+        TableNotPermittedError with `.public` (safe to surface) and
+        `.forbidden` (exact forbidden table names — must never reach state).
+        sql_agent_node sanitizes via _public_error_message() before anything
+        enters state, because that state (last_error, action_trace,
+        agent_outputs) can reach the UI via app.py or travel through
+        reflector_agent_node into its own LLM prompt and trace entry.
+
+        The exception here is PROVOKED from the real guard
+        (assert_tables_permitted against TEST_PROFILE, which grants
+        test_user only orders/customers/products — not payroll) rather than
+        hand-built with a "(nội bộ: [...])" string. A hand-built message
+        would stay green even if the marker/format assert_tables_permitted
+        actually produces changed — this construction fails loudly instead
+        if the two drift apart, since it exercises the real code path that
+        must stay in sync with the sanitizer.
         """
         mock_instance = MagicMock()
         mock_instance.invoke.return_value = "SELECT * FROM payroll"
         MockClient.return_value = mock_instance
-        mock_execute.side_effect = TableNotPermittedError(
-            "Câu hỏi này chạm dữ liệu bạn không được cấp quyền. "
-            "(nội bộ: ['payroll'])"
-        )
+        try:
+            assert_tables_permitted("SELECT * FROM payroll", TEST_PROFILE, "test_user")
+            pytest.fail("expected TableNotPermittedError — test fixture drifted")
+        except TableNotPermittedError as real_exc:
+            mock_execute.side_effect = real_exc
 
         s = _state(PLAN_SQL_INSIGHT)
         result = sql_agent_node(s)
@@ -193,6 +199,31 @@ class TestSqlAgentNode:
         for text in haystacks:
             assert "payroll" not in text, f"forbidden table name leaked: {text!r}"
             assert "nội bộ" not in text, f"internal-segment marker leaked: {text!r}"
+
+
+class TestBuildSystemPromptHasNoSurvivingPlaceholders:
+    def test_no_placeholder_survives_rendering(self):
+        """IMPORTANT 1 (final review): assert on the RENDERED OUTPUT, not on an
+        exact-string .replace() call matching the template byte-for-byte.
+
+        build_system_prompt drops "Task: {task}\\n\\n" by exact string match.
+        tests/unit/test_prompts_are_schema_agnostic.py separately REQUIRES the
+        template to contain the literal "{task}" placeholder — so the template
+        is contractually required to hold the exact substring the code must
+        remove verbatim. If a future edit changes "Task: {task}" to
+        "Task:{task}", adds a trailing space, or the file picks up CRLF line
+        endings, the .replace() call silently stops matching and the model is
+        told its task is the literal string "{task}" — while every test that
+        checks the template file directly stays green. Only a test on the
+        function's OUTPUT catches that.
+        """
+        ctx = SchemaContext(
+            retrieved_tables=("orders",),
+            rendered_text="CREATE TABLE orders (id INT PRIMARY KEY);",
+            few_shots=({"question": "Doanh thu tháng này?", "sql": "SELECT 1"},),
+        )
+        rendered = build_system_prompt(ctx)
+        assert re.search(r"\{[a-z_]+\}", rendered) is None, rendered
 
 
 if __name__ == "__main__":

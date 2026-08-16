@@ -121,9 +121,15 @@ def tables_in_sql(sql: str) -> frozenset[str]:
         return frozenset()
 
     found: set[str] = set()
-    ctes: set[str] = set()
     for statement in sqlparse.parse(sql):
-        ctes |= _cte_names(statement)
-        _collect(statement, found)
+        # Per-statement, không gộp toàn cục: một CTE không sống qua khỏi
+        # statement khai báo nó trong PostgreSQL. Nếu gom tên CTE của mọi
+        # statement vào một tập rồi trừ chung, một CTE tên trùng bảng thật
+        # ở statement khác sẽ xoá nhầm bảng thật đó khỏi kết quả — ví dụ
+        # 'WITH payroll AS (...) SELECT ...; SELECT * FROM payroll' sẽ mất
+        # 'payroll' dù statement 2 chạm bảng thật, không phải CTE.
+        stmt_found: set[str] = set()
+        _collect(statement, stmt_found)
+        found |= stmt_found - _cte_names(statement)
 
-    return frozenset(found - ctes)
+    return frozenset(found)

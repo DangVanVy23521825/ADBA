@@ -33,7 +33,22 @@ _READ_ONLY_STATEMENT_TYPE = "SELECT"
 
 
 class TableNotPermittedError(PermissionError):
-    """Câu SQL chạm bảng ngoài quyền của người dùng."""
+    """Câu SQL chạm bảng ngoài quyền của người dùng.
+
+    Structured thay vì text: `.public` là phần an toàn để lộ ra ngoài
+    (state, trace, UI); `.forbidden` mang đúng tên các bảng bị chạm ngoài
+    quyền, chỉ để log server-side. Trước bản này, ba module
+    (graph/tools/sql_tool.py, graph/agents/sql_agent.py, app.py) đều tự
+    parse chuỗi lỗi bằng cách split trên literal "(nội bộ:" — nếu marker đó
+    đổi ở nơi sinh ra lỗi, hai nơi tiêu thụ còn lại vẫn xanh nhưng tên bảng
+    cấm sẽ rò ra last_error/action_trace/UI. Đọc `.public`, không parse text.
+    """
+
+    def __init__(self, public: str, forbidden: frozenset[str] = frozenset()):
+        self.public = public
+        self.forbidden = forbidden
+        message = f"{public} (nội bộ: {sorted(forbidden)})" if forbidden else public
+        super().__init__(message)
 
 
 def assert_tables_permitted(sql: str, profile: ConnectionProfile, user: str) -> frozenset[str]:
@@ -53,9 +68,22 @@ def assert_tables_permitted(sql: str, profile: ConnectionProfile, user: str) -> 
 
     Fail closed: SQL không parse ra bảng nào, hoặc không parse ra statement
     nào cả, cũng bị từ chối.
+
+    Đúng một statement — bắt buộc, trước cả kiểm loại. CTE không sống qua
+    khỏi statement trong PostgreSQL, nhưng tables_in_sql cũ gom tên CTE của
+    MỌI statement vào một tập rồi trừ chung khỏi tập bảng của MỌI statement:
+    'WITH payroll AS (...) SELECT * FROM orders; SELECT * FROM payroll' khiến
+    'payroll' ở câu 2 bị hiểu nhầm là CTE của câu 1 và biến mất khỏi tập
+    chạm — trong khi cả hai statement đều là SELECT nên qua được kiểm loại,
+    và psycopg2.execute() với vars=None gửi cả chuỗi qua PQexec, chạy cả hai
+    và trả về result set cuối cùng (payroll). Chặn tại đây thay vì chỉ sửa
+    tables_in_sql vì execute_sql là bộ thực thi một-câu-một-lần theo hợp
+    đồng đã có (kiểm loại statement ở trên) — viết hợp đồng đó thành code.
     """
-    statements = sqlparse.parse(sql)
-    if not statements or any(s.get_type() != _READ_ONLY_STATEMENT_TYPE for s in statements):
+    statements = [s for s in sqlparse.parse(sql) if s.token_first(skip_cm=True) is not None]
+    if len(statements) != 1:
+        raise TableNotPermittedError("Chỉ cho phép đúng một câu SELECT.")
+    if any(s.get_type() != _READ_ONLY_STATEMENT_TYPE for s in statements):
         raise TableNotPermittedError(
             "Chỉ cho phép câu SELECT (kể cả WITH ... SELECT) — "
             "câu này không parse được hoặc không chỉ đọc."
@@ -68,8 +96,8 @@ def assert_tables_permitted(sql: str, profile: ConnectionProfile, user: str) -> 
     allowed = permitted_tables(profile, user)
     if forbidden := (touched - allowed):
         raise TableNotPermittedError(
-            f"Câu hỏi này chạm dữ liệu bạn không được cấp quyền. "
-            f"(nội bộ: {sorted(forbidden)})"
+            "Câu hỏi này chạm dữ liệu bạn không được cấp quyền.",
+            forbidden=forbidden,
         )
     return touched
 

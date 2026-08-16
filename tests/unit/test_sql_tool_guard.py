@@ -65,6 +65,22 @@ def test_module_no_longer_exposes_a_static_whitelist():
     assert not hasattr(sql_tool, "_ALLOWED_TABLES")
 
 
+def test_explain_query_plan_checks_guard_before_connecting():
+    """Same shape as test_execute_sql_checks_guard_before_connecting — mirrors
+    it for explain_query_plan, whose guard call (and the switch to
+    profile.dsn) had zero coverage: every existing test patches
+    explain_query_plan wholesale, so deleting the guard line inside it would
+    break nothing. The second assertion (mock_connect not called) is the
+    substance — it proves the guard runs BEFORE the connection is opened,
+    not merely that an error surfaces somewhere.
+    """
+    p = _profile({"sales": frozenset({"orders"})})
+    with patch.object(sql_tool.psycopg2, "connect") as mock_connect:
+        with pytest.raises(sql_tool.TableNotPermittedError):
+            sql_tool.explain_query_plan("SELECT * FROM payroll", profile=p, user="sales")
+        mock_connect.assert_not_called()
+
+
 def test_execute_sql_checks_guard_before_connecting():
     """Chứng minh guard thực sự nằm trên đường thực thi, không chỉ tồn tại
     như một hàm độc lập không ai gọi.
@@ -114,3 +130,28 @@ def test_multi_statement_with_any_non_select_is_refused():
     with pytest.raises(sql_tool.TableNotPermittedError):
         sql_tool.assert_tables_permitted(
             "SELECT * FROM orders; UPDATE payroll SET base_salary = 0", p, "admin")
+
+
+def test_cross_statement_cte_shadowing_cannot_bypass_the_guard():
+    """CRITICAL: CTE khai báo ở statement 1 không được che bảng thật ở statement 2.
+
+    psycopg2.execute() với vars=None gửi cả chuỗi qua PQexec, chạy hết mọi
+    statement và trả result set CUỐI CÙNG. Trước fix, tables_in_sql gộp tên
+    CTE của MỌI statement thành một tập rồi trừ chung khỏi tập bảng của MỌI
+    statement — nên 'payroll' khai CTE ở statement 1 xoá luôn 'payroll' bảng
+    thật ở statement 2 khỏi tập bị chạm, và cả hai statement đều là SELECT
+    nên qua được kiểm loại. Kết quả: user chỉ có quyền trên 'orders' đọc
+    được toàn bộ 'payroll'. Fix chặn bằng cách đòi đúng MỘT statement.
+    """
+    p = _profile({"sales": frozenset({"orders"})})
+    bypass_sql = "WITH payroll AS (SELECT 1 AS x) SELECT * FROM orders; SELECT * FROM payroll"
+    with pytest.raises(sql_tool.TableNotPermittedError):
+        sql_tool.assert_tables_permitted(bypass_sql, p, "sales")
+
+
+def test_multiple_statements_are_refused_even_when_all_are_select():
+    """len(statements) != 1 chặn trước cả kiểm loại — không chỉ khi có non-SELECT."""
+    p = _profile({"admin": frozenset({ALL_TABLES})})
+    with pytest.raises(sql_tool.TableNotPermittedError):
+        sql_tool.assert_tables_permitted(
+            "SELECT * FROM orders; SELECT * FROM customers", p, "admin")

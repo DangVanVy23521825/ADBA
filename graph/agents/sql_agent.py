@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 from graph.state import MultiAgentState
-from graph.tools.sql_tool import execute_sql, explain_query_plan
+from graph.tools.sql_tool import TableNotPermittedError, execute_sql, explain_query_plan
 from graph.utils import append_trace, df_to_state
 from model.model_client import ModelClient
 from perception.schema_context import SchemaContext
@@ -66,17 +66,23 @@ def build_system_prompt(schema_context: SchemaContext) -> str:
 
 
 def _public_error_message(exc: Exception) -> str:
-    """Strip the internal-only segment (table names) off an exception's text.
+    """The safe-to-surface text for an exception raised during SQL execution.
 
-    assert_tables_permitted() (graph/tools/sql_tool.py) appends a
-    "(nội bộ: [...])" segment to TableNotPermittedError carrying the exact
-    forbidden table names — useful for logs, never for anything that ends
-    up in state (trace observations, last_error, agent_outputs), since
-    those can reach the UI. Applied unconditionally: messages without the
-    marker pass through unchanged, so this is safe for every exception
-    type this loop can see, not just TableNotPermittedError.
+    TableNotPermittedError (graph/tools/sql_tool.py) is structured: `.public`
+    is the safe segment, `.forbidden` carries the exact forbidden table names
+    — useful for logs, never for anything that ends up in state (trace
+    observations, last_error, agent_outputs), since those can reach the UI.
+    Reading `.public` on the exception object, rather than string-splitting
+    on a "(nội bộ:" marker, means a future change to that marker (or to how
+    the message is formatted) can't silently stop the redaction from working
+    — the two are no longer coupled by string content. Exceptions without a
+    `.public` attribute (i.e. not a TableNotPermittedError) fall back to
+    str(exc) unchanged, so this is safe for every exception type this loop
+    can see.
     """
-    return str(exc).split("(nội bộ:")[0].strip()
+    if isinstance(exc, TableNotPermittedError):
+        return exc.public
+    return str(exc)
 
 
 def _find_sql_step(state: MultiAgentState) -> dict | None:

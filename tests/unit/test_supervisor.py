@@ -12,6 +12,7 @@ Unit tests — Supervisor Agent routing logic.
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -23,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from langgraph.graph import END
 
-from graph.agents.supervisor import route_next_agent, supervisor_node
+from graph.agents.supervisor import build_system_prompt, route_next_agent, supervisor_node
 from graph.state import MultiAgentState, make_initial_state
 from perception.schema_context import SchemaContext
 
@@ -234,6 +235,28 @@ class TestSupervisorNode:
 
         assert result["status"] == "failed"
         assert result["last_error"]["agent"] == "supervisor"
+
+
+class TestBuildSystemPromptHasNoSurvivingPlaceholders:
+    def test_no_placeholder_survives_rendering(self):
+        """IMPORTANT 1 (final review): assert on the RENDERED OUTPUT, not on an
+        exact-string .replace() call matching the template byte-for-byte.
+
+        build_system_prompt drops "User query: {query}\\n\\n" by exact string
+        match. tests/unit/test_prompts_are_schema_agnostic.py separately
+        requires nothing here, but the same fragility applies: any drift in
+        the template's whitespace/line-endings around that literal silently
+        stops the .replace() from matching, and the model would be told the
+        user query is the literal string "{query}" while a test that only
+        checks the .txt file's raw content would stay green. Only a test on
+        the function's OUTPUT catches that.
+        """
+        ctx = SchemaContext(
+            retrieved_tables=("orders",),
+            rendered_text="CREATE TABLE orders (id INT PRIMARY KEY);",
+        )
+        rendered = build_system_prompt(ctx)
+        assert re.search(r"\{[a-z_]+\}", rendered) is None, rendered
 
 
 if __name__ == "__main__":

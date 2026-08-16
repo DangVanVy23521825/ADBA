@@ -132,7 +132,9 @@ Chi phí runtime: index dựng một lần lúc onboarding; lúc chạy chỉ l�
 
 `build_profile.py` đo kích thước schema đã render. Dưới ngưỡng thì ghi `schema_mode: full` và bỏ qua retrieval hoàn toàn; trên ngưỡng thì `schema_mode: retrieval`.
 
-**Ngưỡng đề xuất: 6.000 token schema đã render** — ở mức ~140 token/bảng (mục 3.4) thì tương đương **khoảng 40 bảng**.
+**Ngưỡng đề xuất: 6.000 token schema đã render.** Ngưỡng này KHÔNG đổi theo bản sửa dưới đây — nó cố ý đặt bằng đơn vị token vì token tự điều chỉnh khi bảng "béo" lên (nhiều cột, mô tả dài); một ngưỡng đặt bằng *số bảng* thì không.
+
+> **Sửa (rà soát cuối nhánh này):** bản trước quy đổi ngưỡng trên thành "khoảng 40 bảng" ở giả định 140 token/bảng — con số đó **chưa từng đo**, chỉ ước lượng tay. Đo thật trên schema 9 bảng của chính ADBA (`perception/info_box_all.json`, không bảng nào có `description`) ra **~67 token/bảng** (mục 3.4), tức 6.000 token ≈ **khoảng 90 bảng**, gấp hơn hai lần con số cũ. Nhưng đây KHÔNG phải một hằng số thay thế 140 để dùng lại: 9 bảng đó chưa chú giải và trung bình chỉ ~9,4 cột/bảng. Đo với mô tả tiếng Việt thực tế thêm vào thì ra ~81 token/bảng (339 B/bảng, +26% so với 268 B/bảng chưa chú giải) — ngưỡng khi đó còn ~74 bảng. Bảng ERP thật có 30–60 cột, cộng chú giải do việc onboarding (kế hoạch riêng, ngoài phạm vi nhánh này) thêm vào, có thể đẩy lên ~200–350 token/bảng — ngưỡng khi đó tụt về ~17–30 bảng. Nói cách khác, "bao nhiêu bảng thì chạm ngưỡng" dao động cả chục lần tuỳ mức chú giải; **không có một con số bảng nào đáng tin để thay cho ngưỡng token**. Đừng quy đổi lại — đọc thẳng ngưỡng 6.000 token, để nó tự điều chỉnh theo mật độ chú giải thật của từng khách.
 
 Đây **không** phải fallback động. Một nhánh code, một công tắc, quyết một lần lúc onboarding. Khách nhỏ được sự đơn giản của chế độ full; khách lớn được sự co giãn của retrieval. Không phải test tổ hợp hai đường chạy trên cùng một cài đặt.
 
@@ -158,9 +160,9 @@ CREATE TABLE orders (
 );
 ```
 
-≈ **500 B cho 12 cột ≈ 140 token**, nhỏ hơn JSON 2–3 lần. Và dễ hơn cho model: Qwen2.5-**Coder** đã đọc hàng triệu file SQL lúc pretrain; JSON mô tả schema thì không.
+Nhỏ hơn JSON 2–3 lần. Và dễ hơn cho model: Qwen2.5-**Coder** đã đọc hàng triệu file SQL lúc pretrain; JSON mô tả schema thì không.
 
-Con số 140 token/bảng là cơ sở cho mọi ước tính ngân sách trong spec này (mục 3.3, mục 5.1). Nó phải được đo lại trên schema thật ở pha 1 chứ không giữ nguyên như giả định.
+> **Sửa (rà soát cuối nhánh này) — con số 140 token/bảng ở trên chưa từng đo, chỉ ước lượng tay từ một ví dụ 12 cột.** Đo thật bằng `render_schema()` + `estimate_tokens()` (commit `6486ddc`) trên schema 9 bảng thật của ADBA, `perception/info_box_all.json` — schema này **không bảng nào có `description`** — ra **268 B/bảng, ~67 token/bảng** (603 token / 9 bảng), tức khoảng một nửa giả định cũ. Đo lại với mô tả tiếng Việt thực tế thêm vào từng bảng (task 3 review) ra **339 B/bảng, ~81 token/bảng** (+26% so với bản chưa chú giải) — vẫn thấp hơn 140 đáng kể, vì DDL của những bảng nhỏ (9–15 cột) rẻ hơn ví dụ 12-cột-với-comment-dài dùng để ước lượng ban đầu. Cả hai con số đều là **sàn dưới**: bảng ERP thật nhiều cột hơn (30–60) và mô tả dài hơn có thể đẩy lên 200–350 token/bảng (xem mục 3.3). Không có ước tính đơn nào đáng tin cho mọi schema — số thật phụ thuộc số cột và độ dài chú giải của schema cụ thể, đo bằng `render_schema()` trên schema đó chứ đừng giữ một hằng số cố định.
 
 ### 3.4.1 Hai tập bảng, khác bản chất — không được gộp
 
@@ -251,14 +253,16 @@ Dòng cuối bảng có mặt để nói rõ điều dễ nhầm nhất: retriev
 
 ### 5.1 Ngân sách — thiết kế này gần như không đụng vào
 
-Đếm token thực tế:
+> **Sửa (rà soát cuối nhánh này) — bảng dưới đây trong bản gốc dùng giả định 140 token/bảng, chưa từng đo (xem mục 3.4).** Đo thật trên schema 9 bảng ADBA ra ~67 token/bảng chưa chú giải, ~81 token/bảng có chú giải tiếng Việt thực tế — tính lại bằng mức chú giải thực tế (~81 token/bảng) bên dưới. Đây vẫn không phải trần: bảng ERP nhiều cột + mô tả dài có thể đẩy DDL/bảng cao hơn nhiều (xem mục 3.3), nên coi đây là ví dụ minh hoạ ở mật độ chú giải "vừa phải", không phải cam kết cho mọi schema khách.
+
+Đếm token thực tế (DDL tính ở ~81 token/bảng, mức đo được với chú giải thực tế — mục 3.4):
 
 | Chế độ | Thành phần | Tổng | ctx cần |
 |---|---|---|---|
-| `retrieval`, 12 bảng | rules ~700 (cố định) + DDL ~1.700 + few-shot ~400 + task ~100 | **~2.900** | 8k |
-| `full`, 40 bảng (sát ngưỡng) | rules ~700 + DDL ~5.600 + few-shot ~400 + task ~100 | **~6.800** | 16k |
+| `retrieval`, 12 bảng | rules ~700 (cố định) + DDL ~970 (12×81) + few-shot ~400 + task ~100 | **~2.200** | 8k |
+| `full`, 74 bảng (sát ngưỡng 6.000-token ở mức ~81 token/bảng — KHÔNG còn là 40 bảng như bản gốc, xem mục 3.3) | rules ~700 + DDL ~6.000 (74×81) + few-shot ~400 + task ~100 | **~7.200** | 16k |
 
-Chế độ `full` cần ctx 16k chứ không phải 8k: cộng thêm `AGENT_MAX_TOKENS["sql"] = 1024` cho phần sinh, 8k không còn biên an toàn.
+Cả hai tổng đều thấp hơn bản gốc (2.900 / 6.800) vì tỉ lệ đo được thấp hơn giả định cũ — nhưng hàng `full` vẫn cần ctx 16k chứ không phải 8k: cộng thêm `AGENT_MAX_TOKENS["sql"] = 1024` cho phần sinh, tổng ~8.224 đã vượt cửa sổ 8k (8.192), không còn biên an toàn.
 
 Ở `full`, toàn bộ prompt cố định giữa mọi query → sau query đầu prefill gần bằng 0 nhờ prefix caching.
 Ở `retrieval`, phần biến thiên ~2.300 token ≈ 0,6s prefill trên một card tầm 4090.

@@ -1,0 +1,29 @@
+name: Docs
+
+# Lưới an toàn cho hook post-commit: nếu ai đó commit mà chưa cài hook
+# (scripts/install_docs_hooks.sh), job này bắt được tài liệu lỗi thời.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  docs-sync:
+    name: Kiểm tra tài liệu đồng bộ với mã nguồn
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # update_docs.py đọc toàn bộ git log để dựng changelog.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Script chỉ dùng thư viện chuẩn — không cần cài requirements.
+      - name: Kiểm tra khối AUTO
+        run: python scripts/update_docs.py --check

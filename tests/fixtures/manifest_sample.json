@@ -1,0 +1,26 @@
+{
+  "confirmed": {
+    "url": "https://example.invalid/confirmed.zip",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "license": "CC BY-SA 4.0",
+    "license_url": "https://example.invalid/license",
+    "may_ship": true,
+    "notes": "Mục đã được người xác nhận — dùng để test đường thành công."
+  },
+  "pending_license": {
+    "url": "https://example.invalid/pending.zip",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "license": null,
+    "license_url": "https://example.invalid/license",
+    "may_ship": null,
+    "notes": "Chưa xác nhận — phải bị từ chối trước khi chạm mạng."
+  },
+  "no_ship": {
+    "url": "https://example.invalid/noship.zip",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "license": "CC BY-NC-ND 4.0",
+    "license_url": "https://example.invalid/license",
+    "may_ship": false,
+    "notes": "Dùng được nội bộ, cấm đóng gói kèm sản phẩm."
+  }
+}

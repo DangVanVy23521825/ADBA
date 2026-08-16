@@ -1,0 +1,26 @@
+{
+  "spider": {
+    "url": "",
+    "sha256": "",
+    "license": null,
+    "license_url": "https://yale-lily.github.io/spider",
+    "may_ship": null,
+    "notes": "Tra cứu sơ bộ (chưa xác minh tại nguồn): CC BY-SA 4.0 — cho phép dùng thương mại, buộc ghi công và share-alike. Điền license + may_ship sau khi đọc điều khoản gốc."
+  },
+  "bird": {
+    "url": "",
+    "sha256": "",
+    "license": null,
+    "license_url": "https://bird-bench.github.io/",
+    "may_ship": null,
+    "notes": "Tra cứu sơ bộ (chưa xác minh tại nguồn): đổi sang CC BY-SA 4.0 từ 27/04/2024 — tức cùng license với Spider. Chính sách nội bộ ban đầu coi BIRD hạn chế hơn Spider; cần đối chiếu lại trước khi điền."
+  },
+  "beaver": {
+    "url": "",
+    "sha256": "",
+    "license": null,
+    "license_url": "https://beaverbench.github.io/",
+    "may_ship": null,
+    "notes": "Tra cứu sơ bộ (chưa xác minh tại nguồn): CC BY-NC-ND 4.0 — NC cấm dùng thương mại, ND cấm tạo bản phái sinh. Nếu đúng thì (a) không dùng làm căn cứ quyết định sản phẩm, và (b) bước chuyển sang questions.jsonl/schemas.json là bản phái sinh nên bị ND chặn. Xác minh tại nguồn trước khi điền."
+  }
+}

@@ -114,3 +114,40 @@ def test_empty_input_gives_empty_string():
 
 def test_estimate_tokens_is_quarter_of_length():
     assert estimate_tokens("a" * 400) == 100
+
+
+def test_column_description_renders_as_a_trailing_comment():
+    t = Table(
+        name="orders",
+        columns=(
+            Column("id", "integer"),
+            Column("flg_tt", "boolean", description="Cờ đã thanh toán"),
+        ),
+    )
+    out = render_schema([t])
+    assert "flg_tt BOOL  -- Cờ đã thanh toán" in out
+
+
+def test_column_without_a_description_gets_no_comment():
+    t = Table(name="x", columns=(Column("a", "integer"),))
+    assert "--" not in render_schema([t])
+
+
+def test_column_description_does_not_break_the_700_byte_ceiling():
+    """Chú giải làm bảng to lên; trần vẫn phải giữ."""
+    import dataclasses
+
+    from tests.fixtures.mini_schema import MINI_TABLES
+
+    fat = tuple(
+        dataclasses.replace(
+            t,
+            columns=tuple(
+                dataclasses.replace(c, description="Mô tả nghiệp vụ dài vừa phải cho cột này")
+                for c in t.columns
+            ),
+        )
+        for t in MINI_TABLES
+    )
+    out = render_schema(fat)
+    assert len(out.encode()) / len(fat) <= 700

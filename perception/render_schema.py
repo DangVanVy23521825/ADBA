@@ -47,7 +47,10 @@ def _render_one(table: Table) -> str:
             parts.append(f"REFERENCES {ref}")
         if col.is_generated:
             parts.append("GENERATED")
-        body.append("  " + " ".join(parts))
+        line = "  " + " ".join(parts)
+        if col.description:
+            line += f"  -- {col.description}"
+        body.append(line)
     lines.append(",\n".join(body))
 
     tail = ");"

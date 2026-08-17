@@ -129,21 +129,21 @@ def test_column_description_renders_as_a_trailing_comment():
 
 
 def test_column_without_a_description_gets_no_comment():
+    # This fixture also has no row_count, so no );  -- N rows tail appears either.
+    # The assertion depends on both conditions.
     t = Table(name="x", columns=(Column("a", "integer"),))
     assert "--" not in render_schema([t])
 
 
 def test_column_description_does_not_break_the_700_byte_ceiling():
     """Chú giải làm bảng to lên; trần vẫn phải giữ."""
-    import dataclasses
-
     from tests.fixtures.mini_schema import MINI_TABLES
 
     fat = tuple(
-        dataclasses.replace(
+        replace(
             t,
             columns=tuple(
-                dataclasses.replace(c, description="Mô tả nghiệp vụ dài vừa phải cho cột này")
+                replace(c, description="Mô tả nghiệp vụ dài vừa phải cho cột này")
                 for c in t.columns
             ),
         )
@@ -151,3 +151,36 @@ def test_column_description_does_not_break_the_700_byte_ceiling():
     )
     out = render_schema(fat)
     assert len(out.encode()) / len(fat) <= 700
+
+
+def test_column_description_on_non_last_column_has_comma_before_comment():
+    """Description on a non-last column must have comma before the --, not inside it."""
+    t = Table(
+        name="customers",
+        columns=(
+            Column("id", "integer", description="ID khách hàng"),
+            Column("name", "character varying"),
+        ),
+    )
+    out = render_schema([t])
+    # Must have comma before the comment, and line must end with description
+    assert "id INT,  -- ID khách hàng\n" in out
+    assert "name VARCHAR" in out
+
+
+def test_column_description_with_whitespace_is_collapsed():
+    """Description with newlines and tabs must be collapsed to single space on one line."""
+    t = Table(
+        name="data",
+        columns=(
+            Column("id", "integer"),
+            Column("notes", "text", description="Ghi chú chi tiết\n\tvề dữ liệu"),
+            Column("status", "character varying"),
+        ),
+    )
+    out = render_schema([t])
+    # Output must have exactly one line per column, comment on same line
+    lines = out.split("\n")
+    assert any("notes TEXT,  -- Ghi chú chi tiết về dữ liệu" in line for line in lines)
+    # Ensure the malformed multi-line version does NOT appear
+    assert "Ghi chú chi tiết\n" not in out

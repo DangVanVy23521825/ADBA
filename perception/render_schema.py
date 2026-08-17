@@ -39,7 +39,7 @@ def _render_one(table: Table) -> str:
 
     pk = set(table.primary_key)
     body: list[str] = []
-    for col in table.columns:
+    for i, col in enumerate(table.columns):
         parts = [col.name, _short_type(col.data_type)]
         if col.name in pk:
             parts.append("PRIMARY KEY")
@@ -48,10 +48,15 @@ def _render_one(table: Table) -> str:
         if col.is_generated:
             parts.append("GENERATED")
         line = "  " + " ".join(parts)
+        # Add comma if not the last column
+        if i < len(table.columns) - 1:
+            line += ","
+        # Add description after the comma, with whitespace collapsed
         if col.description:
-            line += f"  -- {col.description}"
+            collapsed_desc = " ".join(col.description.split())
+            line += f"  -- {collapsed_desc}"
         body.append(line)
-    lines.append(",\n".join(body))
+    lines.append("\n".join(body))
 
     tail = ");"
     if table.row_count is not None:

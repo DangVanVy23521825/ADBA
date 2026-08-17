@@ -80,11 +80,22 @@ def introspect_schema(dsn: str, schema: str = "public") -> tuple[Table, ...]:
             for table, column, ref_table, ref_column in cur.fetchall():
                 fks.setdefault(table, {})[column] = f"{ref_table}({ref_column})"
 
-            counts: dict[str, int] = {}
+            counts: dict[str, int | None] = {}
             for table in cols:
                 cur.execute(_COUNT_SQL, (table, schema))
                 row = cur.fetchone()
-                counts[table] = int(row[0]) if row and row[0] is not None else 0
+                if row is None or row[0] is None:
+                    counts[table] = 0
+                    continue
+                reltuples = int(row[0])
+                # Postgres dùng -1 làm sentinel cho "chưa từng ANALYZE" — trên
+                # một DB khách vừa restore, phần lớn bảng sẽ ở trạng thái này
+                # cho tới khi autovacuum chạy tới. -1 không phải một con số
+                # dòng thật; nó không được đi tới render_schema()/prompt như
+                # một sự thật. Chuẩn hoá về None, giống trường hợp không có
+                # ước lượng nào cả — render_schema đã bỏ qua comment khi
+                # row_count is None.
+                counts[table] = reltuples if reltuples >= 0 else None
     finally:
         conn.close()
 

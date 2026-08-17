@@ -28,6 +28,74 @@ class TestIdentifierGuard:
             sample_rows(self._UNUSED_DSN, "orders\n", n=1)
 
 
+class _FakeCursor:
+    """Cursor giả tối thiểu: trả kết quả theo nội dung câu SQL vừa execute,
+    đủ để introspect_schema chạy hết một vòng mà không cần Postgres thật."""
+
+    def __init__(self, reltuples: int):
+        self._reltuples = reltuples
+        self._last_sql = ""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        return False
+
+    def execute(self, query, params=None):
+        self._last_sql = query
+
+    def fetchall(self):
+        if "information_schema.columns" in self._last_sql:
+            return [("t", "id", "integer", "NEVER")]
+        if "PRIMARY KEY" in self._last_sql:
+            return [("t", "id")]
+        if "FOREIGN KEY" in self._last_sql:
+            return []
+        raise AssertionError(f"unexpected fetchall() for query: {self._last_sql!r}")
+
+    def fetchone(self):
+        if "reltuples" in self._last_sql:
+            return (self._reltuples,)
+        raise AssertionError(f"unexpected fetchone() for query: {self._last_sql!r}")
+
+
+class _FakeConnection:
+    def __init__(self, reltuples: int):
+        self._reltuples = reltuples
+
+    def cursor(self, *args, **kwargs):
+        return _FakeCursor(self._reltuples)
+
+    def close(self):
+        pass
+
+
+class TestRowCountNormalisation:
+    """Không cần Postgres thật: mock tầng psycopg2.connect để khẳng định
+    introspect_schema tự chuẩn hoá `-1` (sentinel "chưa ANALYZE" của
+    pg_class.reltuples) thành None, không phải một số dòng thật.
+
+    Không dùng bảng thật/ANALYZE trên container dùng chung để tạo điều kiện
+    này — mock trực tiếp giá trị reltuples để test không phụ thuộc vào việc
+    ai đó đã chạy ANALYZE trên bảng nào trước đó."""
+
+    def test_negative_reltuples_normalises_to_none(self, monkeypatch):
+        monkeypatch.setattr(
+            "psycopg2.connect", lambda dsn: _FakeConnection(reltuples=-1)
+        )
+        tables = introspect_schema("postgresql://unused/db")
+        assert len(tables) == 1
+        assert tables[0].row_count is None
+
+    def test_non_negative_reltuples_passes_through(self, monkeypatch):
+        monkeypatch.setattr(
+            "psycopg2.connect", lambda dsn: _FakeConnection(reltuples=42)
+        )
+        tables = introspect_schema("postgresql://unused/db")
+        assert tables[0].row_count == 42
+
+
 @pytest.mark.skipif(not DSN, reason="cần DATABASE_URL trỏ Postgres thật")
 class TestAgainstLiveDatabase:
     """Những test này mở kết nối thật tới Postgres nên bị skip khi không có

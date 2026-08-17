@@ -10,6 +10,7 @@ import re
 
 import psycopg2
 import psycopg2.extras
+from psycopg2 import sql
 
 from perception.schema_model import Column, Table
 
@@ -44,7 +45,12 @@ JOIN information_schema.constraint_column_usage ccu
 WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_schema = %s
 """
 
-_COUNT_SQL = "SELECT reltuples::bigint FROM pg_class WHERE relname = %s"
+_COUNT_SQL = """
+SELECT c.reltuples::bigint
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE c.relname = %s AND n.nspname = %s
+"""
 
 
 def introspect_schema(dsn: str, schema: str = "public") -> tuple[Table, ...]:
@@ -76,7 +82,7 @@ def introspect_schema(dsn: str, schema: str = "public") -> tuple[Table, ...]:
 
             counts: dict[str, int] = {}
             for table in cols:
-                cur.execute(_COUNT_SQL, (table,))
+                cur.execute(_COUNT_SQL, (table, schema))
                 row = cur.fetchone()
                 counts[table] = int(row[0]) if row and row[0] is not None else 0
     finally:
@@ -98,9 +104,14 @@ def introspect_schema(dsn: str, schema: str = "public") -> tuple[Table, ...]:
 def sample_rows(dsn: str, table: str, n: int = 5) -> list[dict]:
     """Vài dòng mẫu để bước chú giải đoán ý nghĩa cột.
 
-    KHÔNG được ghi vào `profile/` — xem Global Constraints. Tên bảng đi qua
-    regex định danh vì nó bị nội suy vào SQL (không tham số hoá được tên
-    bảng trong Postgres).
+    KHÔNG được ghi vào `profile/` — xem Global Constraints. Tên bảng không
+    tham số hoá được trong Postgres nên phải qua hai lớp: regex định danh
+    trước (để báo lỗi rõ ràng, đọc được, ngay tại đây) rồi `sql.Identifier`
+    khi dựng câu lệnh (để việc quote/escape đúng đắn không phụ thuộc vào
+    regex có đúng hay không — chính layer regex này từng lọt một trường hợp,
+    xem TestIdentifierGuard trong tests/unit/test_introspect.py). `sql.Identifier`
+    cũng quote tên, nên một bảng thật tên `Orders` (phân biệt hoa/thường)
+    vẫn địa chỉ được đúng.
     """
     if not _IDENT.fullmatch(table):
         raise ValueError(f"Tên bảng không hợp lệ: {table!r}")
@@ -108,7 +119,10 @@ def sample_rows(dsn: str, table: str, n: int = 5) -> list[dict]:
     conn = psycopg2.connect(dsn)
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(f"SELECT * FROM {table} LIMIT %s", (n,))  # noqa: S608
+            query = sql.SQL("SELECT * FROM {table} LIMIT %s").format(
+                table=sql.Identifier(table)
+            )
+            cur.execute(query, (n,))
             return [dict(r) for r in cur.fetchall()]
     finally:
         conn.close()

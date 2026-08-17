@@ -102,7 +102,7 @@ def sample_rows(dsn: str, table: str, n: int = 5) -> list[dict]:
     regex định danh vì nó bị nội suy vào SQL (không tham số hoá được tên
     bảng trong Postgres).
     """
-    if not _IDENT.match(table):
+    if not _IDENT.fullmatch(table):
         raise ValueError(f"Tên bảng không hợp lệ: {table!r}")
 
     conn = psycopg2.connect(dsn)

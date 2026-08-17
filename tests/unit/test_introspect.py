@@ -54,3 +54,11 @@ def test_sample_rows_returns_dicts_capped_at_n():
 def test_sample_rows_rejects_a_table_name_that_is_not_an_identifier():
     with pytest.raises(ValueError):
         sample_rows(DSN, "orders; DROP TABLE customers", n=1)
+
+
+def test_sample_rows_rejects_a_table_name_with_trailing_newline():
+    """re.match + '$' matches just before a trailing '\\n' in Python — a
+    known footgun that would let "orders\\n" slip past re.match() even
+    though it isn't a bare identifier. fullmatch() closes that gap."""
+    with pytest.raises(ValueError):
+        sample_rows(DSN, "orders\n", n=1)

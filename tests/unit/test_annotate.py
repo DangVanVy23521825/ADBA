@@ -192,3 +192,69 @@ def test_failure_count_equals_table_count_when_invoke_always_raises():
 
     ann, failures = annotate_schema(tables, samples, _raise)
     assert failures == len(tables) == 2
+
+
+# --- Fix round 1 ---
+
+# Fix 1: _parse must not lock onto the first "{" when it belongs to prose,
+# not the JSON payload — it must keep scanning candidate braces until one
+# of them decodes.
+
+def test_a_brace_inside_leading_prose_does_not_defeat_parsing():
+    def _invoke(system, user):
+        return (
+            'Kết quả (dạng {key:val}): '
+            '{"table": {"text": "Đơn hàng", "confidence": "high"}, "columns": {}}'
+        )
+
+    ann, failures = annotate_schema(TABLES, SAMPLES, _invoke)
+    assert ann.tables["orders"].text == "Đơn hàng"
+    assert failures == 0
+
+
+# Fix 2: a well-formed but empty reply must count as a failure — the
+# failure count now tracks "did this table end up with no text", not
+# "did parsing raise".
+
+def test_a_well_formed_but_empty_reply_counts_as_a_failure():
+    ann, failures = annotate_schema(
+        TABLES, SAMPLES,
+        _reply({"table": {}, "columns": {}}),
+    )
+    assert ann.tables["orders"].text == ""
+    assert ann.tables["orders"].confidence == "low"
+    assert ann.tables["orders"].reviewed_by == "llm"
+    assert failures == 1
+
+
+def test_a_well_formed_but_empty_reply_for_every_table_counts_all_of_them():
+    tables = TABLES + (
+        Table(
+            name="customers",
+            columns=(Column("id", "integer"),),
+            primary_key=("id",),
+        ),
+    )
+    samples = dict(SAMPLES, customers=[{"id": 1}])
+
+    ann, failures = annotate_schema(
+        tables, samples,
+        _reply({"table": {}, "columns": {}}),
+    )
+    assert failures == len(tables) == 2
+
+
+# Fix 3: pin the 200-character truncation boundary exactly.
+
+def test_a_200_character_value_is_not_truncated():
+    value = "x" * 200
+    prompt = build_annotation_prompt(TABLES[0], [{"id": 1, "flg_tt": value}])
+    assert f'"{value}"' in prompt
+    assert "…" not in prompt
+
+
+def test_a_201_character_value_is_truncated():
+    value = "x" * 201
+    prompt = build_annotation_prompt(TABLES[0], [{"id": 1, "flg_tt": value}])
+    assert f'"{value}"' not in prompt
+    assert ("x" * 200 + "…") in prompt

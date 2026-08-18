@@ -89,16 +89,27 @@ def _parse(raw: str) -> dict:
     `json.loads(text[start:])` đòi mọi thứ sau dấu `{` đầu tiên phải là JSON
     hợp lệ nên sẽ ném lỗi vì đoạn văn xuôi cuối câu. `raw_decode` chỉ đọc
     đúng một giá trị JSON và bỏ qua phần còn lại.
+
+    Không dừng lại ở dấu `{` đầu tiên trong chuỗi: một câu dẫn kiểu
+    "Kết quả (dạng {key:val}): {"table": ...}" có một dấu `{` giả trong
+    phần văn xuôi trước JSON thật. Nếu khoá vào dấu đó, `raw_decode` sẽ
+    hỏng và cả câu trả lời — vốn chứa JSON hợp lệ — bị vứt bỏ oan. Thay vào
+    đó, quét từng dấu `{` từ trái sang phải và dùng kết quả đầu tiên giải
+    mã thành công (thành một object, không phải số hay chuỗi); chỉ trả về
+    `{}` khi mọi ứng viên đều thất bại.
     """
     text = _FENCE.sub("", raw).strip()
-    start = text.find("{")
-    if start < 0:
-        return {}
-    try:
-        obj, _end = json.JSONDecoder().raw_decode(text[start:])
-        return obj if isinstance(obj, dict) else {}
-    except json.JSONDecodeError:
-        return {}
+    decoder = json.JSONDecoder()
+    pos = text.find("{")
+    while pos >= 0:
+        try:
+            obj, _end = decoder.raw_decode(text, pos)
+            if isinstance(obj, dict):
+                return obj
+        except json.JSONDecodeError:
+            pass
+        pos = text.find("{", pos + 1)
+    return {}
 
 
 def _confidence(value) -> str:
@@ -118,9 +129,13 @@ def annotate_schema(
     được xử lý như một lần trả lời không đọc được — nếu không, một bảng lỗi
     hạ tầng ở giữa lượt chạy sẽ làm mất công 36 bảng đã xong trước đó.
 
-    Trả về số bảng lỗi (ném lỗi hoặc trả về thứ không đọc được) cùng với chú
-    giải, để nơi gọi báo cho người vận hành thay vì âm thầm coi là thành
-    công.
+    Một bảng tính là lỗi khi mô tả bảng thu được rỗng — bất kể nguyên nhân
+    là `invoke` ném lỗi, câu trả lời không đọc được, hay câu trả lời là JSON
+    hợp lệ nhưng rỗng (`{"table": {}, "columns": {}}`). Model local suy
+    thoái về JSON hợp lệ-nhưng-rỗng là một kiểu lỗi thật, khác lỗi kết nối
+    nhưng cùng hậu quả: bảng đó không được chú giải. Đếm theo văn bản rỗng
+    thay vì theo "parse được hay không" mới trung thực với đúng câu hỏi mà
+    con số này trả lời cho người vận hành.
     """
     table_ann: dict[str, Annotation] = {}
     column_ann: dict[str, dict[str, Annotation]] = {}
@@ -133,15 +148,16 @@ def annotate_schema(
         except Exception:
             raw = ""
         parsed = _parse(raw)
-        if not parsed:
-            failures += 1
 
         t = parsed.get("table") or {}
+        text = t.get("text", "")
         table_ann[table.name] = Annotation(
-            text=t.get("text", ""),
+            text=text,
             reviewed_by=LLM,
-            confidence=_confidence(t.get("confidence")) if t.get("text") else "low",
+            confidence=_confidence(t.get("confidence")) if text else "low",
         )
+        if not text:
+            failures += 1
 
         cols = parsed.get("columns") or {}
         known = {c.name for c in table.columns}

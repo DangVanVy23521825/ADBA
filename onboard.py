@@ -17,6 +17,7 @@ import json
 import os
 import sys
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 
 from model.model_client import ModelClient
@@ -219,6 +220,148 @@ def cmd_build(
     return profile
 
 
+HANDOVER_RECALL = 0.95  # spec 6.5 — ngưỡng chặn bàn giao.
+
+
+@dataclass
+class VerifyReport:
+    total: int
+    recall: float
+    avg_context_tables: float
+    passed: bool
+    misses: list[tuple[str, frozenset[str]]]
+
+
+def _read_golden(golden_path: Path) -> tuple[list[dict], int]:
+    """Đọc golden set JSONL, trả `(bản ghi, số dòng đọc được)`.
+
+    File này do khách viết tay. Một dòng thiếu `question` hoặc `sql`, hay
+    không phải JSON hợp lệ, phải báo lỗi nêu ĐÚNG số dòng — không phải một
+    `KeyError`/`JSONDecodeError` trần trụi mà người vận hành phải tự mò
+    ngược lại xem dòng nào trong file.
+    """
+    if not golden_path.exists():
+        raise OnboardError(
+            f"Không có golden set tại {golden_path}. Cần một file JSONL, mỗi "
+            'dòng {"question": ..., "sql": ...}.'
+        )
+
+    rows: list[dict] = []
+    lines_read = 0
+    for lineno, raw in enumerate(golden_path.read_text(encoding="utf-8").splitlines(), start=1):
+        line = raw.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError as e:
+            raise OnboardError(
+                f"{golden_path}: dòng {lineno} không phải JSON hợp lệ ({e}). "
+                "File golden là JSONL viết tay — sửa dòng đó rồi chạy lại."
+            ) from e
+        lines_read += 1
+        if "question" not in row or "sql" not in row:
+            raise OnboardError(
+                f"{golden_path}: dòng {lineno} thiếu trường 'question' hoặc "
+                "'sql'. File golden là JSONL viết tay — sửa dòng đó rồi chạy lại."
+            )
+        rows.append(row)
+    return rows, lines_read
+
+
+def cmd_verify(
+    profile_dir: Path | str,
+    golden_path: Path | str,
+    user: str,
+    k: int = 8,
+) -> VerifyReport:
+    """Chấm recall chọn bảng trên golden set của khách, ghi `report.md`.
+
+    Dùng lại đúng định nghĩa recall của eval tầng 1: một câu tính là đạt khi
+    context chứa ĐỦ tập bảng đúng. Thiếu một bảng JOIN là SQL sai chắc chắn,
+    nên không có điểm từng phần.
+
+    `measure_recall` (eval.tier1_recall) CỐ Ý bỏ qua những bản ghi mà SQL
+    mẫu không parse ra bảng nào — coi đó là lỗi dữ liệu golden, không phải
+    lỗi retriever. Hệ quả là `report.total` là số câu CHẤM ĐƯỢC, không phải
+    số dòng trong file golden. Nếu hai số đó khác nhau, report.md phải nói
+    rõ cả hai và lý do — im lặng ở đây sẽ khiến người vận hành tưởng golden
+    set nhỏ hơn nó thật sự là, và cổng bàn giao lặng lẽ bỏ qua đúng nửa khó
+    của bộ câu hỏi khách viết.
+
+    Không cần DSN: hàm này chỉ đọc `profile/` đã dựng sẵn (qua `read_profile`,
+    không bao giờ mở kết nối DB thật — xem `perception/profile_store.py`),
+    không chạm database của khách.
+    """
+    from eval.tier1_recall import measure_recall
+    from eval.datasets import EvalRecord
+    from perception.connection_profile import permitted_tables
+    from perception.retrieval import LexicalRetriever
+    from perception.schema_context import resolve_schema_context
+
+    d = Path(profile_dir)
+    profile = read_profile(d)
+    permitted = permitted_tables(profile, user)
+    retriever = LexicalRetriever(profile.tables)
+
+    rows, lines_read = _read_golden(Path(golden_path))
+    records = [
+        EvalRecord(question=row["question"], gold_sql=row["sql"],
+                   db_id="khach", tables=profile.tables)
+        for row in rows
+    ]
+
+    def resolve(rec: EvalRecord) -> frozenset[str]:
+        ctx = resolve_schema_context(
+            profile, rec.question, permitted, retriever=retriever, k=k
+        )
+        return frozenset(ctx.retrieved_tables)
+
+    r = measure_recall(records, resolve)
+    report = VerifyReport(
+        total=r.total,
+        recall=r.recall,
+        avg_context_tables=r.avg_context_tables,
+        passed=r.recall >= HANDOVER_RECALL,
+        misses=r.misses,
+    )
+
+    lines = ["# Báo cáo kiểm profile", ""]
+    if lines_read != report.total:
+        skipped = lines_read - report.total
+        lines += [
+            f"- Dòng golden đọc được: **{lines_read}**",
+            f"- Câu chấm được: **{report.total}** — bỏ qua {skipped} câu vì "
+            "SQL mẫu không parse ra bảng nào (lỗi dữ liệu golden set, "
+            "KHÔNG tính là trượt). Recall dưới đây chỉ tính trên số câu "
+            "chấm được, không phải trên toàn bộ file golden.",
+        ]
+    else:
+        lines += [f"- Câu chấm được: **{report.total}**"]
+    lines += [
+        f"- Recall: **{report.recall:.3f}**  (ngưỡng bàn giao: {HANDOVER_RECALL:.0%})",
+        f"- Bảng/context trung bình: {report.avg_context_tables:.1f}",
+        f"- Kết luận: **{'ĐẠT' if report.passed else 'CHƯA ĐẠT'}**",
+        "",
+    ]
+    if report.misses:
+        lines += ["## Câu chưa đạt", ""]
+        shown = report.misses[:20]
+        lines += [f"- {q} — thiếu `{sorted(m)}`" for q, m in shown]
+        omitted = len(report.misses) - len(shown)
+        if omitted > 0:
+            lines += [f"- … và {omitted} câu khác không hiện ở đây."]
+        lines += [
+            "",
+            "Recall thấp hầu như luôn là do chú giải, không phải do model.",
+            "Mở trang 'Chú giải schema', bổ sung mô tả cho các bảng bị thiếu, rồi chạy lại.",
+        ]
+    (d / "report.md").write_text("\n".join(lines), encoding="utf-8")
+
+    print(f"recall {report.recall:.3f} — {'ĐẠT' if report.passed else 'CHƯA ĐẠT'}")
+    return report
+
+
 def _resolve_dsn(cli_dsn: str | None) -> str:
     dsn = cli_dsn or os.environ.get(DSN_ENV_VAR)
     if not dsn:
@@ -267,10 +410,19 @@ def main() -> None:
     )
     p_build.add_argument("--min-reviewed", type=float, default=0.0)
 
-    # Task 10, 11 thêm `verify`, `refresh` vào đây theo cùng khuôn: một
-    # `sub.add_parser(...)`, một `_add_dsn_profile_args(...)` (hoặc biến thể
-    # của nó nếu lệnh đó không cần DSN), và một nhánh mới trong khối
-    # `if/elif` bên dưới. Không cần viết lại gì ở trên.
+    # `verify` không nhận `--dsn`: nó chỉ đọc `profile/` đã dựng sẵn qua
+    # `read_profile` (không bao giờ mở kết nối DB thật), nên không có gì để
+    # đòi DSN — bắt operator set ADBA_DSN chỉ để chạy verify là phiền vô ích.
+    p_verify = sub.add_parser("verify", help="chấm recall trên golden set của khách")
+    p_verify.add_argument("--profile", type=Path, default=Path("profile"))
+    p_verify.add_argument("--golden", type=Path, required=True)
+    p_verify.add_argument("--user", required=True)
+    p_verify.add_argument("--k", type=int, default=8)
+
+    # Task 11 thêm `refresh` vào đây theo cùng khuôn: một `sub.add_parser(...)`,
+    # `_add_dsn_profile_args(...)` (hoặc biến thể của nó nếu lệnh đó không
+    # cần DSN), và một nhánh mới trong khối `if/elif` bên dưới. Không cần
+    # viết lại gì ở trên.
 
     args = ap.parse_args()
     try:
@@ -282,7 +434,11 @@ def main() -> None:
 
 
 def _dispatch(args) -> None:
-    dsn = _resolve_dsn(args.dsn)
+    # `verify` không có cờ `--dsn` (xem p_verify ở main()) và không cần kết
+    # nối DB thật, nên không gọi `_resolve_dsn` cho nó — nhánh else của
+    # ternary này không được evaluate khi cmd == "verify", nên `args.dsn`
+    # (vốn không tồn tại trên namespace của verify) không bao giờ bị chạm.
+    dsn = None if args.cmd == "verify" else _resolve_dsn(args.dsn)
 
     if args.cmd == "extract":
         cmd_extract(dsn, args.profile)
@@ -309,6 +465,9 @@ def _dispatch(args) -> None:
             user, _, tables_csv = spec.partition("=")
             grants[user] = frozenset(t.strip() for t in tables_csv.split(",") if t.strip())
         cmd_build(args.profile, dsn, grants, min_reviewed=args.min_reviewed)
+    elif args.cmd == "verify":
+        report = cmd_verify(args.profile, args.golden, args.user, k=args.k)
+        raise SystemExit(0 if report.passed else 1)
 
 
 if __name__ == "__main__":

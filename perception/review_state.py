@@ -127,17 +127,10 @@ def review_progress(
         ]
         return sum(1 for a in entries if a.reviewed_by == HUMAN), len(entries)
 
-    done = 0
-    total = 0
-    for table in tables:
-        t = ann.tables.get(table.name)
-        total += 1
-        if t is not None and t.reviewed_by == HUMAN:
-            done += 1
-        cols = ann.columns.get(table.name, {})
-        for c in table.columns:
-            a = cols.get(c.name)
-            total += 1
-            if a is not None and a.reviewed_by == HUMAN:
-                done += 1
-    return done, total
+    # Dẫn xuất thẳng từ `review_rows` chứ không đếm lại bằng một vòng lặp
+    # song song: hai vòng viết tay chỉ TÌNH CỜ khớp nhau, và khi `review_rows`
+    # đổi cách liệt kê thì mẫu số lặng lẽ lệch đi — đúng thứ mà tham số
+    # `tables` sinh ra để ngăn. Ở đây thanh tiến độ và danh sách bên dưới nó
+    # khớp nhau về mặt cấu trúc, không phải nhờ may mắn.
+    rows = review_rows(tables, ann)
+    return sum(1 for r in rows if r.reviewed_by == HUMAN), len(rows)

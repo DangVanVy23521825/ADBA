@@ -218,3 +218,43 @@ def test_missing_dsn_password_stripped_field_defaults_to_false(tmp_path, monkeyp
     monkeypatch.setenv("ADBA_DB_PASSWORD", "p")
     profile = read_profile(tmp_path)
     assert profile.dsn == stripped_dsn
+
+
+# --- Fix round 2: thông điệp ValueError không được lặp lại mật khẩu; khôi
+# phục một mật khẩu THÔ (chưa encode, như operator gõ tay) qua biến môi
+# trường vẫn phải hoạt động đúng nghĩa, không chỉ đúng byte.
+
+def test_reserved_char_error_does_not_leak_the_password(tmp_path):
+    """Thông điệp lỗi từng lặp lại {dsn!r} — tức lặp lại mật khẩu — vào
+    ValueError. Đó là một điểm rò rỉ TỆ HƠN profile.json: profile.json chỉ
+    nằm trên máy khách, còn traceback/log lỗi có thể bị gửi ra ngoài qua
+    dịch vụ theo dõi lỗi. Dùng mật khẩu đặc trưng để một match có ý nghĩa.
+    """
+    password = "distinctive-secret-xyz789/rest"
+    dsn = f"postgresql://u:{password}@h:5432/d"
+    with pytest.raises(ValueError) as exc_info:
+        _write(tmp_path, dsn=dsn)
+    assert "distinctive-secret-xyz789" not in str(exc_info.value)
+
+
+def test_raw_password_round_trips_functionally_via_environment_variable(
+    tmp_path, monkeypatch
+):
+    """Khác với test_password_with_all_reserved_chars_round_trips_byte_identical
+    ở trên (so BYTE-FOR-BYTE toàn bộ DSN, xuất phát từ một DSN đã
+    percent-encode SẴN — thứ một client DB thật sự tạo ra) — test này xuất
+    phát từ một mật khẩu THÔ, như operator gõ tay: chứa '@' và ':' chưa
+    percent-encode. Với đầu vào đó, `write_profile`/`read_profile` không
+    hứa giữ nguyên HÌNH DẠNG chuỗi DSN gốc (DSN dựng lại sẽ percent-encode
+    mật khẩu, khác chuỗi thô ban đầu) — chúng chỉ hứa khôi phục ĐÚNG mật
+    khẩu. Vì vậy assertion ở đây percent-decode phần mật khẩu của DSN dựng
+    lại rồi so với mật khẩu thô gốc, KHÔNG so cả chuỗi DSN.
+    """
+    password = "p@ss:wd"
+    dsn = f"postgresql://u:{password}@h:5432/d"
+    monkeypatch.setenv("ADBA_DB_PASSWORD", password)
+    profile = read_profile(_write(tmp_path, dsn=dsn))
+    recovered_password = urllib.parse.unquote(
+        urllib.parse.urlsplit(profile.dsn).password
+    )
+    assert recovered_password == password

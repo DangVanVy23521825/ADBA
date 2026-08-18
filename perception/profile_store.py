@@ -93,10 +93,18 @@ def _strip_password(dsn: str) -> tuple[str, bool]:
         return stripped, True
 
     if "@" in parts.path or "@" in parts.query or "@" in parts.fragment:
+        # KHÔNG được nội suy `dsn` (hay bất kỳ phần nào rút ra từ authority
+        # đã bị cắt cụt, như `parts.hostname` ở đây — nó thật ra là mảnh
+        # username bị đọc nhầm, không đáng tin) vào thông điệp lỗi.
+        # ValueError này sẽ đi vào traceback, log lỗi, dịch vụ theo dõi
+        # lỗi — một nơi rò rỉ còn tệ hơn profile.json, vì profile.json chỉ
+        # nằm trên máy khách còn log có thể bị gửi ra ngoài. Chỉ nêu
+        # scheme (không mang thông tin nhạy cảm); operator đang cầm sẵn
+        # DSN gốc, không cần được nhắc lại.
         raise ValueError(
-            f"DSN có vẻ chứa mật khẩu chưa percent-encode: {dsn!r}. Ký tự "
-            "'/', '?', hoặc '#' trong mật khẩu cắt ngang authority (RFC "
-            "3986), khiến urlsplit đọc sai chỗ mật khẩu bắt đầu/kết thúc. "
+            f"DSN dùng scheme {parts.scheme!r} có vẻ chứa mật khẩu chưa "
+            "percent-encode. Ký tự '/', '?', hoặc '#' trong mật khẩu cắt "
+            "ngang authority (RFC 3986), khiến vị trí mật khẩu bị đọc sai. "
             "Hãy percent-encode mật khẩu trước khi ghép vào DSN, ví dụ "
             "bằng urllib.parse.quote(password, safe='')."
         )

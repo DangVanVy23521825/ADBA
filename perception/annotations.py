@@ -175,12 +175,13 @@ def merge_annotations(
         tables[name] = old if (old and old.reviewed_by == HUMAN) else new
 
     columns: dict[str, dict[str, Annotation]] = {}
-    for table in set(fresh.tables) | set(fresh.columns):
+    for table in sorted(set(fresh.tables) | set(fresh.columns)):
         new_cols = fresh.columns.get(table, {})
         old_cols = existing.columns.get(table, {})
-        col_names = set(new_cols) | {
-            col for col, old in old_cols.items() if old.reviewed_by == HUMAN
-        }
+        col_names = sorted(
+            set(new_cols)
+            | {col for col, old in old_cols.items() if old.reviewed_by == HUMAN}
+        )
         merged = {}
         for col in col_names:
             old = old_cols.get(col)

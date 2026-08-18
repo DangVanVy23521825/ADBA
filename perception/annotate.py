@@ -20,6 +20,18 @@ from perception.schema_model import Table
 
 _ALLOWED_CONFIDENCE = {"high", "low"}
 _FENCE = re.compile(r"```(?:json)?\s*|\s*```")
+
+# Chỉ những dấu `{` mở ra một object JSON mới đáng thử: sau nó phải là một
+# khoá dạng chuỗi, hoặc object rỗng. Dấu ngoặc trong văn xuôi (`{key:val}`)
+# bị loại ngay, nên vòng quét không tốn một lần `raw_decode` thất bại cho
+# mỗi dấu ngoặc trong câu trả lời.
+_OBJECT_START = re.compile(r'\{\s*(?:"|\})')
+
+# Chặn trên số ứng viên. `json.JSONDecodeError` tính lineno/colno bằng cách
+# quét lại toàn bộ văn bản, nên N lần thử hỏng là O(N × độ dài). Model local
+# lặp vô hạn một ký tự là chuyện có thật; không có trần thì một câu trả lời
+# rác treo luôn bảng đó.
+_MAX_PARSE_CANDIDATES = 32
 _MAX_CELL_LEN = 200
 
 SYSTEM_PROMPT = """\
@@ -100,15 +112,15 @@ def _parse(raw: str) -> dict:
     """
     text = _FENCE.sub("", raw).strip()
     decoder = json.JSONDecoder()
-    pos = text.find("{")
-    while pos >= 0:
+    for tried, match in enumerate(_OBJECT_START.finditer(text)):
+        if tried >= _MAX_PARSE_CANDIDATES:
+            break
         try:
-            obj, _end = decoder.raw_decode(text, pos)
+            obj, _end = decoder.raw_decode(text, match.start())
             if isinstance(obj, dict):
                 return obj
         except json.JSONDecodeError:
             pass
-        pos = text.find("{", pos + 1)
     return {}
 
 

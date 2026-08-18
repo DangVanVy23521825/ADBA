@@ -212,6 +212,43 @@ def test_a_brace_inside_leading_prose_does_not_defeat_parsing():
     assert failures == 0
 
 
+def test_many_prose_braces_do_not_consume_the_candidate_budget():
+    """Dấu ngoặc trong văn xuôi không được tính là ứng viên JSON.
+
+    `_OBJECT_START` chỉ khớp `{` mở ra object thật (`{"` hoặc `{}`), nên
+    hàng nghìn dấu ngoặc kiểu `{a{b{c` bị bỏ qua mà không tốn một lần
+    `raw_decode` hỏng nào — và JSON thật nằm sau chúng vẫn được tìm thấy.
+    """
+    noise = "{a{b{c " * 500
+
+    def _invoke(system, user):
+        return (
+            f"{noise}"
+            '{"table": {"text": "Đơn hàng", "confidence": "high"}, "columns": {}}'
+        )
+
+    ann, failures = annotate_schema(TABLES, SAMPLES, _invoke)
+    assert ann.tables["orders"].text == "Đơn hàng"
+    assert failures == 0
+
+
+def test_a_reply_that_is_only_open_braces_fails_instead_of_hanging():
+    """Model local lặp vô hạn một ký tự là chuyện có thật.
+
+    Mỗi `json.JSONDecodeError` tính lineno/colno bằng cách quét lại cả văn
+    bản, nên thử mọi dấu ngoặc là O(N × độ dài). Trần ứng viên giữ cho một
+    câu trả lời rác chỉ làm hỏng chú giải của MỘT bảng, không treo cả lượt
+    chạy 150 bảng.
+    """
+
+    def _invoke(system, user):
+        return '{"' * 50_000
+
+    ann, failures = annotate_schema(TABLES, SAMPLES, _invoke)
+    assert ann.tables["orders"].text == ""
+    assert failures == 1
+
+
 # Fix 2: a well-formed but empty reply must count as a failure — the
 # failure count now tracks "did this table end up with no text", not
 # "did parsing raise".

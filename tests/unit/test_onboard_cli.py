@@ -343,3 +343,133 @@ def test_cli_build_parses_grant_flags(tmp_path, monkeypatch):
     profile = read_profile(tmp_path)
     assert permitted_tables(profile, "admin") == {t.name for t in MINI_TABLES}
     assert permitted_tables(profile, "analyst") == {"orders", "customers"}
+
+
+# --- Fix round 1, item 1: a `--grant` with no '=' is a typo, not a phantom -
+
+
+def test_cli_build_grant_without_equals_exits_with_clear_error(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr("onboard.introspect_schema", lambda dsn, **kw: MINI_TABLES)  # noqa: ARG005
+    cmd_extract("postgresql://x", tmp_path)
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "onboard.py",
+            "build",
+            "--dsn",
+            "postgresql://x",
+            "--profile",
+            str(tmp_path),
+            "--grant",
+            "admin",
+        ],
+    )
+    with pytest.raises(SystemExit):
+        main()
+
+    captured = capsys.readouterr()
+    text = captured.out + captured.err
+    # Names the offending value...
+    assert "admin" in text
+    # ...and shows the correct syntax.
+    assert "user=bang1,bang2" in text or "user=*" in text
+
+    # No profile.json must have been written — a rejected --grant is a hard
+    # stop, not a build that silently drops the bad grant.
+    assert not (tmp_path / "profile.json").exists()
+
+
+# --- Fix round 1, item 1 (decision) + item 3: explicit empty grant ----------
+
+
+def test_cli_build_explicit_empty_grant_is_accepted_and_suppresses_warning(
+    tmp_path, monkeypatch, capsys
+):
+    """`--grant sales=` (an explicit empty value) is accepted as a deliberate
+    "grant nothing to sales for now", distinct from omitting --grant
+    entirely. Because the resulting `grants` mapping is non-empty (it has
+    the key `sales`), the no-grants warning must NOT fire — that warning is
+    about nobody having any grants recorded at all, not about any one
+    user's grant being empty.
+    """
+    monkeypatch.setattr("onboard.introspect_schema", lambda dsn, **kw: MINI_TABLES)  # noqa: ARG005
+    cmd_extract("postgresql://x", tmp_path)
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "onboard.py",
+            "build",
+            "--dsn",
+            "postgresql://x",
+            "--profile",
+            str(tmp_path),
+            "--grant",
+            "sales=",
+        ],
+    )
+    capsys.readouterr()
+    main()
+
+    out = capsys.readouterr().out
+    assert "--grant user=*" not in out
+    assert "CẢNH BÁO" not in out
+
+    from perception.connection_profile import permitted_tables
+    from perception.profile_store import read_profile
+
+    profile = read_profile(tmp_path)
+    assert permitted_tables(profile, "sales") == frozenset()
+
+
+# --- Fix round 1, item 2: gate arithmetic ------------------------------------
+
+
+def test_build_allows_when_ratio_exactly_equals_threshold(tmp_path, monkeypatch):
+    """Strict `<`, not `<=`: a ratio exactly at the threshold must pass."""
+    from perception.annotations import Annotation, SchemaAnnotations, save_annotations
+    from perception.schema_model import Column, Table
+
+    tables = (
+        Table(name="t1", columns=(Column("a", "integer"),), primary_key=("a",), row_count=1),
+        Table(name="t2", columns=(Column("b", "integer"),), primary_key=("b",), row_count=1),
+    )
+    monkeypatch.setattr("onboard.introspect_schema", lambda dsn, **kw: tables)  # noqa: ARG005
+    cmd_extract("postgresql://x", tmp_path)
+
+    # 4 reviewable items total (t1, t1.a, t2, t2.b); 2 human-reviewed ->
+    # ratio == 0.5 exactly.
+    save_annotations(
+        SchemaAnnotations(
+            tables={"t1": Annotation("mô tả t1", reviewed_by="human")},
+            columns={"t2": {"b": Annotation("mô tả b", reviewed_by="human")}},
+        ),
+        tmp_path / "schema.yaml",
+    )
+
+    from onboard import cmd_build
+
+    # Must NOT raise: ratio (0.5) == min_reviewed (0.5).
+    cmd_build(tmp_path, "postgresql://x", grants={}, min_reviewed=0.5)
+
+
+def test_build_gate_on_empty_schema_does_not_divide_by_zero_and_still_gates(
+    tmp_path, monkeypatch
+):
+    """`total == 0` must not raise ZeroDivisionError, and must NOT be treated
+    as 100% reviewed: a nonzero --min-reviewed still has to gate it.
+    """
+    monkeypatch.setattr("onboard.introspect_schema", lambda dsn, **kw: ())  # noqa: ARG005
+    cmd_extract("postgresql://x", tmp_path)
+
+    from onboard import UnreviewedAnnotationsError, cmd_build
+
+    with pytest.raises(UnreviewedAnnotationsError):
+        cmd_build(tmp_path, "postgresql://x", grants={}, min_reviewed=0.1)
+
+    # min_reviewed=0.0 on an empty schema is the one case that must pass:
+    # ratio defaults to 0.0, and 0.0 < 0.0 is false.
+    cmd_build(tmp_path, "postgresql://x", grants={}, min_reviewed=0.0)

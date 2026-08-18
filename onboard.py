@@ -258,6 +258,21 @@ def main() -> None:
     elif args.cmd == "build":
         grants = {}
         for spec in args.grant:
+            if "=" not in spec:
+                # `--grant admin` (no '=') would otherwise silently become
+                # `{"admin": frozenset()}` — a phantom user granted nothing,
+                # AND a non-empty `grants` mapping that suppresses the
+                # separate "no --grant at all" warning below. Both failures
+                # look identical from the operator's chair (empty context on
+                # the first question), so refuse outright instead of
+                # guessing the operator meant an empty grant.
+                print(
+                    f"Cờ --grant sai cú pháp: {spec!r} thiếu dấu '='. "
+                    "Cú pháp đúng: user=bang1,bang2 hoặc user=* "
+                    "(hoặc user= để cấp rỗng có chủ đích).",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
             user, _, tables_csv = spec.partition("=")
             grants[user] = frozenset(t.strip() for t in tables_csv.split(",") if t.strip())
         cmd_build(args.profile, dsn, grants, min_reviewed=args.min_reviewed)

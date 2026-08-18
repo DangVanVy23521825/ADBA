@@ -147,6 +147,22 @@ def merge_annotations(
     LLM sinh bị thay bằng bản mới. Bảng và cột không còn trong `fresh` bị
     loại — giữ chú giải của thứ không còn tồn tại chỉ làm nhiễu bản duyệt.
 
+    Vòng ghép cột lặp theo HỢP của `fresh.tables` và `fresh.columns` — tập
+    bảng còn tồn tại, mà `annotate_schema` bảo đảm ghi đủ cho mọi bảng —
+    chứ không phải theo riêng `fresh.columns` (hợp với `fresh.columns` chỉ
+    để không phá vỡ cách gọi đã có, nơi ai đó truyền `columns` mà không kèm
+    `tables` tương ứng). Lý do phải nhìn sang `fresh.tables`: model được
+    `SYSTEM_PROMPT` (trong `perception/annotate.py`) chỉ đạo bỏ qua cột
+    hiển nhiên như id, và có thể trả `"columns": {}` cho cả một bảng khi
+    không cột nào đáng chú giải. Cả hai đều là hoạt động bình thường, không
+    phải dấu hiệu bảng hay cột đó đã biến mất khỏi schema thật — nên không
+    được dùng sự vắng mặt ấy làm căn cứ xoá chú giải `human`. Với mỗi bảng
+    còn trong hợp đó, tập cột được ghép là HỢP của tên cột trong
+    `fresh.columns.get(table, {})` và các cột `reviewed_by == HUMAN` trong
+    `existing.columns.get(table, {})`; cột chỉ có trong `existing` mà
+    không phải `human` thì bị bỏ. Nếu hợp đó rỗng, bảng không được thêm
+    vào `columns` — giữ đúng hình dạng hiện tại của đầu ra.
+
     CẢNH BÁO: việc loại bỏ này dựa hoàn toàn vào `fresh`. `fresh` phải phủ
     toàn bộ schema hiện có — truyền một `fresh` thiếu hoặc rỗng sẽ âm thầm
     xoá sạch mọi chú giải do người viết, kể cả những mục `human` mà quy tắc
@@ -159,13 +175,19 @@ def merge_annotations(
         tables[name] = old if (old and old.reviewed_by == HUMAN) else new
 
     columns: dict[str, dict[str, Annotation]] = {}
-    for table, new_cols in fresh.columns.items():
+    for table in set(fresh.tables) | set(fresh.columns):
+        new_cols = fresh.columns.get(table, {})
         old_cols = existing.columns.get(table, {})
+        col_names = set(new_cols) | {
+            col for col, old in old_cols.items() if old.reviewed_by == HUMAN
+        }
         merged = {}
-        for col, new in new_cols.items():
+        for col in col_names:
             old = old_cols.get(col)
+            new = new_cols.get(col)
             merged[col] = old if (old and old.reviewed_by == HUMAN) else new
-        columns[table] = merged
+        if merged:
+            columns[table] = merged
 
     return SchemaAnnotations(tables=tables, columns=columns)
 

@@ -113,6 +113,74 @@ def test_no_human_entry_is_ever_lost_across_a_full_refresh():
     assert all(merged.columns[f"t{i}"]["c"].text == f"cột {i}" for i in range(20))
 
 
+def test_human_column_annotation_survives_when_fresh_has_no_columns_for_that_table():
+    """Model trả "columns": {} là chuyện thường; nó không được xoá công sức người."""
+    existing = SchemaAnnotations(
+        tables={"orders": _ann("bảng")},
+        columns={"orders": {"flg_tt": _ann("Người sửa", reviewed_by="human")}},
+    )
+    fresh = SchemaAnnotations(tables={"orders": _ann("bảng mới")}, columns={})
+    merged = merge_annotations(existing, fresh)
+    assert merged.columns["orders"]["flg_tt"].text == "Người sửa"
+    assert merged.columns["orders"]["flg_tt"].reviewed_by == "human"
+
+
+def test_human_column_annotation_survives_when_fresh_omits_that_one_column():
+    """SYSTEM_PROMPT bảo model bỏ qua cột hiển nhiên như id — nên nó sẽ bỏ qua."""
+    existing = SchemaAnnotations(
+        tables={"orders": _ann("bảng")},
+        columns={"orders": {
+            "id": _ann("Khoá chính do người viết", reviewed_by="human"),
+            "flg_tt": _ann("cũ"),
+        }},
+    )
+    fresh = SchemaAnnotations(
+        tables={"orders": _ann("bảng mới")},
+        columns={"orders": {"flg_tt": _ann("mới")}},
+    )
+    merged = merge_annotations(existing, fresh)
+    assert merged.columns["orders"]["id"].text == "Khoá chính do người viết"
+    assert merged.columns["orders"]["flg_tt"].text == "mới", "mục LLM vẫn phải được thay"
+
+
+def test_llm_column_annotation_absent_from_fresh_is_dropped():
+    """Chỉ mục người mới được giữ. Mục LLM cũ mà lần này model không nhắc thì bỏ.
+
+    Sửa so với bản gốc trong brief: bản gốc chỉ có cột LLM trong bảng, nên
+    khi bảng vắng mặt khỏi `fresh.columns`, "cu" không nằm trong kết quả dù
+    code cũ (lỗi) hay code mới (đã sửa) — vì code cũ CHƯA BAO GIỜ tự thêm
+    một khoá không có trong `fresh`, nó chỉ lỗi ở việc XOÁ những khoá đáng
+    lẽ phải giữ. Assertion gốc xanh ngay cả trên code lỗi, không kiểm được
+    gì. Thêm một cột `human` cùng bảng để test đỏ đúng lý do (mục người bị
+    xoá theo cả bảng) và xanh đúng lý do (mục người sống, mục LLM cũ vẫn bị
+    bỏ) sau khi sửa.
+    """
+    existing = SchemaAnnotations(
+        tables={"orders": _ann("bảng")},
+        columns={
+            "orders": {
+                "giu": _ann("người viết", reviewed_by="human"),
+                "cu": _ann("LLM cũ"),
+            }
+        },
+    )
+    fresh = SchemaAnnotations(tables={"orders": _ann("bảng mới")}, columns={})
+    merged = merge_annotations(existing, fresh)
+    assert merged.columns["orders"]["giu"].text == "người viết"
+    assert "cu" not in merged.columns["orders"]
+
+
+def test_human_column_annotation_dies_with_its_table():
+    """Bảng bị xoá khỏi schema thì chú giải cột của nó cũng đi theo."""
+    existing = SchemaAnnotations(
+        tables={"cu": _ann("bảng cũ")},
+        columns={"cu": {"c": _ann("người viết", reviewed_by="human")}},
+    )
+    fresh = SchemaAnnotations(tables={"orders": _ann("còn sống")}, columns={})
+    merged = merge_annotations(existing, fresh)
+    assert "cu" not in merged.columns
+
+
 # ── gắn vào Table ───────────────────────────────────────────────────────────
 
 def test_apply_puts_descriptions_onto_tables_and_columns():

@@ -42,6 +42,18 @@ from perception.schema_model import Table
 
 DSN_ENV_VAR = "ADBA_DSN"
 
+
+class OnboardError(RuntimeError):
+    """Lỗi vận hành mà người dùng sửa được, không phải bug của chương trình.
+
+    `main()` bắt loại này và in nguyên câu thông báo rồi thoát mã 1. Đừng
+    dùng nó cho lỗi lập trình: traceback của những lỗi đó vẫn cần hiện ra
+    đầy đủ.
+
+    Thông báo không được chứa DSN — nó mang mật khẩu, và cả đường onboarding
+    này giữ mật khẩu ra khỏi file lẫn thông báo lỗi.
+    """
+
 # Xem model/model_config.py — đây là biến operator cần kiểm tra khi toàn
 # bộ lượt annotate thất bại, dấu hiệu của một địa chỉ Ollama sai chứ không
 # phải một vấn đề của schema khách.
@@ -62,9 +74,21 @@ def cmd_extract(dsn: str, profile_dir: Path | str) -> tuple[Table, ...]:
 
 
 def _load_structure(profile_dir: Path) -> tuple[Table, ...]:
-    return structure_from_plain(
-        json.loads((profile_dir / STRUCTURE_JSON).read_text(encoding="utf-8"))
-    )
+    """Đọc `structure.json`, hoặc báo lỗi nói được phải làm gì tiếp.
+
+    Chạy sai thứ tự lệnh, hoặc trỏ `--profile` nhầm thư mục, là việc đầu
+    tiên người vận hành làm sai. Để `FileNotFoundError` nguyên dạng thoát
+    ra thành traceback thì họ nhận một trang stack Python thay vì câu
+    "chạy extract trước" — trong khi trang Streamlit vốn đã xử lý đúng
+    tình huống này.
+    """
+    path = profile_dir / STRUCTURE_JSON
+    if not path.exists():
+        raise OnboardError(
+            f"Không có {STRUCTURE_JSON} trong {profile_dir}. "
+            f"Chạy `onboard.py extract --profile {profile_dir}` trước."
+        )
+    return structure_from_plain(json.loads(path.read_text(encoding="utf-8")))
 
 
 def _local_invoke(system: str, user: str) -> str:
@@ -249,6 +273,15 @@ def main() -> None:
     # `if/elif` bên dưới. Không cần viết lại gì ở trên.
 
     args = ap.parse_args()
+    try:
+        _dispatch(args)
+    except OnboardError as e:
+        # Lỗi người vận hành sửa được: in câu thông báo, không in traceback.
+        print(str(e), file=sys.stderr)
+        sys.exit(1)
+
+
+def _dispatch(args) -> None:
     dsn = _resolve_dsn(args.dsn)
 
     if args.cmd == "extract":

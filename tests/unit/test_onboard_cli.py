@@ -473,3 +473,33 @@ def test_build_gate_on_empty_schema_does_not_divide_by_zero_and_still_gates(
     # min_reviewed=0.0 on an empty schema is the one case that must pass:
     # ratio defaults to 0.0, and 0.0 < 0.0 is false.
     cmd_build(tmp_path, "postgresql://x", grants={}, min_reviewed=0.0)
+
+
+# ── chạy sai thứ tự lệnh ────────────────────────────────────────────────────
+
+
+def test_a_missing_structure_file_says_to_run_extract_first(tmp_path):
+    """Chạy sai thứ tự lệnh là việc đầu tiên người vận hành làm sai.
+
+    Trước đây `FileNotFoundError` thoát ra nguyên dạng, nên họ nhận một
+    trang traceback Python thay vì câu chỉ đúng việc phải làm — trong khi
+    trang Streamlit vốn đã xử lý đúng tình huống này.
+    """
+    from onboard import OnboardError, _load_structure
+
+    with pytest.raises(OnboardError) as excinfo:
+        _load_structure(tmp_path / "chua-extract")
+
+    message = str(excinfo.value)
+    assert "structure.json" in message
+    assert "extract" in message, "phải nói rõ lệnh cần chạy, không chỉ nói thiếu file"
+
+
+def test_the_missing_structure_message_never_carries_the_dsn(tmp_path):
+    """Thông báo lỗi không được mang mật khẩu — cùng ràng buộc với profile.json."""
+    from onboard import OnboardError, _load_structure
+
+    with pytest.raises(OnboardError) as excinfo:
+        _load_structure(tmp_path / "chua-extract")
+
+    assert "postgresql://" not in str(excinfo.value)

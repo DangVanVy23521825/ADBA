@@ -92,6 +92,17 @@ def test_empty_permitted_gives_empty_context():
     assert ctx.rendered_text == ""
 
 
+def test_narrow_grants_still_produce_a_non_empty_context():
+    """Lỗi spec 4.1: trước bản sửa, user quyền hẹp nhận context rỗng."""
+    p = _profile(threshold=1)
+    ctx = resolve_schema_context(
+        p, "bảng lương nhân viên", permitted=frozenset({"payroll"}),
+        retriever=LexicalRetriever(MINI_TABLES), k=1,
+    )
+    assert ctx.retrieved_tables == ("payroll",)
+    assert "payroll" in ctx.rendered_text
+
+
 def test_table_order_is_stable_for_prefix_caching():
     p = _profile()
     a = resolve_schema_context(p, "câu một", permitted=ALL)

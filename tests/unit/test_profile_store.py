@@ -1,4 +1,6 @@
 import dataclasses
+import json
+import urllib.parse
 
 import pytest
 
@@ -111,8 +113,13 @@ def test_password_is_not_written_to_disk_anywhere(tmp_path):
 
 
 def test_password_round_trips_via_environment_variable(tmp_path, monkeypatch):
-    dsn = "postgresql://u:p@ss:wd@h:5432/d"
-    monkeypatch.setenv("ADBA_DB_PASSWORD", "p@ss:wd")
+    # DSN gốc phải là URI percent-encode HỢP LỆ — đây là điều write_profile
+    # bây giờ đòi hỏi (xem test_write_profile_rejects_dsn_with_reserved_...
+    # ở dưới). '@' và ':' vẫn parse đúng không cần encode (rpartition/
+    # partition xử lý được), nhưng ta encode cho đúng chuẩn RFC 3986.
+    password = "p@ss:wd"
+    dsn = f"postgresql://u:{urllib.parse.quote(password, safe='')}@h:5432/d"
+    monkeypatch.setenv("ADBA_DB_PASSWORD", password)
     profile = read_profile(_write(tmp_path, dsn=dsn))
     assert profile.dsn == dsn
 
@@ -123,3 +130,91 @@ def test_read_profile_without_password_env_var_returns_dsn_without_password(
     monkeypatch.delenv("ADBA_DB_PASSWORD", raising=False)
     profile = read_profile(_write(tmp_path))
     assert profile.dsn == "postgresql://u@h:5432/d"
+
+
+# --- Fix round 1: _strip_password conflated "cannot parse a password" with
+# "there is no password" (Critical 1); _restore_password spliced the raw
+# password back without re-encoding it (Critical 2); read_profile injected
+# ADBA_DB_PASSWORD into DSNs that never had a password to begin with
+# (Important 3). See task-5-report.md, "Fix round 1" section.
+
+@pytest.mark.parametrize(
+    "dsn",
+    [
+        "postgresql://u:sl/ash@h:5432/d",
+        "postgresql://u:ha#sh@h/d",
+        "postgresql://u:qu?ery@h/d",
+    ],
+)
+def test_write_profile_rejects_dsn_with_reserved_chars_that_truncate_authority(
+    tmp_path, dsn
+):
+    """'/', '?', '#' cắt ngang authority theo RFC 3986. Nếu mật khẩu chứa
+    chúng mà chưa percent-encode, urlsplit đọc authority bị cụt và
+    `parts.password` về None dù DSN thật sự mang mật khẩu — mật khẩu rơi
+    nguyên dạng vào path/query/fragment. Phải raise, không được âm thầm
+    ghi DSN đó ra đĩa coi như "không có mật khẩu".
+    """
+    with pytest.raises(ValueError):
+        _write(tmp_path, dsn=dsn)
+
+
+def test_write_profile_passes_through_dsn_that_has_username_but_no_password(tmp_path):
+    dsn = "postgresql://user@host/db"
+    _write(tmp_path, dsn=dsn)
+    meta = json.loads((tmp_path / "profile.json").read_text(encoding="utf-8"))
+    assert meta["dsn"] == dsn
+    assert meta["dsn_password_stripped"] is False
+
+
+def test_write_profile_passes_through_dsn_with_no_userinfo_at_all(tmp_path):
+    dsn = "postgresql://host/db"
+    _write(tmp_path, dsn=dsn)
+    meta = json.loads((tmp_path / "profile.json").read_text(encoding="utf-8"))
+    assert meta["dsn"] == dsn
+    assert meta["dsn_password_stripped"] is False
+
+
+def test_password_with_all_reserved_chars_round_trips_byte_identical(tmp_path, monkeypatch):
+    """Mật khẩu chứa '@', ':', '/', '#', và một chuỗi đã percent-encode
+    sẵn ('%'). _restore_password phải percent-encode LẠI mật khẩu thô lấy
+    từ biến môi trường trước khi ghép vào netloc — ghép thẳng chuỗi thô sẽ
+    đổi ranh giới authority và cho ra một DSN khác, sai."""
+    password = "a@b:c/d#e%f"
+    encoded = urllib.parse.quote(password, safe="")
+    dsn = f"postgresql://u:{encoded}@h:5432/d"
+    monkeypatch.setenv("ADBA_DB_PASSWORD", password)
+    profile = read_profile(_write(tmp_path, dsn=dsn))
+    assert profile.dsn.encode("utf-8") == dsn.encode("utf-8")
+
+
+def test_password_free_dsn_stays_password_free_even_with_env_var_set(tmp_path, monkeypatch):
+    """Biến môi trường đặt toàn host không được gắn mật khẩu vào một DSN
+    vốn không có mật khẩu (spec: ghi lại SỰ THẬT là đã bóc, không đoán)."""
+    dsn = "postgresql://user@host/db"
+    monkeypatch.setenv("ADBA_DB_PASSWORD", "khong-duoc-xuat-hien")
+    profile = read_profile(_write(tmp_path, dsn=dsn))
+    assert profile.dsn == dsn
+
+
+def test_no_userinfo_dsn_round_trips_unchanged_even_with_env_var_set(tmp_path, monkeypatch):
+    dsn = "postgresql://host/db"
+    monkeypatch.setenv("ADBA_DB_PASSWORD", "khong-duoc-xuat-hien")
+    profile = read_profile(_write(tmp_path, dsn=dsn))
+    assert profile.dsn == dsn
+
+
+def test_missing_dsn_password_stripped_field_defaults_to_false(tmp_path, monkeypatch):
+    """profile.json ghi trước khi trường này tồn tại phải mặc định về
+    hướng an toàn: không chắp mật khẩu vào."""
+    dsn = "postgresql://u:p@h:5432/d"
+    _write(tmp_path, dsn=dsn)
+    meta_path = tmp_path / "profile.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    stripped_dsn = meta["dsn"]
+    del meta["dsn_password_stripped"]
+    meta_path.write_text(json.dumps(meta), encoding="utf-8")
+
+    monkeypatch.setenv("ADBA_DB_PASSWORD", "p")
+    profile = read_profile(tmp_path)
+    assert profile.dsn == stripped_dsn

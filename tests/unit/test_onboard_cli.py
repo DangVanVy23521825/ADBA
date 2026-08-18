@@ -192,3 +192,154 @@ def test_local_invoke_disables_openai_fallback():
     fake_client.invoke.assert_called_once_with(
         system_prompt="sys prompt", user_prompt="user prompt"
     )
+
+
+# --- Task 9: `onboard build` ------------------------------------------------
+
+
+def test_build_writes_a_loadable_profile(tmp_path, monkeypatch):
+    monkeypatch.setattr("onboard.introspect_schema", lambda dsn, **kw: MINI_TABLES)  # noqa: ARG005
+    cmd_extract("postgresql://x", tmp_path)
+
+    from onboard import cmd_build
+    from perception.connection_profile import ALL_TABLES, permitted_tables
+    from perception.profile_store import read_profile
+
+    cmd_build(tmp_path, "postgresql://x", grants={"admin": frozenset({ALL_TABLES})})
+    profile = read_profile(tmp_path)
+    assert permitted_tables(profile, "admin") == {t.name for t in MINI_TABLES}
+
+
+def test_build_refuses_when_annotations_are_mostly_unreviewed(tmp_path, monkeypatch):
+    """Chặn bàn giao sớm: profile không chú giải sẽ cho recall thấp và không ai biết vì sao."""
+    monkeypatch.setattr("onboard.introspect_schema", lambda dsn, **kw: MINI_TABLES)  # noqa: ARG005
+    cmd_extract("postgresql://x", tmp_path)
+
+    from onboard import UnreviewedAnnotationsError, cmd_build
+
+    with pytest.raises(UnreviewedAnnotationsError):
+        cmd_build(tmp_path, "postgresql://x", grants={}, min_reviewed=0.5)
+
+
+# --- Amendment 1: gate denominator must include un-annotated columns -------
+
+
+def test_build_refuses_when_only_table_level_entries_are_reviewed(tmp_path, monkeypatch):
+    """`review_progress(ann)` (một-đối-số) đếm mọi mục *đã có chú giải* là đã
+    duyệt/tổng dựa trên tập đó — 4 bảng, cả 4 đều `human`, cho ratio 1.0 và
+    KHÔNG chặn được. Nhưng schema này có 17 cột chưa hề được chú giải; dùng
+    dạng hai-đối-số (`review_progress(ann, tables)`) đưa những cột đó vào
+    mẫu số, kéo ratio xuống dưới ngưỡng và cổng phải chặn.
+    """
+    monkeypatch.setattr("onboard.introspect_schema", lambda dsn, **kw: MINI_TABLES)  # noqa: ARG005
+    cmd_extract("postgresql://x", tmp_path)
+
+    from perception.annotations import Annotation, SchemaAnnotations, save_annotations
+
+    save_annotations(
+        SchemaAnnotations(
+            tables={
+                t.name: Annotation(f"mô tả {t.name}", reviewed_by="human")
+                for t in MINI_TABLES
+            }
+        ),
+        tmp_path / "schema.yaml",
+    )
+
+    from onboard import UnreviewedAnnotationsError, cmd_build
+
+    with pytest.raises(UnreviewedAnnotationsError):
+        cmd_build(tmp_path, "postgresql://x", grants={}, min_reviewed=0.5)
+
+
+# --- Amendment 2: a build with no grants must say so ------------------------
+
+
+def test_build_with_no_grants_warns_nobody_can_see_anything(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr("onboard.introspect_schema", lambda dsn, **kw: MINI_TABLES)  # noqa: ARG005
+    cmd_extract("postgresql://x", tmp_path)
+
+    from onboard import cmd_build
+
+    capsys.readouterr()
+    cmd_build(tmp_path, "postgresql://x", grants={})
+
+    out = capsys.readouterr().out
+    assert "--grant user=*" in out
+
+
+def test_build_with_grants_does_not_print_no_grant_warning(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr("onboard.introspect_schema", lambda dsn, **kw: MINI_TABLES)  # noqa: ARG005
+    cmd_extract("postgresql://x", tmp_path)
+
+    from onboard import cmd_build
+    from perception.connection_profile import ALL_TABLES
+
+    capsys.readouterr()
+    cmd_build(tmp_path, "postgresql://x", grants={"admin": frozenset({ALL_TABLES})})
+
+    out = capsys.readouterr().out
+    assert "--grant user=*" not in out
+
+
+# --- Amendment 3: `build` uses the same DSN resolution as extract/annotate --
+
+
+def test_cli_build_falls_back_to_adba_dsn_env_var(tmp_path, monkeypatch):
+    monkeypatch.setattr("onboard.introspect_schema", lambda dsn, **kw: MINI_TABLES)  # noqa: ARG005
+    cmd_extract("postgresql://x", tmp_path)
+
+    monkeypatch.setenv("ADBA_DSN", "postgresql://from-env")
+    monkeypatch.setattr(
+        sys, "argv", ["onboard.py", "build", "--profile", str(tmp_path)]
+    )
+    main()
+
+    from perception.profile_store import read_profile
+
+    profile = read_profile(tmp_path)
+    assert profile.dsn == "postgresql://from-env"
+
+
+def test_cli_build_missing_dsn_exits_with_clear_error(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr("onboard.introspect_schema", lambda dsn, **kw: MINI_TABLES)  # noqa: ARG005
+    cmd_extract("postgresql://x", tmp_path)
+
+    monkeypatch.delenv("ADBA_DSN", raising=False)
+    monkeypatch.setattr(
+        sys, "argv", ["onboard.py", "build", "--profile", str(tmp_path)]
+    )
+    with pytest.raises(SystemExit):
+        main()
+    captured = capsys.readouterr()
+    assert "ADBA_DSN" in captured.out + captured.err
+
+
+def test_cli_build_parses_grant_flags(tmp_path, monkeypatch):
+    monkeypatch.setattr("onboard.introspect_schema", lambda dsn, **kw: MINI_TABLES)  # noqa: ARG005
+    cmd_extract("postgresql://x", tmp_path)
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "onboard.py",
+            "build",
+            "--dsn",
+            "postgresql://from-flag",
+            "--profile",
+            str(tmp_path),
+            "--grant",
+            "admin=*",
+            "--grant",
+            "analyst=orders,customers",
+        ],
+    )
+    main()
+
+    from perception.connection_profile import permitted_tables
+    from perception.profile_store import read_profile
+
+    profile = read_profile(tmp_path)
+    assert permitted_tables(profile, "admin") == {t.name for t in MINI_TABLES}
+    assert permitted_tables(profile, "analyst") == {"orders", "customers"}

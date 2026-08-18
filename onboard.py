@@ -16,7 +16,7 @@ import argparse
 import json
 import os
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from model.model_client import ModelClient
@@ -28,12 +28,15 @@ from perception.annotations import (
     pending_review,
     save_annotations,
 )
+from perception.connection_profile import ConnectionProfile
 from perception.introspect import introspect_schema, sample_rows
 from perception.profile_store import (
     SCHEMA_YAML,
     STRUCTURE_JSON,
+    read_profile,
     structure_from_plain,
     structure_to_plain,
+    write_profile,
 )
 from perception.schema_model import Table
 
@@ -140,6 +143,58 @@ def cmd_annotate(
     return merged
 
 
+class UnreviewedAnnotationsError(RuntimeError):
+    """Quá ít chú giải được người duyệt để dựng profile dùng được."""
+
+
+def cmd_build(
+    profile_dir: Path | str,
+    dsn: str,
+    grants: Mapping[str, frozenset[str]],
+    min_reviewed: float = 0.0,
+) -> ConnectionProfile:
+    """Ghép cấu trúc + chú giải thành `profile/` đọc được lúc chạy.
+
+    `min_reviewed` là cổng chặn bàn giao sớm. Một profile gần như không có
+    chú giải do người duyệt sẽ cho recall thấp, và người vận hành sẽ đổ lỗi
+    cho model thay vì cho chú giải — mặc định 0.0 để không cản lúc phát
+    triển, nhưng bản giao khách phải đặt ngưỡng thật.
+
+    Mẫu số của cổng dùng dạng hai-đối-số của `review_progress` — cùng tập
+    `tables` vừa đọc ở trên — chứ không phải dạng một-đối-số vốn chỉ đếm
+    trong những mục ĐÃ có chú giải. Một cột LLM bỏ qua vì không đoán nổi
+    thì không có mục trong `ann` để đếm; đó chính xác là cột cần người
+    nhất, và dạng một-đối-số sẽ để nó lọt khỏi mẫu số, cho một khách hàng
+    thấy "100% đã duyệt" trong khi hàng chục cột vẫn trống.
+    """
+    from perception.review_state import review_progress
+
+    d = Path(profile_dir)
+    tables = _load_structure(d)
+    ann = load_annotations(d / SCHEMA_YAML)
+
+    done, total = review_progress(ann, tables)
+    ratio = (done / total) if total else 0.0
+    if ratio < min_reviewed:
+        raise UnreviewedAnnotationsError(
+            f"Mới {done}/{total} mục ({ratio:.0%}) được người duyệt, "
+            f"ngưỡng là {min_reviewed:.0%}. Mở trang 'Chú giải schema' để duyệt tiếp."
+        )
+
+    if not grants:
+        print(
+            "CẢNH BÁO: không có --grant nào — profile này mặc định đóng, "
+            "không ai xem được bảng nào. Thêm --grant user=* (hoặc "
+            "--grant user=bang1,bang2) để cấp quyền, hoặc cấp sau bằng một "
+            "lượt `build` khác."
+        )
+
+    write_profile(d, dsn=dsn, tables=tables, annotations=ann, grants=grants)
+    profile = read_profile(d)
+    print(f"profile → {d}  ({len(profile.tables)} bảng, chế độ {profile.schema_mode})")
+    return profile
+
+
 def _resolve_dsn(cli_dsn: str | None) -> str:
     dsn = cli_dsn or os.environ.get(DSN_ENV_VAR)
     if not dsn:
@@ -178,10 +233,20 @@ def main() -> None:
     p_annotate = sub.add_parser("annotate", help="sinh chú giải bằng model local")
     _add_dsn_profile_args(p_annotate)
 
-    # Task 9, 10, 11 thêm `build`, `verify`, `refresh` vào đây theo cùng
-    # khuôn: một `sub.add_parser(...)`, một `_add_dsn_profile_args(...)`
-    # (hoặc biến thể của nó nếu lệnh đó không cần DSN), và một nhánh mới
-    # trong khối `if/elif` bên dưới. Không cần viết lại gì ở trên.
+    p_build = sub.add_parser("build", help="dựng profile từ cấu trúc + chú giải")
+    _add_dsn_profile_args(p_build)
+    p_build.add_argument(
+        "--grant",
+        action="append",
+        default=[],
+        help="user=bang1,bang2 hoặc user=* (lặp lại được)",
+    )
+    p_build.add_argument("--min-reviewed", type=float, default=0.0)
+
+    # Task 10, 11 thêm `verify`, `refresh` vào đây theo cùng khuôn: một
+    # `sub.add_parser(...)`, một `_add_dsn_profile_args(...)` (hoặc biến thể
+    # của nó nếu lệnh đó không cần DSN), và một nhánh mới trong khối
+    # `if/elif` bên dưới. Không cần viết lại gì ở trên.
 
     args = ap.parse_args()
     dsn = _resolve_dsn(args.dsn)
@@ -190,6 +255,12 @@ def main() -> None:
         cmd_extract(dsn, args.profile)
     elif args.cmd == "annotate":
         cmd_annotate(args.profile, dsn)
+    elif args.cmd == "build":
+        grants = {}
+        for spec in args.grant:
+            user, _, tables_csv = spec.partition("=")
+            grants[user] = frozenset(t.strip() for t in tables_csv.split(",") if t.strip())
+        cmd_build(args.profile, dsn, grants, min_reviewed=args.min_reviewed)
 
 
 if __name__ == "__main__":

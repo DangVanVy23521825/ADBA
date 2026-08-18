@@ -23,6 +23,7 @@ from pathlib import Path
 from model.model_client import ModelClient
 from perception.annotate import annotate_schema
 from perception.annotations import (
+    HUMAN,
     SchemaAnnotations,
     load_annotations,
     merge_annotations,
@@ -445,7 +446,6 @@ def cmd_refresh(
     kể cả khi annotate thất bại (mục đó có `text` rỗng), nên truyền thẳng
     kết quả của nó là đúng; không được lọc/rút gọn `fresh` trước khi ghép.
     """
-    from perception.annotations import HUMAN
 
     d = Path(profile_dir)
     before = load_annotations(d / SCHEMA_YAML)

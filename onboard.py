@@ -417,6 +417,74 @@ def cmd_verify(
     return report
 
 
+def cmd_refresh(
+    profile_dir: Path | str,
+    dsn: str,
+    invoke: Callable[[str, str], str] = _local_invoke,
+) -> tuple[int, int]:
+    """Đọc lại cấu trúc, chú giải lại, ghép vào bản cũ.
+
+    Trả `(số bảng đã chú giải, số mục người sửa được giữ nguyên)`. Con số thứ
+    hai được in ra có chủ ý: nó là bằng chứng cho khách rằng công sức duyệt
+    của họ không mất, và đó là thứ quyết định họ có duyệt lần thứ hai không —
+    nên nó không được phóng đại.
+
+    Vì lẽ đó, `preserved` được đếm từ KẾT QUẢ SAU KHI GHÉP (`merged`), không
+    phải từ `before` (chú giải trước khi ghép). `merge_annotations` loại bỏ
+    những mục mà bảng/cột của chúng không còn trong schema mới, kể cả mục
+    `human` — đếm từ `before` sẽ báo "giữ nguyên" cho những mục vừa bị xoá,
+    đúng lúc thông báo này tồn tại để làm bằng chứng KHÔNG bị mất. Số mục
+    `human` bị loại vì bảng/cột đã biến mất được đếm riêng (`dropped`) và chỉ
+    in ra khi khác 0 — im lặng khi không có gì bị loại là đúng, che giấu khi
+    có thứ bị loại thì không.
+
+    Đọc `before` PHẢI xảy ra trước `cmd_extract`: `cmd_extract` ghi đè
+    `structure.json`, và sau đó không còn cách nào so sánh với schema cũ.
+    `merge_annotations` đòi hỏi `fresh` phủ toàn bộ schema — `cmd_annotate`
+    (được gọi qua `annotate_schema`) ghi một mục cho mọi bảng vô điều kiện,
+    kể cả khi annotate thất bại (mục đó có `text` rỗng), nên truyền thẳng
+    kết quả của nó là đúng; không được lọc/rút gọn `fresh` trước khi ghép.
+    """
+    from perception.annotations import HUMAN
+
+    d = Path(profile_dir)
+    before = load_annotations(d / SCHEMA_YAML)
+    before_human_tables = {
+        name for name, a in before.tables.items() if a.reviewed_by == HUMAN
+    }
+    before_human_columns = {
+        (table, col)
+        for table, cols in before.columns.items()
+        for col, a in cols.items()
+        if a.reviewed_by == HUMAN
+    }
+
+    cmd_extract(dsn, d)
+    merged = cmd_annotate(d, dsn, invoke=invoke)
+
+    preserved_tables = {
+        name for name in before_human_tables
+        if name in merged.tables and merged.tables[name].reviewed_by == HUMAN
+    }
+    preserved_columns = {
+        (table, col) for table, col in before_human_columns
+        if col in merged.columns.get(table, {})
+        and merged.columns[table][col].reviewed_by == HUMAN
+    }
+    preserved = len(preserved_tables) + len(preserved_columns)
+    dropped = (
+        len(before_human_tables) + len(before_human_columns) - preserved
+    )
+
+    print(f"Giữ nguyên {preserved} mục do người duyệt.")
+    if dropped > 0:
+        print(
+            f"CẢNH BÁO: {dropped} mục do người duyệt bị loại vì bảng/cột "
+            "tương ứng không còn trong schema."
+        )
+    return len(merged.tables), preserved
+
+
 def _resolve_dsn(cli_dsn: str | None) -> str:
     dsn = cli_dsn or os.environ.get(DSN_ENV_VAR)
     if not dsn:
@@ -474,10 +542,8 @@ def main() -> None:
     p_verify.add_argument("--user", required=True)
     p_verify.add_argument("--k", type=int, default=8)
 
-    # Task 11 thêm `refresh` vào đây theo cùng khuôn: một `sub.add_parser(...)`,
-    # `_add_dsn_profile_args(...)` (hoặc biến thể của nó nếu lệnh đó không
-    # cần DSN), và một nhánh mới trong khối `if/elif` bên dưới. Không cần
-    # viết lại gì ở trên.
+    p_refresh = sub.add_parser("refresh", help="đọc lại schema và chú giải phần mới")
+    _add_dsn_profile_args(p_refresh)
 
     args = ap.parse_args()
     try:
@@ -523,6 +589,8 @@ def _dispatch(args) -> None:
     elif args.cmd == "verify":
         report = cmd_verify(args.profile, args.golden, args.user, k=args.k)
         raise SystemExit(0 if report.passed else 1)
+    elif args.cmd == "refresh":
+        cmd_refresh(args.profile, dsn)
 
 
 if __name__ == "__main__":

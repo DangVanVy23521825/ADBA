@@ -151,3 +151,121 @@ def test_misses_beyond_twenty_are_counted_not_silently_dropped(tmp_path):
 
     text = (tmp_path / "report.md").read_text(encoding="utf-8")
     assert "5" in text  # 25 misses - 20 shown = 5 omitted, must be stated somewhere
+
+
+# --- Fix round 1, Important 1: verify before build must not traceback -----
+
+
+def test_verify_before_build_raises_onboard_error_naming_the_next_step(tmp_path):
+    """No profile/ has been built yet — `read_profile` would raise a bare
+    `FileNotFoundError`. `verify` is the LAST pipeline step, so running it
+    early (or pointing `--profile` at the wrong directory) is one of the
+    most likely operator mistakes there is; it must get the same
+    `OnboardError` treatment `_load_structure` gives the same mistake for
+    `annotate`/`build`, not a Python traceback.
+    """
+    golden = tmp_path / "golden.jsonl"
+    golden.write_text(
+        json.dumps({"question": "x", "sql": "SELECT * FROM orders"}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    with pytest.raises(OnboardError) as excinfo:
+        cmd_verify(tmp_path, golden, user="admin")
+    msg = str(excinfo.value)
+    assert "build" in msg
+    assert str(tmp_path) in msg
+
+
+def test_a_golden_path_pointing_at_a_directory_is_an_onboard_error(tmp_path):
+    """`--golden` pointing at a directory (not a file) `.exists()`s but
+    `.read_text()` on it raises `IsADirectoryError` — the same class of
+    bare-traceback bug as the missing-file case, just one guard away.
+    """
+    _write_profile(tmp_path)
+    golden_dir = tmp_path / "golden_as_dir"
+    golden_dir.mkdir()
+    with pytest.raises(OnboardError):
+        cmd_verify(tmp_path, golden_dir, user="admin")
+
+
+# --- Fix round 1, Minor 3: a bare scalar golden line must not TypeError ---
+
+
+def test_a_bare_scalar_golden_line_names_the_line_number(tmp_path):
+    """A line like `42` is valid JSON but not an object — `"question" not
+    in row` on an int raises `TypeError`, not `OnboardError`. Must be
+    caught and reported with the line number like every other malformed
+    line.
+    """
+    _write_profile(tmp_path)
+    golden = _write_golden(tmp_path, "golden.jsonl", [
+        json.dumps({"question": "câu hợp lệ", "sql": "SELECT * FROM orders"},
+                   ensure_ascii=False),
+        "42",
+    ])
+    with pytest.raises(OnboardError) as excinfo:
+        cmd_verify(tmp_path, golden, user="admin")
+    assert "2" in str(excinfo.value)
+
+
+# --- Fix round 1, Important 2: grants vs. annotation as the miss cause ----
+
+
+def test_report_names_the_user_and_points_at_grant_when_permitted_is_empty(tmp_path):
+    """`nguoi_la` has no entry in `grants` at all — `permitted_tables`
+    returns the empty set, so every scored question misses every table.
+    The report must say plainly that this is a grants problem, name the
+    user, point at `--grant`, and must NOT send the operator to the
+    annotation page — the tables are perfectly well annotated.
+    """
+    golden = _setup(tmp_path)
+    cmd_verify(tmp_path, golden, user="nguoi_la")
+    text = (tmp_path / "report.md").read_text(encoding="utf-8")
+    assert "nguoi_la" in text
+    assert "--grant" in text
+    assert "Chú giải schema" not in text
+
+
+def test_report_names_the_specific_table_blocked_by_partial_grants(tmp_path):
+    """`limited` is granted `customers` and `products` but not `orders`.
+    The only golden question needs `orders` — a real table that exists in
+    the schema but sits outside this user's grants. Every miss here is
+    fully explained by grants, so the report must name `orders` as a
+    grants problem and must NOT show the generic annotation guidance.
+    """
+    write_profile(tmp_path, dsn="postgresql://x", tables=MINI_TABLES,
+                  annotations=SchemaAnnotations(),
+                  grants={"limited": frozenset({"customers", "products"})})
+    golden = _write_golden(tmp_path, "golden.jsonl", [
+        json.dumps({"question": "đơn hàng gần đây", "sql": "SELECT * FROM orders"},
+                   ensure_ascii=False),
+    ])
+    report = cmd_verify(tmp_path, golden, user="limited")
+    assert report.recall == 0.0
+    text = (tmp_path / "report.md").read_text(encoding="utf-8")
+    assert "orders" in text
+    assert "quyền" in text
+    assert "Chú giải schema" not in text
+
+
+def test_report_keeps_annotation_guidance_when_grants_do_not_fully_explain_the_misses(tmp_path):
+    """One miss (`orders`) is a grants problem for `limited`; the other
+    references a table (`ghost_table`) that doesn't exist in the schema at
+    all — that one is NOT explained by grants, so the generic annotation
+    guidance is still potentially relevant and must stay, alongside a note
+    naming the grants-caused table.
+    """
+    write_profile(tmp_path, dsn="postgresql://x", tables=MINI_TABLES,
+                  annotations=SchemaAnnotations(),
+                  grants={"limited": frozenset({"customers", "products"})})
+    golden = _write_golden(tmp_path, "golden.jsonl", [
+        json.dumps({"question": "đơn hàng gần đây", "sql": "SELECT * FROM orders"},
+                   ensure_ascii=False),
+        json.dumps({"question": "bảng không tồn tại", "sql": "SELECT * FROM ghost_table"},
+                   ensure_ascii=False),
+    ])
+    cmd_verify(tmp_path, golden, user="limited")
+    text = (tmp_path / "report.md").read_text(encoding="utf-8")
+    assert "orders" in text
+    assert "quyền" in text
+    assert "Chú giải schema" in text

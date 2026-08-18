@@ -240,7 +240,11 @@ def _read_golden(golden_path: Path) -> tuple[list[dict], int]:
     `KeyError`/`JSONDecodeError` trần trụi mà người vận hành phải tự mò
     ngược lại xem dòng nào trong file.
     """
-    if not golden_path.exists():
+    if not golden_path.is_file():
+        # `.is_file()` (không phải `.exists()`) cố ý: `--golden` trỏ nhầm vào
+        # một thư mục vẫn "exists", nhưng `.read_text()` trên nó ném
+        # `IsADirectoryError` trần trụi — cùng loại traceback mà nhánh này
+        # tồn tại để tránh.
         raise OnboardError(
             f"Không có golden set tại {golden_path}. Cần một file JSONL, mỗi "
             'dòng {"question": ..., "sql": ...}.'
@@ -260,7 +264,11 @@ def _read_golden(golden_path: Path) -> tuple[list[dict], int]:
                 "File golden là JSONL viết tay — sửa dòng đó rồi chạy lại."
             ) from e
         lines_read += 1
-        if "question" not in row or "sql" not in row:
+        # `row` có thể là JSON hợp lệ nhưng không phải object (`42`, `[1,2]`,
+        # `"chuỗi"`) — `isinstance` phải đứng trước `in`, nếu không toán tử
+        # `in` trên một int ném `TypeError` trần trụi thay vì `OnboardError`
+        # nêu đúng số dòng.
+        if not isinstance(row, dict) or "question" not in row or "sql" not in row:
             raise OnboardError(
                 f"{golden_path}: dòng {lineno} thiếu trường 'question' hoặc "
                 "'sql'. File golden là JSONL viết tay — sửa dòng đó rồi chạy lại."
@@ -300,7 +308,19 @@ def cmd_verify(
     from perception.schema_context import resolve_schema_context
 
     d = Path(profile_dir)
-    profile = read_profile(d)
+    try:
+        profile = read_profile(d)
+    except FileNotFoundError as e:
+        # Mirror `_load_structure`: verify chạy sai thứ tự (trước `build`,
+        # hoặc `--profile` trỏ nhầm thư mục) là lỗi vận hành đầu tiên người
+        # ta gặp ở BƯỚC CUỐI của pipeline — để `FileNotFoundError` nguyên
+        # dạng thoát ra sẽ cho một trang traceback thay vì câu "chạy build
+        # trước". `str(e)` an toàn để lộ ra: nó tới từ `read_profile`, chỉ
+        # nêu tên file thiếu và đường dẫn thư mục, không bao giờ mang DSN.
+        raise OnboardError(
+            f"Không đọc được profile trong {d} ({e}). "
+            f"Chạy `onboard.py build --profile {d}` trước khi verify."
+        ) from e
     permitted = permitted_tables(profile, user)
     retriever = LexicalRetriever(profile.tables)
 
@@ -344,6 +364,32 @@ def cmd_verify(
         f"- Kết luận: **{'ĐẠT' if report.passed else 'CHƯA ĐẠT'}**",
         "",
     ]
+    # Phân biệt "trượt vì quyền" với "trượt vì chú giải" — hai nguyên nhân
+    # đòi hỏi hai cách sửa khác hẳn nhau, và gộp chúng vào một lời khuyên
+    # chung sẽ đưa operator đi sửa nhầm thứ. `permitted` đã tính sẵn ở trên:
+    # một bảng có thật trong schema (`profile.table_names()`) nhưng KHÔNG
+    # nằm trong `permitted` sẽ không bao giờ được retriever chọn dù chú
+    # giải có hoàn hảo tới đâu — sửa chú giải cho bảng đó là công vô ích.
+    existing_names = profile.table_names()
+    all_missing = frozenset(t for _, missing in report.misses for t in missing)
+    grant_blocked = frozenset(
+        t for t in all_missing if t in existing_names and t not in permitted
+    )
+    # "Chắc chắn do quyền": hoặc user không có bảng nào được cấp (không cần
+    # xét từng bảng để biết lý do), hoặc MỌI bảng thiếu trên MỌI câu trượt
+    # đều là bảng có thật nhưng ngoài quyền — không còn khoảng trống nào để
+    # đổ cho chú giải.
+    fully_grants_caused = bool(report.misses) and (not permitted or grant_blocked == all_missing)
+
+    if not permitted:
+        lines += [
+            f"CẢNH BÁO: user `{user}` không được cấp quyền trên bảng nào. "
+            "Mọi câu hỏi trượt vì lý do này — KHÔNG PHẢI do chú giải.",
+            f"Thêm quyền bằng `--grant {user}=bang1,bang2` (hoặc "
+            f"`--grant {user}=*`), chạy lại `build`, rồi `verify` lại.",
+            "",
+        ]
+
     if report.misses:
         lines += ["## Câu chưa đạt", ""]
         shown = report.misses[:20]
@@ -351,11 +397,20 @@ def cmd_verify(
         omitted = len(report.misses) - len(shown)
         if omitted > 0:
             lines += [f"- … và {omitted} câu khác không hiện ở đây."]
-        lines += [
-            "",
-            "Recall thấp hầu như luôn là do chú giải, không phải do model.",
-            "Mở trang 'Chú giải schema', bổ sung mô tả cho các bảng bị thiếu, rồi chạy lại.",
-        ]
+        if permitted and grant_blocked:
+            lines += [
+                "",
+                f"{len(grant_blocked)} bảng trong các câu trượt trên là do quyền, "
+                f"không phải do chú giải: `{sorted(grant_blocked)}` không nằm "
+                f"trong quyền của user `{user}`. Xem lại `--grant` nếu đây không "
+                "phải chủ đích, rồi chạy lại.",
+            ]
+        if not fully_grants_caused:
+            lines += [
+                "",
+                "Recall thấp hầu như luôn là do chú giải, không phải do model.",
+                "Mở trang 'Chú giải schema', bổ sung mô tả cho các bảng bị thiếu, rồi chạy lại.",
+            ]
     (d / "report.md").write_text("\n".join(lines), encoding="utf-8")
 
     print(f"recall {report.recall:.3f} — {'ĐẠT' if report.passed else 'CHƯA ĐẠT'}")

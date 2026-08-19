@@ -240,16 +240,15 @@ vẫn có thể hỏng end-to-end. Đây chính là lý do M3.0 xây `eval/eval_
 
 | Metric | Baseline | Fine-tuned (LoRA ckpt-50) | Chênh lệch | Mục tiêu |
 |---|---|---|---|---|
-| SQL Execution Accuracy | 84.4% | 96.9% | ▲ 12.5% | ≥82% |
-| SQL Heuristic Accuracy | 100.0% | 100.0% | = 0.0% | — |
-| Python Syntax Rate | 96.7% | 100.0% | ▲ 3.3% | ≥90% |
-| Supervisor JSON Valid | 94.4% | 100.0% | ▲ 5.6% | ≥88% |
-| Insight JSON Valid | 92.9% | 92.9% | = 0.0% | ≥88% |
-| Reflector JSON Valid | 100.0% | 100.0% | = 0.0% | — |
-| Overall JSON Valid | 94.4% | 97.2% | ▲ 2.8% | ≥88% |
-| Latency trung bình / mẫu | 75.8s | 12.42s | ▼ 63.4s | — |
+| SQL Execution Accuracy | — | 96.9% | — | ≥82% |
+| SQL Heuristic Accuracy | — | 100.0% | — | — |
+| Python Syntax Rate | — | 100.0% | — | ≥90% |
+| Supervisor JSON Valid | — | 100.0% | — | ≥88% |
+| Insight JSON Valid | — | 92.9% | — | ≥88% |
+| Reflector JSON Valid | — | 100.0% | — | — |
+| Overall JSON Valid | — | 97.2% | — | ≥88% |
+| Latency trung bình / mẫu | — | 12.42s | — | — |
 
-- **Baseline** — `qwen2.5-coder:7b-instruct-q5_K_M`, 98 mẫu, chạy 2026-03-24T14:50:21
 - **Fine-tuned** — `Qwen/Qwen2.5-Coder-7B-Instruct + LoRA:checkpoint-50`, 98 mẫu, chạy 2026-05-19T12:44:09
 
 <!-- AUTO:end id=metrics -->
@@ -271,13 +270,14 @@ Ba điều đáng đọc kỹ:
 |---|---|
 | `tests/integration/test_complex_queries.py` | 10 |
 | `tests/integration/test_simple_queries.py` | 10 |
+| `tests/unit/test_egress_boundary.py` | 13 |
 | `tests/unit/test_insight_agent.py` | 7 |
 | `tests/unit/test_python_agent.py` | 14 |
 | `tests/unit/test_reflector.py` | 3 |
 | `tests/unit/test_sql_agent.py` | 9 |
 | `tests/unit/test_supervisor.py` | 15 |
 | `tests/unit/test_viz_agent.py` | 11 |
-| **Tổng** | **79** |
+| **Tổng** | **92** |
 
 <!-- AUTO:end id=tests -->
 
@@ -302,10 +302,10 @@ Ba điều đáng đọc kỹ:
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `53dec53` — docs: bộ tài liệu dự án + đường ống tự cập nhật theo commit |
+| Commit nguồn gần nhất | `0e4c5bc` — feat(model): chế độ triển khai chặn egress, mặc định on-prem |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-08-16 |
-| Số commit nguồn | 19 |
+| Ngày commit | 2026-08-19 |
+| Số commit nguồn | 20 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

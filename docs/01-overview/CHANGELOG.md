@@ -76,6 +76,10 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 > Chưa có tag phiên bản nào. Sau khi gắn tag (`git tag v1.0.0`), khối này tự tách theo từng phiên bản.
 
+**Tính năng mới**
+
+- chế độ triển khai chặn egress, mặc định on-prem — `0e4c5bc` (2026-08-19, Đặng Văn Vỹ)
+
 **Tài liệu**
 
 - bộ tài liệu dự án + đường ống tự cập nhật theo commit — `53dec53` (2026-08-16, Đặng Văn Vỹ)
@@ -138,10 +142,10 @@ Cập nhật `PRIMARY_MODEL` trong `.env`, `ollama pull <model>`, rồi chạy l
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `53dec53` — docs: bộ tài liệu dự án + đường ống tự cập nhật theo commit |
+| Commit nguồn gần nhất | `0e4c5bc` — feat(model): chế độ triển khai chặn egress, mặc định on-prem |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-08-16 |
-| Số commit nguồn | 19 |
+| Ngày commit | 2026-08-19 |
+| Số commit nguồn | 20 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

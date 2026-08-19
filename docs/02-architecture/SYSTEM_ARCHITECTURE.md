@@ -110,7 +110,7 @@ trong khi dữ liệu là `'Miền Bắc'` — lỗi im lặng trả về 0 dòn
 | `seaborn` | `>=0.13.0` | Style biểu đồ | Chỉ dùng theme `seaborn-v0_8-whitegrid` cho đồng nhất |
 | `scipy` | `>=1.11.0` | Thống kê phát hiện bất thường (z-score, IQR) | Có sẵn hàm kiểm định, không cần tự cài đặt |
 | `pydantic` | `>=2.0.0` | Contract cho output LLM | Ranh giới an toàn: plan có chu trình / insight sai định dạng bị chặn tại validate thay vì nổ giữa pipeline |
-| `openai` | `>=1.30.0` | Fallback khi Ollama lỗi | Chỉ dùng khi `ADBA_DEPLOYMENT=hybrid`. Mặc định (`onprem`) chặn hẳn: prompt agent `sql` mang schema, chú giải nghiệp vụ và câu hỏi thật của khách |
+| `openai` | `>=1.30.0` | Fallback khi Ollama lỗi | Giữ hệ thống trả lời được khi model cục bộ chết; tắt được bằng `ENABLE_OPENAI_FALLBACK=0` cho triển khai kín |
 | `streamlit` | `>=1.35.0` | UI chat + bảng + biểu đồ | Một file Python ra được UI có state; React/FastAPI tốn công gấp nhiều lần cho cùng phạm vi demo |
 | `ragas` | `>=0.1.0` | Đánh giá chất lượng sinh | Bộ metric có sẵn cho đánh giá đầu ra LLM |
 | `faker` | `—` | Sinh dữ liệu seed tiếng Việt | Có locale vi_VN — tên/địa chỉ thật hợp cảnh dữ liệu doanh nghiệp Việt Nam |
@@ -241,21 +241,21 @@ riêng qua MCP, và egress bị chặn ở tầng mạng. Chi tiết:
 
 | Đường dẫn | File | File .py | Dòng | Vai trò |
 |---|---|---|---|---|
-| `ADBA_Project_Context_Prompt_v2.md` | 1 | 0 | 982 | — |
+| `ADBA_Project_Context_Prompt_v2.md` | 1 | 0 | 851 | — |
 | `README.md` | 1 | 0 | 269 | — |
 | `app.py` | 1 | 1 | 271 | Streamlit UI — điểm vào duy nhất cho người dùng cuối |
 | `data` | 12 | 1 | 68.524 | DDL 3 domain, seed, và dataset huấn luyện/đánh giá (JSONL) |
-| `docker-compose.yml` | 1 | 0 | 47 | — |
+| `docker-compose.yml` | 1 | 0 | 21 | — |
 | `docs` | 16 | 0 | — | Bộ tài liệu dự án (chính file này) |
 | `eval` | 4 | 3 | 1.071 | Runner đo baseline / PEFT và so sánh hai lần chạy |
 | `graph` | 16 | 16 | 1.907 | LangGraph: state, các node agent, và tool thực thi |
-| `model` | 3 | 3 | 265 | ModelClient (Ollama local-first, fallback OpenAI) + tham số theo agent |
+| `model` | 3 | 3 | 356 | ModelClient (Ollama local-first, fallback OpenAI) + tham số theo agent |
 | `perception` | 5 | 1 | 3.080 | Perception layer — introspect PostgreSQL sinh `info_box` JSON |
 | `prompts` | 5 | 0 | 551 | System prompt của từng skill, dạng file text tách khỏi code |
 | `requirements.txt` | 1 | 0 | 17 | — |
 | `schemas` | 3 | 3 | 735 | Pydantic contract: ExecutionPlan (Supervisor) và InsightOutput (Insight) |
 | `scripts` | 7 | 3 | 1.644 | Tiện ích vận hành: áp schema, kiểm tra kết nối, sinh tài liệu |
-| `tests` | 9 | 9 | 1.925 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
+| `tests` | 10 | 10 | 2.115 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
 | `training` | 13 | 5 | 3.795 | Sinh dữ liệu, LoRA/QLoRA notebook, checkpoint và kết quả |
 | `.cursorrules` | 1 | 0 | 0 | — |
 | `.github` | 1 | 0 | 29 | CI/CD — unit test, build & push image lên GHCR |
@@ -272,38 +272,24 @@ kèm giá trị thật; `env.example` là bản mẫu.
 
 | Biến | Mặc định trong code | Có trong `env.example` | Nơi đọc |
 |---|---|---|---|
-| `BACKUP_MODEL` | `"llama3.1:8b-instruct-q4_K_M"` | ✅ | `model/model_config.py` |
+| `BACKUP_MODEL` | `"llama3.1:8b-instruct-q4_K_M"` | — | `model/model_config.py` |
 | `DATABASE_URL` | `os.getenv("POSTGRES_URL", "postgresql://adba_user:adba@localhost:5432/adba_db"` | — | `data/seed/seed_data.py`, `graph/tools/sql_tool.py`, `perception/extract_info_box.py` (+2) |
-| `ADBA_DEPLOYMENT` | `"onprem"` | ✅ | `model/model_config.py` |
-| `ENABLE_OPENAI_FALLBACK` | `"1"` — nhưng chỉ có tác dụng khi `ADBA_DEPLOYMENT=hybrid` | ✅ | `model/model_client.py` |
+| `ENABLE_OPENAI_FALLBACK` | — | — | `model/model_client.py` |
 | `EVAL_MODEL` | `"qwen2.5-coder:7b-instruct-q5_K_M"` | — | `eval/eval_runner.py` |
-| `IMAGE_TAG` | — | ✅ | _chỉ có trong `env.example`_ |
-| `LOG_DIR` | — | ✅ | _chỉ có trong `env.example`_ |
-| `LOG_LEVEL` | — | ✅ | _chỉ có trong `env.example`_ |
-| `LOG_RETENTION_DAYS` | — | ✅ | _chỉ có trong `env.example`_ |
-| `MODEL_MAX_RETRIES` | `"3"` | ✅ | `model/model_config.py` |
-| `OLLAMA_BASE_URL` | `"http://localhost:11434"` | ✅ | `eval/eval_runner.py`, `model/model_config.py` |
-| `OLLAMA_NUM_CTX` | `"4096"` | ✅ | `eval/eval_runner.py`, `model/model_config.py` |
-| `OPENAI_API_KEY` | `""` | ✅ | `model/model_client.py` |
-| `OPENAI_EMBEDDING_MODEL` | — | ✅ | _chỉ có trong `env.example`_ |
-| `OPENAI_MODEL` | `"gpt-4o-mini"` | ✅ | `model/model_client.py` |
+| `MODEL_MAX_RETRIES` | `"3"` | — | `model/model_config.py` |
+| `OLLAMA_BASE_URL` | `"http://localhost:11434"` | — | `eval/eval_runner.py`, `model/model_config.py` |
+| `OLLAMA_NUM_CTX` | `"4096"` | — | `eval/eval_runner.py`, `model/model_config.py` |
+| `OPENAI_API_KEY` | `""` | — | `model/model_client.py` |
+| `OPENAI_MODEL` | `"gpt-4o-mini"` | — | `model/model_client.py` |
 | `PANDAS_EXEC_TIMEOUT_SECONDS` | `"10"` | — | `graph/tools/python_tool.py` |
-| `POSTGRES_DB` | `"adba_db"` | ✅ | `eval/eval_runner.py`, `scripts/test_postgres_connection.py` |
+| `POSTGRES_DB` | `"adba_db"` | — | `eval/eval_runner.py`, `scripts/test_postgres_connection.py` |
 | `POSTGRES_HOST` | `"localhost"` | — | `eval/eval_runner.py`, `scripts/test_postgres_connection.py` |
-| `POSTGRES_PASSWORD` | `"adba_password"` | ✅ | `eval/eval_runner.py`, `scripts/test_postgres_connection.py` |
-| `POSTGRES_PORT` | `"5432"` | ✅ | `eval/eval_runner.py`, `scripts/test_postgres_connection.py` |
-| `POSTGRES_URL` | `""` | ✅ | `data/seed/seed_data.py`, `eval/eval_runner.py`, `scripts/test_postgres_connection.py` |
-| `POSTGRES_USER` | `"adba_user"` | ✅ | `eval/eval_runner.py`, `scripts/test_postgres_connection.py` |
-| `PRIMARY_MODEL` | `"qwen2.5-coder:7b-instruct-q5_K_M"` | ✅ | `model/model_config.py` |
-| `SANDBOX_MAX_EXECUTIONS_PER_MINUTE` | — | ✅ | _chỉ có trong `env.example`_ |
-| `SANDBOX_MEMORY_MB` | — | ✅ | _chỉ có trong `env.example`_ |
-| `SANDBOX_TIMEOUT_S` | — | ✅ | _chỉ có trong `env.example`_ |
-| `SANDBOX_URL` | — | ✅ | _chỉ có trong `env.example`_ |
+| `POSTGRES_PASSWORD` | `"adba_password"` | — | `eval/eval_runner.py`, `scripts/test_postgres_connection.py` |
+| `POSTGRES_PORT` | `"5432"` | — | `eval/eval_runner.py`, `scripts/test_postgres_connection.py` |
+| `POSTGRES_URL` | `""` | — | `data/seed/seed_data.py`, `eval/eval_runner.py`, `scripts/test_postgres_connection.py` |
+| `POSTGRES_USER` | `"adba_user"` | — | `eval/eval_runner.py`, `scripts/test_postgres_connection.py` |
+| `PRIMARY_MODEL` | `"qwen2.5-coder:7b-instruct-q5_K_M"` | — | `model/model_config.py` |
 | `SQL_TIMEOUT_MS` | `"30000"` | — | `graph/tools/sql_tool.py` |
-| `STREAMLIT_BROWSER_GATHER_USAGE_STATS` | — | ✅ | _chỉ có trong `env.example`_ |
-| `STREAMLIT_SERVER_HEADLESS` | — | ✅ | _chỉ có trong `env.example`_ |
-| `STREAMLIT_SERVER_MAX_UPLOAD_SIZE` | — | ✅ | _chỉ có trong `env.example`_ |
-| `STREAMLIT_SERVER_PORT` | — | ✅ | _chỉ có trong `env.example`_ |
 
 <!-- AUTO:end id=env-vars -->
 
@@ -334,10 +320,10 @@ kèm giá trị thật; `env.example` là bản mẫu.
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `53dec53` — docs: bộ tài liệu dự án + đường ống tự cập nhật theo commit |
+| Commit nguồn gần nhất | `0e4c5bc` — feat(model): chế độ triển khai chặn egress, mặc định on-prem |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-08-16 |
-| Số commit nguồn | 19 |
+| Ngày commit | 2026-08-19 |
+| Số commit nguồn | 20 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

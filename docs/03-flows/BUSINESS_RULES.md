@@ -183,13 +183,14 @@ vì thành phần sửa lỗi.
 |---|---|
 | `tests/integration/test_complex_queries.py` | 10 |
 | `tests/integration/test_simple_queries.py` | 10 |
+| `tests/unit/test_egress_boundary.py` | 13 |
 | `tests/unit/test_insight_agent.py` | 7 |
 | `tests/unit/test_python_agent.py` | 14 |
 | `tests/unit/test_reflector.py` | 3 |
 | `tests/unit/test_sql_agent.py` | 9 |
 | `tests/unit/test_supervisor.py` | 15 |
 | `tests/unit/test_viz_agent.py` | 11 |
-| **Tổng** | **79** |
+| **Tổng** | **92** |
 
 <!-- AUTO:end id=tests -->
 
@@ -206,10 +207,10 @@ PYTHONPATH=. pytest tests/unit/ -v       # không cần DB và Ollama
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `53dec53` — docs: bộ tài liệu dự án + đường ống tự cập nhật theo commit |
+| Commit nguồn gần nhất | `0e4c5bc` — feat(model): chế độ triển khai chặn egress, mặc định on-prem |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-08-16 |
-| Số commit nguồn | 19 |
+| Ngày commit | 2026-08-19 |
+| Số commit nguồn | 20 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

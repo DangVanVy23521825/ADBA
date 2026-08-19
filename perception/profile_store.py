@@ -287,6 +287,13 @@ def read_profile(directory: Path | str) -> ConnectionProfile:
     âm thầm bỏ sót bảng JOIN (đúng thứ lỗi C3 đang sửa); đoán sai "full" chỉ
     tốn thêm token — hỏng ồn ào (context/token vượt ngưỡng) chứ không âm
     thầm cho ra câu trả lời sai.
+
+    Cùng lý do đó, một giá trị CÓ MẶT nhưng không hợp lệ (`"Full"`, `""`,
+    `null`, `"retrieval "` — file bị sửa tay hoặc cắt cụt) cũng phải rơi về
+    `"full"`, KHÔNG được lọt xuống `schema_context.py`: ở đó phép so sánh là
+    `== "full"` với `retrieval` là nhánh `else`, nên bất cứ giá trị lạ nào
+    không được chặn ở đây sẽ tự động chọn nhánh retrieval — đúng thứ lỗi
+    N1 đang chặn.
     """
     d = Path(directory)
     meta_path = d / PROFILE_JSON
@@ -308,7 +315,9 @@ def read_profile(directory: Path | str) -> ConnectionProfile:
         grants={u: frozenset(t) for u, t in meta.get("grants", {}).items()},
         threshold_tokens=meta.get("threshold_tokens", DEFAULT_THRESHOLD_TOKENS),
     )
-    return dataclasses.replace(profile, schema_mode=meta.get("schema_mode", "full"))
+    raw_mode = meta.get("schema_mode", "full")
+    schema_mode = raw_mode if raw_mode in ("full", "retrieval") else "full"
+    return dataclasses.replace(profile, schema_mode=schema_mode)
 
 
 def profile_is_stale(directory: Path | str, tables: Sequence[Table]) -> bool:

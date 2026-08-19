@@ -359,3 +359,32 @@ def test_schema_mode_comes_from_profile_json_not_from_recomputation(tmp_path):
     meta_path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
 
     assert read_profile(tmp_path).schema_mode == "retrieval"
+
+
+# ── N1: schema_mode không hợp lệ phải rơi về "full", không lọt xuống retrieval
+#
+# `schema_context.py` so `profile.schema_mode == "full"`, retrieval là nhánh
+# `else` — nên bất cứ giá trị lạ nào (profile.json bị sửa tay/cắt cụt/hỏng)
+# mà không bị chặn ở `read_profile` sẽ tự động chọn retrieval, có thể âm
+# thầm bỏ sót bảng JOIN. Chỉ khoá bị thiếu mới được mặc định "full" — giá
+# trị CÓ MẶT nhưng sai phải bị từ chối, không được đi qua nguyên trạng.
+@pytest.mark.parametrize(
+    "bad_value",
+    ["Full", "FULL", "", None, 0, "retrieval "],
+)
+def test_read_profile_rejects_invalid_schema_mode_and_falls_back_to_full(
+    tmp_path, bad_value
+):
+    write_profile(
+        tmp_path,
+        dsn="postgresql://u:p@h:5432/d",
+        tables=MINI_TABLES,
+        annotations=SchemaAnnotations(),
+        grants=GRANTS,
+    )
+    meta_path = tmp_path / "profile.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta["schema_mode"] = bad_value
+    meta_path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+
+    assert read_profile(tmp_path).schema_mode == "full"

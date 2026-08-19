@@ -1,3 +1,5 @@
+import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -293,6 +295,61 @@ def test_write_does_not_leave_a_stray_tmp_file_behind(tmp_path: Path):
     save_annotations(_sample(), path)
     names = {p.name for p in tmp_path.iterdir()}
     assert names == {"schema.yaml", "schema.yaml.bak"}
+
+
+# ── N6: atomic write phải fsync để thật sự chống mất điện, không chỉ ───────
+# ── chống tiến trình chết (điều docstring cũ nhận vơ) ───────────────────────
+#
+# `os.replace` chỉ đảm bảo không ai thấy trạng thái nửa vời -- nó không đảm
+# bảo nội dung đã nằm trên đĩa vật lý trước khi hàm trả về. Không có
+# `fsync`, một lần mất điện đúng lúc replace vừa xong (ở tầng kernel) có
+# thể khiến rename đó chưa kịp bền vững. Chọn thêm `fsync` (file tạm +
+# thư mục cha) thay vì chỉ sửa lời docstring, vì chi phí I/O cho một file
+# YAML vài chục KB là nhỏ so với việc giữ đúng lời hứa durability.
+
+
+def test_save_annotations_fsyncs_the_temp_file_and_the_parent_directory(
+    tmp_path: Path, monkeypatch
+):
+    path = tmp_path / "schema.yaml"
+    synced_fds: list[int] = []
+    real_fsync = os.fsync
+
+    def spy_fsync(fd):
+        synced_fds.append(fd)
+        return real_fsync(fd)
+
+    monkeypatch.setattr(os, "fsync", spy_fsync)
+    save_annotations(_sample(), path)
+
+    # Ít nhất hai fsync: một cho nội dung file tạm, một cho thư mục cha
+    # (để việc rename bền vững) -- thiếu cái thứ hai, nội dung có thể bền
+    # vững nhưng cây thư mục vẫn có thể quên mất rename đó sau mất điện.
+    assert len(synced_fds) >= 2, (
+        "phải fsync cả nội dung file tạm lẫn thư mục cha, không chỉ một trong hai"
+    )
+
+
+# ── N3: lưu không được âm thầm siết quyền file xuống 0600 ──────────────────
+#
+# `tempfile.mkstemp` tạo file tạm 0600 và `os.replace` mang nguyên mode đó
+# sang đích. `schema.yaml` là đường thoát hiểm cho việc sửa tay -- nếu
+# onboarding chạy bằng service account còn analyst sửa bằng user riêng,
+# đường thoát đó đóng lại ngay sau lần `annotate` đầu tiên nếu quyền bị
+# siết mà không ai để ý.
+
+
+def test_save_annotations_preserves_an_existing_files_permission_mode(tmp_path: Path):
+    path = tmp_path / "schema.yaml"
+    save_annotations(_sample(), path)
+    os.chmod(path, 0o644)
+    assert stat.S_IMODE(os.stat(path).st_mode) == 0o644
+
+    save_annotations(_sample(), path)
+
+    assert stat.S_IMODE(os.stat(path).st_mode) == 0o644, (
+        "một lần lưu lên file đã tồn tại không được thay đổi mode của nó"
+    )
 
 
 def test_load_rejects_bad_confidence_on_column_annotation(tmp_path: Path):

@@ -246,6 +246,63 @@ def test_a_sampling_failure_does_not_leave_that_table_without_annotation_input(
     assert samples["orders"] == [{"id": 1}]
 
 
+# --- N2: wholesale sampling failure must warn, not be blamed on per-table --
+# --- SELECT permissions, and must not be reported as a clean run ----------
+
+
+def test_annotate_all_sampling_failed_warns_connection_or_credentials(
+    tmp_path, monkeypatch, capsys
+):
+    """Trước fix: một DSN hỏng hoàn toàn khiến MỌI bảng lấy mẫu lỗi, nhưng
+    `cmd_annotate` chỉ in `Lấy mẫu thất bại: N/N bảng` với lời giải thích
+    'thiếu quyền SELECT hoặc mất kết nối thoáng qua' -- sai khi N/N bảng
+    cùng lỗi (một DSN sai khả năng cao hơn nhiều so với N bảng cùng thiếu
+    đúng một quyền), và lượt chạy vẫn được coi là thành công. Đối xứng với
+    cảnh báo OLLAMA_BASE_URL khi toàn bộ chú giải LLM thất bại."""
+    monkeypatch.setattr("onboard.introspect_schema", lambda dsn, **kw: MINI_TABLES)  # noqa: ARG005
+    cmd_extract("postgresql://x", tmp_path)
+
+    def always_fails(dsn, table, n=5):  # noqa: ARG001
+        raise psycopg2.OperationalError("could not connect to server")
+
+    monkeypatch.setattr("onboard.sample_rows", always_fails)
+
+    reply = '{"table": {"text": "mô tả", "confidence": "high"}, "columns": {}}'
+    capsys.readouterr()
+    cmd_annotate(tmp_path, "postgresql://x", invoke=lambda s, u: reply)  # noqa: ARG005
+
+    out = capsys.readouterr().out
+    assert "CẢNH BÁO" in out or "cảnh báo" in out.lower()
+    assert "DSN" in out
+    lower = out.lower()
+    assert "kết nối" in lower
+
+
+def test_annotate_partial_sampling_failure_does_not_trigger_connection_warning(
+    tmp_path, monkeypatch, capsys
+):
+    """Một bảng lỗi lấy mẫu (thiếu quyền SELECT trên riêng bảng đó) không
+    được kích hoạt cảnh báo 'toàn bộ thất bại' -- cảnh báo đó chỉ đúng khi
+    N/N bảng cùng lỗi."""
+    monkeypatch.setattr("onboard.introspect_schema", lambda dsn, **kw: MINI_TABLES)  # noqa: ARG005
+    cmd_extract("postgresql://x", tmp_path)
+
+    def flaky_sample_rows(dsn, table, n=5):  # noqa: ARG001
+        if table == "payroll":
+            raise psycopg2.OperationalError("permission denied for table payroll")
+        return []
+
+    monkeypatch.setattr("onboard.sample_rows", flaky_sample_rows)
+
+    reply = '{"table": {"text": "mô tả", "confidence": "high"}, "columns": {}}'
+    capsys.readouterr()
+    cmd_annotate(tmp_path, "postgresql://x", invoke=lambda s, u: reply)  # noqa: ARG005
+
+    out = capsys.readouterr().out
+    assert "Lấy mẫu thất bại: 1/" in out
+    assert "CẢNH BÁO" not in out and "cảnh báo" not in out.lower()
+
+
 # --- Amendment 3: --dsn optional, ADBA_DSN fallback -------------------------
 
 
@@ -685,6 +742,125 @@ def test_annotate_still_works_normally_when_the_schema_is_intact(tmp_path, monke
     assert load_annotations(tmp_path / "schema.yaml").tables["orders"].text == "mô tả"
 
 
+# ── N4: chốt chặn C1 phải dựa trên SỐ MỤC human THẬT SỰ bị ghép loại,
+# ── không phải tỉ lệ số bảng -- một proxy MÙ trước phân bố công sức duyệt.
+#
+# Trước fix: `_guarded_merge` so `len(fresh.tables) < len(existing.tables)
+# * SHRINK_ABORT_RATIO`. Một `structure.json` vẫn giữ 3/4 bảng (75%, xa
+# ngưỡng 50%) qua được chốt chặn cũ dễ dàng -- kể cả khi bảng DUY NHẤT vừa
+# biến mất là bảng mang toàn bộ chú giải `human` đang có. Ghép loại 100%
+# công sức duyệt, chốt chặn cũ không hề thấy vì nó chỉ đếm bảng, không đếm
+# mục người duyệt.
+
+
+def _human_heavy_single_table_annotations():
+    from perception.annotations import Annotation, SchemaAnnotations
+
+    existing = SchemaAnnotations(
+        tables={
+            "orders": Annotation("Đơn hàng", reviewed_by="human"),
+            "customers": Annotation("Khách hàng", reviewed_by="llm"),
+            "products": Annotation("Sản phẩm", reviewed_by="llm"),
+            "payroll": Annotation("Lương", reviewed_by="llm"),
+        },
+        columns={
+            "orders": {
+                "amount": Annotation("Số tiền", reviewed_by="human"),
+                "order_date": Annotation("Ngày đặt", reviewed_by="human"),
+            }
+        },
+    )
+    # "orders" biến mất hoàn toàn khỏi fresh (mọi mục còn lại là LLM, không
+    # có gì đáng bảo vệ ở 3 bảng sống sót) -- 3/4 bảng vẫn còn (75%), TRÊN
+    # ngưỡng SHRINK_ABORT_RATIO=0.5 nếu đo bằng số bảng như bản cũ.
+    fresh = SchemaAnnotations(
+        tables={
+            "customers": Annotation("Khách hàng mới", reviewed_by="llm"),
+            "products": Annotation("Sản phẩm mới", reviewed_by="llm"),
+            "payroll": Annotation("Lương mới", reviewed_by="llm"),
+        },
+    )
+    return existing, fresh
+
+
+def test_guarded_merge_blocks_on_real_human_loss_even_when_table_count_survives():
+    from onboard import OnboardError, _guarded_merge
+
+    existing, fresh = _human_heavy_single_table_annotations()
+
+    with pytest.raises(OnboardError) as excinfo:
+        _guarded_merge(existing, fresh, force=False)
+
+    # Thông báo phải nói được đúng thứ bị mất (mục human), không phải số
+    # bảng -- proxy cũ.
+    assert "3" in str(excinfo.value)  # 3 mục human bị mất: 1 bảng + 2 cột
+
+
+def test_guarded_merge_force_still_bypasses_the_real_count_guard():
+    from onboard import _guarded_merge
+
+    existing, fresh = _human_heavy_single_table_annotations()
+
+    merged, preserved, dropped = _guarded_merge(existing, fresh, force=True)
+
+    assert "orders" not in merged.tables
+    assert dropped == 3
+    assert preserved == 0
+
+
+def test_guarded_merge_does_not_block_a_small_legitimate_table_drop():
+    """Chỉ MỘT bảng nhỏ (1 mục human) thật sự biến mất, trong khi phần lớn
+    công sức duyệt (5 mục human ở hai bảng khác) còn nguyên -- dưới ngưỡng
+    co ngót -- vẫn phải đi qua (chỉ cảnh báo qua `_report_dropped`, không
+    chặn ghi)."""
+    from onboard import _guarded_merge
+    from perception.annotations import Annotation, SchemaAnnotations
+
+    existing = SchemaAnnotations(
+        tables={
+            "legacy_flags": Annotation("Bảng cờ cũ", reviewed_by="human"),
+            "orders": Annotation("Đơn hàng", reviewed_by="llm"),
+            "customers": Annotation("Khách hàng", reviewed_by="llm"),
+        },
+        columns={
+            "orders": {
+                "amount": Annotation("Số tiền", reviewed_by="human"),
+                "order_date": Annotation("Ngày đặt", reviewed_by="human"),
+            },
+            "customers": {
+                "segment": Annotation("Phân khúc", reviewed_by="human"),
+                "name": Annotation("Tên khách", reviewed_by="human"),
+                "region": Annotation("Khu vực", reviewed_by="human"),
+            },
+        },
+    )
+    # "legacy_flags" thật sự đã bị xoá khỏi schema (đợt dọn dẹp hợp lệ) --
+    # 1/6 mục human (~17%) mất, dưới ngưỡng SHRINK_ABORT_RATIO=0.5.
+    fresh = SchemaAnnotations(
+        tables={
+            "orders": Annotation("Đơn hàng mới", reviewed_by="llm"),
+            "customers": Annotation("Khách hàng mới", reviewed_by="llm"),
+        },
+        columns={
+            "orders": {
+                "amount": Annotation("x", reviewed_by="llm"),
+                "order_date": Annotation("x", reviewed_by="llm"),
+            },
+            "customers": {
+                "segment": Annotation("x", reviewed_by="llm"),
+                "name": Annotation("x", reviewed_by="llm"),
+                "region": Annotation("x", reviewed_by="llm"),
+            },
+        },
+    )
+
+    merged, preserved, dropped = _guarded_merge(existing, fresh, force=False)
+    assert dropped == 1
+    assert preserved == 5
+    assert "legacy_flags" not in merged.tables
+    assert merged.columns["orders"]["amount"].reviewed_by == "human"
+
+
 # ── C2: DSN gõ sai không được đẩy mật khẩu ra console ───────────────────────
 #
 # libpq echo NGUYÊN chuỗi kết nối khi DSN không đúng hình dạng URI:
@@ -721,3 +897,76 @@ def test_a_well_formed_dsn_passes_through_unchanged():
 
     good = f"postgresql://u:{_SECRET}@h:5432/db"
     assert _resolve_dsn(good) == good
+
+
+# ── N5: kiểm tra hình dạng cũ chỉ đòi "có scheme, có host" -- không đòi
+# ── scheme đó phải là một trong hai giá trị libpq THẬT SỰ nhận diện là URI
+# ── (`postgresql`/`postgres`). Một scheme sai một ký tự, dán nhầm domain,
+# ── hay cú pháp driver SQLAlchemy đều qua được kiểm tra cũ rồi rơi xuống
+# ── cú pháp key=value cổ ở libpq -- đúng đường lộ mật khẩu C2 đã sửa,
+# ── chưa được chặn ở TẦNG này (chỉ còn được cứu bởi `_run_db_call` bỏ
+# ── `str(e)` -- một lớp phòng thủ, không phải lớp được đặt tên cho lỗi
+# ── gõ sai DSN thông thường).
+
+
+@pytest.mark.parametrize(
+    "bad_dsn",
+    [
+        f"postgresq://u:{_SECRET}@h:5432/db",  # thiếu một chữ 'l'
+        f"HTTP://u:{_SECRET}@h:5432/db",  # dán nhầm scheme khác hẳn
+        f"postgresql+psycopg2://u:{_SECRET}@h:5432/db",  # cú pháp SQLAlchemy
+    ],
+)
+def test_a_dsn_with_a_scheme_libpq_does_not_recognize_is_rejected(bad_dsn):
+    from onboard import OnboardError, _resolve_dsn
+
+    with pytest.raises(OnboardError) as excinfo:
+        _resolve_dsn(bad_dsn)
+
+    message = str(excinfo.value)
+    assert _SECRET not in message, "mật khẩu không được xuất hiện trong thông báo lỗi"
+    assert bad_dsn not in message, "cả DSN cũng không được in ra"
+    assert "ADBA_DSN" in message
+
+
+@pytest.mark.parametrize(
+    "bad_dsn",
+    [
+        f" postgresql://u:{_SECRET}@h:5432/db",  # khoảng trắng đầu
+        f"postgresql://u:{_SECRET}@h:5432/db ",  # khoảng trắng cuối
+    ],
+)
+def test_a_dsn_with_leading_or_trailing_whitespace_is_rejected_by_name(bad_dsn):
+    """Khoảng trắng thừa vô hình trên terminal -- thông báo lỗi phải tự nói
+    ra điều đó, không chỉ báo chung chung 'sai hình dạng'."""
+    from onboard import OnboardError, _resolve_dsn
+
+    with pytest.raises(OnboardError) as excinfo:
+        _resolve_dsn(bad_dsn)
+
+    message = str(excinfo.value)
+    assert _SECRET not in message
+    assert bad_dsn not in message
+    assert "trắng" in message or "khoảng" in message.lower(), (
+        "thông báo phải gọi tên đúng vấn đề: khoảng trắng thừa"
+    )
+
+
+def test_a_dsn_scheme_with_the_wrong_case_is_rejected_not_silently_lowercased():
+    """`urllib.parse.urlsplit(...).scheme` LUÔN lowercase -- một kiểm tra
+    ngây thơ đọc `.scheme` sẽ thấy 'POSTGRESQL://...' giống hệt
+    'postgresql://...' và cho qua. Xác nhận bằng thực nghiệm
+    (`psycopg2.connect`) rằng libpq KHÔNG chấp nhận biến thể hoa/thường
+    này như một URI -- nó rơi xuống cú pháp key=value cổ và echo nguyên
+    DSN, mật khẩu bị lộ y hệt một scheme sai hẳn. `_resolve_dsn` phải đọc
+    scheme từ chuỗi GỐC, không phải từ `.scheme` đã bị chuẩn hoá."""
+    from onboard import OnboardError, _resolve_dsn
+
+    bad_dsn = f"POSTGRESQL://u:{_SECRET}@h:5432/db"
+
+    with pytest.raises(OnboardError) as excinfo:
+        _resolve_dsn(bad_dsn)
+
+    message = str(excinfo.value)
+    assert _SECRET not in message
+    assert bad_dsn not in message

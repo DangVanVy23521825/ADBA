@@ -11,6 +11,7 @@ from __future__ import annotations
 import dataclasses
 import os
 import shutil
+import stat
 import tempfile
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -107,13 +108,23 @@ def _atomic_write_with_backup(path: Path, content: str) -> None:
     """Ghi `content` ra `path` không bao giờ để lộ trạng thái nửa vời.
 
     `schema.yaml` mang trần độ chính xác của hệ thống. Một `write_text`
-    thường ghi trực tiếp vào `path` — nếu tiến trình (hay máy) chết giữa
-    chừng, file bị cắt cụt, và không có cách nào phân biệt "vừa bị cắt cụt"
-    với "khách thật sự chỉ chú giải nửa vời". Ghi vào một file tạm CÙNG THƯ
-    MỤC (bắt buộc: `os.replace` giữa hai đường dẫn trên cùng filesystem là
-    một syscall rename, nguyên tử trên mọi hệ POSIX/NT) rồi thay bằng
+    thường ghi trực tiếp vào `path` — nếu tiến trình chết giữa chừng, file
+    bị cắt cụt, và không có cách nào phân biệt "vừa bị cắt cụt" với "khách
+    thật sự chỉ chú giải nửa vời". Ghi vào một file tạm CÙNG THƯ MỤC (bắt
+    buộc: `os.replace` giữa hai đường dẫn trên cùng filesystem là một
+    syscall rename, nguyên tử trên mọi hệ POSIX/NT) rồi thay bằng
     `os.replace` — tại mọi thời điểm trước lần gọi đó, file đích cũ (nếu
     có) vẫn nguyên vẹn.
+
+    Đây là atomicity chống TIẾN TRÌNH chết, không chống MÁY chết: có
+    `fsync` cả file tạm lẫn thư mục cha trước khi `os.replace`, để nội
+    dung và việc rename thật sự nằm trên đĩa trước khi hàm trả về — thiếu
+    hai lần `fsync` đó, `os.replace` vẫn nguyên tử theo nghĩa "không bao
+    giờ thấy trạng thái nửa vời", nhưng một lần mất điện đúng lúc có thể
+    khiến `path` trỏ tới một rename chưa kịp ghi xuống đĩa (rơi về nội
+    dung cũ hoặc file rỗng tuỳ filesystem/kernel) — chi phí I/O nhỏ (một
+    file YAML vài chục KB) đổi lấy durability qua mất điện, không chỉ qua
+    process crash.
 
     Giữ đúng MỘT bản `.bak` — bản ngay trước lần ghi này, không phải một
     lịch sử tích luỹ (mỗi lần ghi đè `.bak` cũ bằng nội dung cũ hiện tại).
@@ -121,10 +132,22 @@ def _atomic_write_with_backup(path: Path, content: str) -> None:
     chưa từng có) không có gì để sao lưu, và không được tự bịa ra một file
     thừa trong `profile/` (xem test_no_sample_row_data_is_written_anywhere
     ở tests/unit/test_profile_store.py — nó đếm đúng số file trong đó).
+
+    `mkstemp` tạo file tạm với quyền 0600 bất kể umask hay quyền của
+    `path` hiện có — cố ý, vì nội dung tạm không nên đọc được bởi ai khác
+    trong lúc đang ghi. Nhưng `os.replace` mang nguyên mode đó sang đích,
+    nên nếu không sửa lại trước khi replace, MỖI lần lưu sẽ âm thầm siết
+    một `schema.yaml` 0644 (file "cửa thoát hiểm" cho việc sửa tay, có thể
+    thuộc một user khác chạy `annotate`) xuống 0600. Khôi phục mode của
+    `path` cũ nếu nó đã tồn tại; nếu đây là lần ghi đầu tiên, dùng mode mà
+    umask của tiến trình đáng lẽ tạo ra cho một file mới (0o666 & ~umask),
+    không ép cứng 0600.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    existing_mode: int | None = None
     if path.exists():
+        existing_mode = stat.S_IMODE(os.stat(path).st_mode)
         # copy2 (không phải move/replace): bản GỐC phải còn nguyên tại
         # `path` cho tới khi `os.replace` bên dưới hoán đổi nội dung mới
         # vào — nếu backup thất bại giữa chừng, `path` vẫn là bản cũ hợp lệ.
@@ -134,7 +157,20 @@ def _atomic_write_with_backup(path: Path, content: str) -> None:
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
+        if existing_mode is not None:
+            os.chmod(tmp_name, existing_mode)
+        else:
+            umask = os.umask(0)
+            os.umask(umask)
+            os.chmod(tmp_name, 0o666 & ~umask)
         os.replace(tmp_name, path)
+        dir_fd = os.open(str(path.parent), os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
     except BaseException:
         Path(tmp_name).unlink(missing_ok=True)
         raise

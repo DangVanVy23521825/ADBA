@@ -171,18 +171,22 @@ def _with_progress(
     return wrapped
 
 
-# Ngưỡng "co ngót nhiều" cho `_guarded_merge` (C1). `fresh` phải, theo đúng
-# tinh thần docstring của `merge_annotations`, phủ toàn bộ schema hiện có —
-# nếu nó chỉ còn phủ CHƯA ĐẾN MỘT NỬA số bảng mà `schema.yaml` đang biết
-# tới, đó gần như chắc chắn là một lượt `extract` hỏng (ADBA_DSN trỏ nhầm
-# DB rỗng/staging, nhầm schema ngoài `public`), không phải khách hàng vừa
-# xoá thật hơn một nửa số bảng của họ trong một lượt. 0.5 chọn có chủ đích:
-# một đợt dọn dẹp/loại bỏ bảng deprecated thật sự hiếm khi chạm mốc này
-# trong một lần chạy, còn trỏ nhầm DB thì luôn chạm (thường về 0). So trên
-# TỔNG SỐ BẢNG trong `schema.yaml` hiện có — không lọc riêng mục `human` —
-# vì đây là một chốt chặn RẺ, chạy TRƯỚC khi ghép, lúc chưa biết trong số
-# bị mất có bao nhiêu là `human`; biết được điều đó đòi hỏi đã ghép xong,
-# tức đã quá muộn để "chặn trước khi ghi" (yêu cầu C1).
+# Ngưỡng "co ngót nhiều" cho `_guarded_merge` (C1/N4). Chốt chặn phải nổ khi
+# một lượt ghép sẽ XOÁ hơn một nửa số mục `human` mà `existing` đang giữ —
+# đó gần như chắc chắn là một lượt `extract` hỏng (ADBA_DSN trỏ nhầm DB
+# rỗng/staging, nhầm schema ngoài `public`, hay chỉ đơn giản introspect trả
+# về một tập cột bị cắt cụt), không phải khách hàng vừa xoá thật hơn một
+# nửa công sức duyệt của họ trong một lượt. 0.5 chọn có chủ đích: một đợt
+# dọn dẹp/loại bỏ bảng deprecated thật sự hiếm khi chạm mốc này trong một
+# lần chạy, còn trỏ nhầm DB thì luôn chạm (thường về gần 0% sống sót).
+#
+# So trên SỐ MỤC `human` THẬT SỰ bị ghép loại (`_preserved_and_dropped`,
+# đo trên kết quả `merge_annotations` — hàm đó THUẦN, không tốn gì để gọi
+# trước khi ghi), KHÔNG PHẢI trên số bảng của `existing`/`fresh` (xem N4:
+# proxy đếm bảng không thấy được một `fresh` giữ đủ tên bảng nhưng cắt cụt
+# tập cột — nó ghép loại chú giải cột `human` mà chốt chặn cũ mù hoàn
+# toàn). Đo trên số mục dropped nghĩa là chốt chặn tự động bắt được CẢ hai
+# hình dạng lỗi (mất bảng lẫn mất cột) bằng đúng một phép đo.
 SHRINK_ABORT_RATIO = 0.5
 
 
@@ -243,43 +247,55 @@ def _guarded_merge(
     — hàm này là chốt chặn cho đúng chuỗi nhân quả đó, KHÔNG thay quy tắc
     ghép.
 
-    Hai trường hợp bị chặn khi `force=False` VÀ `existing` không rỗng:
-      1. `fresh` rỗng hoàn toàn (`structure.json` rỗng) — luôn chặn.
-      2. `fresh` phủ chưa tới `SHRINK_ABORT_RATIO` số bảng `existing` đang
-         có — chặn ("co ngót nhiều", xem hằng số ở trên).
-    `force=True` bỏ qua cả hai, cho operator biết chủ đích một đường đi
-    qua — đúng lúc họ THẬT SỰ vừa xoá phần lớn schema.
-    """
-    existing_table_count = len(existing.tables)
-    fresh_table_count = len(fresh.tables)
+    N4 — chốt chặn dựa trên SỐ MỤC `human` THẬT SỰ bị ghép loại, không phải
+    một proxy suy ra trước khi ghép. `merge_annotations` là hàm THUẦN (trả
+    object mới, không ghi gì), nên gọi nó rồi đo `_preserved_and_dropped`
+    trên kết quả — TRƯỚC khi `save_annotations` chạm tới đĩa — không hề
+    "quá muộn": không có gì được ghi ra cho tới khi hàm này trả về bình
+    thường và caller (`cmd_annotate`) tự gọi `save_annotations` sau đó.
+    (Bản trước sai khi nói ngược lại — dùng số bảng làm proxy vì "biết
+    đúng số mục human bị mất chỉ có được sau khi ghép, quá muộn để chặn
+    trước khi ghi". Hệ quả của việc tin nhầm đó: một `extract` trả về ĐỦ
+    tên bảng nhưng CẮT CỤT tập cột lọt qua chốt chặn hoàn toàn — proxy đếm
+    bảng không thấy chú giải cột `human` nào bị ghép loại, dù thực tế mất
+    y hệt kịch bản chốt chặn này sinh ra để chặn.)
 
-    if not force and existing_table_count > 0:
-        if fresh_table_count == 0:
-            raise OnboardError(
-                "Từ chối ghép chú giải: structure.json hiện có 0 bảng, "
-                f"trong khi schema.yaml đang có {existing_table_count} bảng "
-                "đã chú giải (kể cả mục người duyệt). Ghép sẽ XOÁ TOÀN BỘ "
-                "chú giải hiện có. Đây gần như chắc chắn là ADBA_DSN trỏ "
-                "nhầm (DB rỗng, môi trường staging, hoặc schema ngoài "
-                "'public') chứ không phải khách hàng vừa xoá sạch bảng. "
-                f"Kiểm tra biến môi trường {DSN_ENV_VAR}, chạy lại `extract` "
-                "rồi `annotate`. Nếu bảng thật sự đã bị xoá hết, chạy lại "
-                "`annotate` với --force."
-            )
-        if fresh_table_count < existing_table_count * SHRINK_ABORT_RATIO:
-            raise OnboardError(
-                f"Từ chối ghép chú giải: structure.json chỉ còn "
-                f"{fresh_table_count} bảng, giảm hơn một nửa so với "
-                f"{existing_table_count} bảng schema.yaml đang có chú giải. "
-                "Ghép sẽ xoá chú giải của mọi bảng biến mất, kể cả mục "
-                f"người duyệt. Kiểm tra biến môi trường {DSN_ENV_VAR} — đây "
-                "thường là dấu hiệu trỏ nhầm DB/schema, không phải một đợt "
-                "xoá bảng thật sự lớn. Nếu đây đúng là chủ đích, chạy lại "
-                "`annotate` với --force."
-            )
+    Chặn khi `force=False` VÀ số mục `human` bị ghép loại VƯỢT QUÁ (strict
+    `>`, không phải `>=`) `SHRINK_ABORT_RATIO` số mục `human` mà `existing`
+    đang có (đủ để coi là "co ngót nhiều", không phải một vài cột/bảng bị
+    loại bỏ hợp lệ theo đúng nhịp sống thường của schema — dropped đúng
+    bằng nửa, ví dụ một bảng biến mất khỏi hai bảng đang có chú giải người,
+    KHÔNG bị coi là "nhiều", giữ đúng biên cũ mà `cmd_refresh` đã dựa vào).
+    `existing` không có mục
+    `human` nào thì không bao giờ chặn — kể cả khi `fresh` rỗng hoàn toàn —
+    vì khi đó không có công sức người duyệt nào để mất; đây cũng đúng
+    trường hợp lần chạy đầu tiên (`existing` rỗng). `force=True` bỏ qua
+    hoàn toàn, cho operator biết chủ đích một đường đi qua — đúng lúc họ
+    THẬT SỰ vừa xoá phần lớn schema hoặc chú giải.
+    """
+    # Chốt chặn RẺ: nếu `existing` không có mục `human` nào, không có gì để
+    # mất — bỏ qua việc ghép/đo mà vẫn đúng câu trả lời (không chặn).
+    # KHÔNG phải chốt chặn RA QUYẾT ĐỊNH chặn — chỉ mỗi trường hợp không
+    # chặn mới được phép quyết định sớm ở đây; mọi trường hợp còn lại phải
+    # đi qua phép đo thật bên dưới.
+    existing_human_tables, existing_human_columns = _human_entries(existing)
+    total_human = len(existing_human_tables) + len(existing_human_columns)
 
     merged = merge_annotations(existing, fresh)
     preserved, dropped = _preserved_and_dropped(existing, merged)
+
+    if not force and total_human > 0 and dropped > total_human * SHRINK_ABORT_RATIO:
+        raise OnboardError(
+            f"Từ chối ghép chú giải: lượt ghép này sẽ xoá {dropped}/"
+            f"{total_human} mục do người duyệt (bảng và cột), quá nửa số "
+            "mục schema.yaml đang giữ. Đây gần như chắc chắn là một lượt "
+            "extract hỏng (ADBA_DSN trỏ nhầm DB/schema, hoặc structure.json "
+            "bị cắt cụt bảng/cột), không phải khách hàng vừa xoá thật hơn "
+            f"một nửa công sức duyệt của họ. Kiểm tra biến môi trường "
+            f"{DSN_ENV_VAR}, chạy lại `extract` rồi `annotate`. Nếu đây "
+            "đúng là chủ đích, chạy lại `annotate` với --force."
+        )
+
     return merged, preserved, dropped
 
 
@@ -392,6 +408,21 @@ def cmd_annotate(
             "rỗng cho các bảng đó (model vẫn chú giải được, chỉ mất gợi ý "
             "từ dữ liệu thật). Thường do thiếu quyền SELECT hoặc mất kết "
             "nối thoáng qua."
+        )
+    if total > 0 and sample_failures == total:
+        # Đối xứng với cảnh báo "toàn bộ bảng chú giải thất bại" bên dưới:
+        # nếu MỌI bảng lấy mẫu đều lỗi, đó không còn là chuyện thiếu quyền
+        # SELECT trên từng bảng (152 bảng cùng thiếu đúng một quyền là
+        # trùng hợp khó tin) — nhiều khả năng cả DSN sai (host/port/tên DB
+        # gõ sai) hoặc mất kết nối tới DB hoàn toàn. `annotate` độc lập
+        # không mở kết nối nào khác để bắt lỗi này; nếu không báo ở đây,
+        # dòng "Lấy mẫu thất bại: 4/4 bảng" phía trên trôi qua với lời giải
+        # thích sai (per-bảng) và lượt chạy vẫn coi là thành công.
+        print(
+            "CẢNH BÁO: toàn bộ bảng lấy mẫu thất bại — đây là dấu hiệu DSN "
+            "sai hoặc mất kết nối tới database, không phải thiếu quyền "
+            "SELECT trên từng bảng. Kiểm tra DSN (host, port, tên database, "
+            "mật khẩu) và rằng database đang chạy và nhận kết nối."
         )
     _report_dropped(dropped)
     if total > 0 and failures == total:
@@ -703,8 +734,20 @@ def cmd_refresh(
     return len(merged.tables), preserved
 
 
+# Scheme mà libpq thật sự nhận diện là một connection URI (không phải cú
+# pháp `key=value` cổ). Xem https://www.postgresql.org/docs/current/
+# libpq-connect.html#LIBPQ-CONNSTRING-URIS — CHỈ hai giá trị này. Bất cứ
+# scheme nào khác (`postgresq://` gõ thiếu chữ, `HTTP://` dán nhầm,
+# `postgresql+psycopg2://` — cú pháp SQLAlchemy, không phải libpq) trông
+# ĐỦ giống URI để qua được một kiểm tra "có scheme, có host" hời hợt,
+# nhưng vẫn rơi xuống cú pháp `key=value` cổ ở tầng psycopg2/libpq — đúng
+# đường lộ mật khẩu mà `_resolve_dsn` tồn tại để chặn (xem N5).
+_LIBPQ_URI_SCHEMES = frozenset({"postgresql", "postgres"})
+
+
 def _resolve_dsn(cli_dsn: str | None) -> str:
-    """Lấy DSN từ `--dsn` hoặc `ADBA_DSN`, và xác nhận nó ĐÚNG DẠNG URI.
+    """Lấy DSN từ `--dsn` hoặc `ADBA_DSN`, và xác nhận nó ĐÚNG DẠNG URI mà
+    libpq thật sự phân tích được như một URI.
 
     Kiểm tra hình dạng ở ĐÂY, TRƯỚC khi bất kỳ lệnh con nào đưa DSN xuống
     `psycopg2.connect` (C2). Một DSN không đúng dạng URI (thiếu `scheme://`
@@ -717,6 +760,33 @@ def _resolve_dsn(cli_dsn: str | None) -> str:
     thông báo lỗi đó vào (vd. một ticket hỗ trợ). Một DSN URI-shaped với
     port/query sai KHÔNG lộ theo cách này (xem test); nên chỉ hình dạng
     không phải URI mới cần chặn ở đây.
+
+    N5 — "có scheme, có host" (kiểm tra cũ) không đủ: `urlsplit` vui vẻ
+    trả về MỘT scheme cho bất kỳ chuỗi nào có dạng `xxx://...`, dù `xxx`
+    không nằm trong tập libpq thật sự nhận diện là URI
+    (`_LIBPQ_URI_SCHEMES`). `postgresq://` (thiếu một chữ `l`), `HTTP://`
+    (dán nhầm domain), `postgresql+psycopg2://` (cú pháp driver
+    SQLAlchemy, libpq không hiểu dấu `+`) đều có `.scheme` và `.hostname`
+    hợp lệ theo `urlsplit`, qua được kiểm tra cũ, rồi rơi xuống cú pháp
+    `key=value` cổ ở psycopg2/libpq — CHÍNH con đường lộ mật khẩu mà hàm
+    này tồn tại để chặn.
+
+    Khớp scheme PHÂN BIỆT hoa/thường, KHÔNG lower() trước khi so — đo bằng
+    thực nghiệm (`psycopg2.connect` với `POSTGRESQL://...`, `Postgresql://
+    ...`): libpq CHỈ nhận diện đúng chữ thường `postgresql://`/`postgres:
+    //` là URI; bất kỳ biến thể hoa/thường nào khác cũng rơi xuống cú pháp
+    `key=value` cổ và echo nguyên DSN y hệt một scheme sai hẳn. Một
+    `.lower()` ở đây sẽ khiến hàm này TỰ TIN cho qua đúng những DSN mà
+    libpq/psycopg2 phía sau vẫn từ chối theo cách lộ mật khẩu — sai hoàn
+    toàn mục đích của N5.
+
+    N5 — khoảng trắng đầu/cuối cũng bị chặn riêng, với thông báo GỌI TÊN
+    đúng vấn đề: một dấu cách thừa ở đầu/cuối là artefact copy-paste phổ
+    biến (từ một ô bảng tính, một biến môi trường export sai), và nó VÔ
+    HÌNH trên terminal — operator nhìn vào DSN in ra (nếu có) hay đọc lại
+    lệnh mình vừa gõ sẽ không thấy gì khác thường, nên thông báo lỗi phải
+    tự nói ra điều mắt thường không thấy được, thay vì để nó lẫn vào lỗi
+    "thiếu scheme/host" chung chung.
 
     Thông báo lỗi không lặp lại DSN (đang cầm sẵn nó mới gọi lệnh, không
     cần nhắc lại) và không đoán mật khẩu là gì — chỉ nói ĐÚNG biến môi
@@ -732,15 +802,32 @@ def _resolve_dsn(cli_dsn: str | None) -> str:
         )
         sys.exit(1)
 
-    parts = urllib.parse.urlsplit(dsn)
-    if not parts.scheme or not parts.hostname:
+    if dsn != dsn.strip():
         raise OnboardError(
-            f"DSN không đúng dạng URI (thiếu 'scheme://' hoặc host). Kiểm "
-            f"tra biến môi trường {DSN_ENV_VAR} (hoặc cờ --dsn nếu dùng nó): "
-            "DSN phải có dạng 'postgresql://user:password@host:port/dbname'. "
+            f"DSN có khoảng trắng thừa ở đầu hoặc cuối — vô hình trên "
+            "terminal nhưng khiến libpq đọc sai. Kiểm tra biến môi trường "
+            f"{DSN_ENV_VAR} (hoặc cờ --dsn nếu dùng nó), thường do dán từ "
+            "một ô bảng tính hoặc một biến môi trường export sai. Không in "
+            "lại DSN ở đây vì nó có thể mang mật khẩu."
+        )
+
+    # `urlsplit(...).scheme` LUÔN lowercase — Python tự chuẩn hoá nó, nên
+    # đọc scheme từ ĐÓ sẽ khiến 'POSTGRESQL://...' trông giống hệt
+    # 'postgresql://...' và lọt qua. Phải đọc phần trước '://' NGUYÊN VĂN
+    # từ chuỗi gốc và so sánh PHÂN BIỆT hoa/thường — xem docstring ở trên.
+    scheme_end = dsn.find("://")
+    raw_scheme = dsn[:scheme_end] if scheme_end != -1 else ""
+    parts = urllib.parse.urlsplit(dsn)
+    if raw_scheme not in _LIBPQ_URI_SCHEMES or not parts.hostname:
+        raise OnboardError(
+            f"DSN không đúng dạng URI mà libpq nhận diện (scheme phải là "
+            f"{sorted(_LIBPQ_URI_SCHEMES)!r}, phải có host). Kiểm tra biến "
+            f"môi trường {DSN_ENV_VAR} (hoặc cờ --dsn nếu dùng nó): DSN "
+            "phải có dạng 'postgresql://user:password@host:port/dbname'. "
             "Không in lại DSN ở đây vì nó có thể mang mật khẩu — lỗi gõ "
             "thường gặp nhất là thiếu dấu ':' trong 'postgresql://' "
-            "(vd. gõ nhầm 'postgres//...')."
+            "(vd. gõ nhầm 'postgres//...') hoặc sai scheme (vd. thiếu một "
+            "ký tự trong 'postgresql://', hay dán nhầm URL từ nơi khác)."
         )
     return dsn
 

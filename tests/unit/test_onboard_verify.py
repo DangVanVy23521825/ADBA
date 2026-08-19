@@ -150,7 +150,12 @@ def test_misses_beyond_twenty_are_counted_not_silently_dropped(tmp_path):
     assert len(report.misses) == 25
 
     text = (tmp_path / "report.md").read_text(encoding="utf-8")
-    assert "5" in text  # 25 misses - 20 shown = 5 omitted, must be stated somewhere
+    # M1: the old assertion here was `assert "5" in text`, meant to prove
+    # the truncation line "... và 5 câu khác" exists. It passed regardless
+    # of that line, because the handover threshold line already contains
+    # "95%" -- "5" always appears in the report whether or not truncation
+    # is reported correctly. Assert the actual sentence onboard.py emits.
+    assert "… và 5 câu khác không hiện ở đây." in text
 
 
 # --- Fix round 1, Important 1: verify before build must not traceback -----

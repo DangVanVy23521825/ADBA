@@ -14,7 +14,23 @@ from psycopg2 import sql
 
 from perception.schema_model import Column, Table
 
-_IDENT = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+# Định danh Unicode: chữ cái (bất kỳ ngôn ngữ nào) hoặc '_' ở đầu, theo sau
+# là chữ/số/'_'. `\w` trên pattern kiểu `str` của Python 3 mặc định khớp
+# Unicode — không cần cờ `re.UNICODE` tường minh (đã là mặc định), giữ ở
+# đây chỉ để nói rõ ý định, phòng ai đó đổi sang pattern kiểu `bytes`.
+#
+# ADBA là sản phẩm tiếng Việt, đọc schema của khách hàng tiếng Việt:
+# `introspect_schema` (ở trên) trả nguyên văn `table_name` từ
+# `information_schema.columns` — nó sẽ trả về `đơn_hàng`, `khách_hàng`,
+# ... một cách bình thường. Regex CŨ (`[a-zA-Z_][a-zA-Z0-9_]*`) không cho
+# những tên đó qua được lớp chặn ở dưới, dù `sql.Identifier` (lớp phòng
+# thủ THỨ HAI, xem docstring `sample_rows`) quote chúng đúng đắn — tức là
+# lớp phòng thủ ĐẦU chặt hơn chính lớp nó bảo vệ. Rộng ra Unicode không
+# làm yếu lớp phòng thủ khỏi injection: mọi ký tự dùng trong tấn công
+# (khoảng trắng, `;`, `'`, `"`, `-`, `.`, xuống dòng, ...) vẫn không phải
+# chữ/số/`_` nên vẫn bị từ chối — xem TestIdentifierGuard trong
+# tests/unit/test_introspect.py, cả phần injection lẫn phần tên Việt hợp lệ.
+_IDENT = re.compile(r"^[^\W\d]\w*\Z", re.UNICODE)
 
 _COLUMNS_SQL = """
 SELECT table_name, column_name, data_type, is_generated
@@ -123,6 +139,16 @@ def sample_rows(dsn: str, table: str, n: int = 5) -> list[dict]:
     xem TestIdentifierGuard trong tests/unit/test_introspect.py). `sql.Identifier`
     cũng quote tên, nên một bảng thật tên `Orders` (phân biệt hoa/thường)
     vẫn địa chỉ được đúng.
+
+    Mở và đóng một kết nối riêng cho mỗi lần gọi có chủ đích — xem
+    `onboard._sample_all_tables` (I3a): dùng chung MỘT kết nối cho cả lượt
+    150 bảng được cân nhắc, nhưng test double của bộ test hiện có
+    (`tests/unit/test_onboard_cli.py`) mock nguyên hàm `onboard.sample_rows`
+    chứ không mock `psycopg2.connect`, và việc dùng chung một connection
+    còn đòi hỏi tự quản lý trạng thái transaction khi một câu SELECT lỗi
+    (nếu không bật `autocommit`, một lỗi ở bảng N để transaction ở trạng
+    thái "aborted" và lây sang bảng N+1). Cả hai lý do khiến việc gộp kết
+    nối là một refactor rộng hơn phạm vi sửa lỗi này — không ép làm ở đây.
     """
     if not _IDENT.fullmatch(table):
         raise ValueError(f"Tên bảng không hợp lệ: {table!r}")

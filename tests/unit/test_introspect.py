@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from perception.introspect import introspect_schema, sample_rows
+from perception.introspect import _IDENT, introspect_schema, sample_rows
 
 DSN = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
 
@@ -26,6 +26,58 @@ class TestIdentifierGuard:
         không phải một identifier trần. fullmatch() đóng khe hở này."""
         with pytest.raises(ValueError):
             sample_rows(self._UNUSED_DSN, "orders\n", n=1)
+
+    def test_rejects_a_table_name_with_a_space(self):
+        with pytest.raises(ValueError):
+            sample_rows(self._UNUSED_DSN, "orders drop", n=1)
+
+    def test_rejects_a_table_name_starting_with_a_digit(self):
+        with pytest.raises(ValueError):
+            sample_rows(self._UNUSED_DSN, "1orders", n=1)
+
+    # I3(b): ADBA đọc schema của khách hàng tiếng Việt — introspect_schema
+    # trả nguyên văn table_name từ information_schema.columns, và Postgres
+    # chấp nhận các tên này bình thường. sql.Identifier (lớp phòng thủ thứ
+    # hai, xem docstring sample_rows) quote chúng đúng đắn; _IDENT không
+    # được chặt hơn lớp nó bảo vệ.
+    def test_accepts_a_vietnamese_table_name_with_a_dieresis(self):
+        assert _IDENT.fullmatch("đơn_hàng")
+
+    def test_accepts_another_vietnamese_table_name(self):
+        assert _IDENT.fullmatch("khách_hàng")
+
+    def test_does_not_raise_for_vietnamese_identifiers(self, monkeypatch):
+        """sample_rows() đầu-đến-cuối với một tên bảng tiếng Việt, kết nối
+        giả (không chạm mạng thật — mock psycopg2.connect) để chứng minh
+        _IDENT không chặn nó ở lớp guard lẫn không có lỗi nào khác ở
+        đường đi sau đó tới sql.Identifier."""
+
+        class _FakeSampleCursor:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc_info):
+                return False
+
+            def execute(self, query, params=None):
+                self.query = query
+
+            def fetchall(self):
+                return []
+
+        class _FakeSampleConnection:
+            def cursor(self, *args, **kwargs):
+                return _FakeSampleCursor()
+
+            def close(self):
+                pass
+
+        monkeypatch.setattr(
+            "psycopg2.connect", lambda dsn: _FakeSampleConnection()
+        )
+        # Không ném ValueError (guard) và không ném gì khác: _IDENT chấp
+        # nhận tên này, và sql.Identifier dựng câu lệnh được bình thường.
+        assert sample_rows(self._UNUSED_DSN, "đơn_hàng", n=1) == []
 
 
 class _FakeCursor:

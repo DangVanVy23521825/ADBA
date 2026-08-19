@@ -89,8 +89,34 @@ def apply_edit(
     """Ghi một sửa đổi của người và đánh dấu `reviewed_by="human"`.
 
     Đánh dấu là phần quan trọng: nó khiến mục này sống sót qua mọi lần làm
-    mới về sau.
+    mới về sau — TRỪ trường hợp `new_text` rỗng (hoặc chỉ khoảng trắng).
+
+    Mọi cột chưa có chú giải hiện ra trong trang duyệt như một text box
+    RỖNG kèm nút "Lưu" — đó là trạng thái tự nhiên của một cột chưa ai
+    viết gì (xem `review_rows`). Nếu một cú click "Lưu" trên box rỗng đó
+    (bấm nhầm, bấm để đóng hàng, ...) tạo ra `Annotation(text="",
+    reviewed_by="human", confidence="high")`, mục đó gây hại theo BA cách
+    cùng lúc: (1) nó tính vào TỬ SỐ của cổng `--min-reviewed` dù không mô
+    tả gì, làm cổng đọc lạc quan hơn thật; (2) nó biến mất khỏi hàng đợi
+    duyệt (`pending_review`/`filter_rows` đều loại `reviewed_by == HUMAN`)
+    và khỏi số đếm "model tự tin bị ẩn" — không còn gì báo cho analyst
+    biết cột đó vẫn trống; (3) vì `merge_annotations` luôn giữ mục
+    `human` bất kể LLM nói gì, mục rỗng này SỐNG SÓT VĨNH VIỄN — không
+    `refresh` nào sau này còn mô tả lại được bảng/cột đó.
+
+    Quyết định: một save rỗng XOÁ mục đang có (nếu có) thay vì ghi một
+    mục `human` rỗng. Coi save rỗng như XÁC NHẬN "để trống có chủ đích"
+    (ví dụ ghi `reviewed_by="human", text=""` nhưng vẫn tính là đã duyệt)
+    cũng sửa được vấn đề (1) và (2), nhưng không sửa được (3) — mục
+    `human` rỗng đó vẫn chặn LLM mô tả lại vĩnh viễn, và một analyst xoá
+    trắng ô để "bỏ qua tạm" hay bấm nhầm không thể phân biệt được với
+    "tôi xác nhận cột này không cần mô tả". Xoá hẳn mục là cách đọc sạch
+    hơn: nó coi ô trống đúng như trạng thái "chưa ai chú giải" ban đầu,
+    để một `refresh` sau này có cơ hội mô tả lại, và giữ tử số của cổng
+    trung thực.
     """
+    if not new_text.strip():
+        return _clear(ann, table, column)
     entry = Annotation(text=new_text, reviewed_by=HUMAN, confidence="high")
     if column is None:
         return SchemaAnnotations(
@@ -102,6 +128,31 @@ def apply_edit(
         tables=ann.tables,
         columns={**ann.columns, table: cols},
     )
+
+
+def _clear(
+    ann: SchemaAnnotations, table: str, column: str | None
+) -> SchemaAnnotations:
+    """Xoá hẳn mục chú giải (bảng hoặc cột) nếu có; không lỗi nếu không có.
+
+    Dùng cho save rỗng (xem `apply_edit`) — kể cả khi mục đó chưa từng tồn
+    tại (cột chưa có chú giải, bấm "Lưu" trên ô rỗng), thao tác này phải là
+    no-op an toàn, không phải `KeyError`.
+    """
+    if column is None:
+        if table not in ann.tables:
+            return ann
+        remaining_tables = {k: v for k, v in ann.tables.items() if k != table}
+        return SchemaAnnotations(tables=remaining_tables, columns=ann.columns)
+
+    cols = ann.columns.get(table)
+    if not cols or column not in cols:
+        return ann
+    remaining_cols = {k: v for k, v in cols.items() if k != column}
+    new_columns = {**ann.columns, table: remaining_cols}
+    if not remaining_cols:
+        del new_columns[table]
+    return SchemaAnnotations(tables=ann.tables, columns=new_columns)
 
 
 def review_progress(

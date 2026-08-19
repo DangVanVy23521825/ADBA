@@ -2,6 +2,7 @@ import json
 import sys
 from unittest.mock import MagicMock, patch
 
+import psycopg2
 import pytest
 
 from onboard import cmd_annotate, cmd_extract, main
@@ -88,7 +89,14 @@ def test_annotate_reports_failure_count_separately_from_success_line(
 
     out = capsys.readouterr().out
     total = len(MINI_TABLES)
-    assert f"1/{total}" in out or "1/" in out  # failure count present in some form
+    # M2: the old assertion here was `f"1/{total}" in out or "1/" in out`,
+    # which is trivially true regardless of failure counting -- `_with_progress`
+    # unconditionally prints `[1/{total}]` for the FIRST table processed,
+    # succeeding or not, so the left side of the `or` (and thus the whole
+    # assertion) can never be false. Narrow it to the line this test is
+    # actually named for: the dedicated failure-count line `cmd_annotate`
+    # prints, `Thất bại: {failures}/{total} bảng.`.
+    assert f"Thất bại: 1/{total} bảng." in out
     lines = [ln for ln in out.splitlines() if ln.strip()]
     # There must be a success/summary line and a distinct line mentioning the failure count.
     assert any("bảng" in ln and "duyệt" in ln for ln in lines)
@@ -129,6 +137,113 @@ def test_annotate_partial_failure_does_not_warn(tmp_path, monkeypatch, capsys):
 
     out = capsys.readouterr().out
     assert "OLLAMA_BASE_URL" not in out
+
+
+# --- I5: annotate's headline number must be review_progress, not ----------
+# --- pending_review (a priority queue, not a coverage measure) ------------
+
+
+def test_annotate_headline_uses_review_progress_not_pending_review_count(
+    tmp_path, monkeypatch, capsys
+):
+    """cmd_build gates on review_progress(ann, tables); `annotate` must
+    report the SAME quantity as its headline, or an operator sees "3 mục
+    cần người duyệt" from annotate and then a `--min-reviewed` gate later
+    reporting hundreds outstanding -- two commands disagreeing about the
+    same number in one pipeline."""
+    monkeypatch.setattr("onboard.introspect_schema", lambda dsn, **kw: MINI_TABLES)  # noqa: ARG005
+    monkeypatch.setattr("onboard.sample_rows", lambda dsn, table, n=5: [])  # noqa: ARG005
+    cmd_extract("postgresql://x", tmp_path)
+
+    # High-confidence table-level descriptions only, no column annotations
+    # at all -- pending_review() would report 0 (nothing low-confidence),
+    # while review_progress(merged, tables) must report a much larger
+    # denominator: every column MINI_TABLES has, annotated or not.
+    reply = '{"table": {"text": "mô tả", "confidence": "high"}, "columns": {}}'
+    capsys.readouterr()
+    merged = cmd_annotate(tmp_path, "postgresql://x", invoke=lambda s, u: reply)  # noqa: ARG005
+
+    from perception.review_state import review_progress
+
+    done, total = review_progress(merged, MINI_TABLES)
+    assert done == 0  # nothing human-reviewed yet
+    assert total > len(MINI_TABLES), "denominator must include every column, not just tables"
+
+    out = capsys.readouterr().out
+    assert f"Đã duyệt {done}/{total} mục" in out
+
+
+def test_annotate_still_prints_pending_review_as_a_separate_priority_line(
+    tmp_path, monkeypatch, capsys
+):
+    """pending_review is still useful as a "look at these first" line -- it
+    just must not be presented as the coverage headline (see test above)."""
+    monkeypatch.setattr("onboard.introspect_schema", lambda dsn, **kw: MINI_TABLES)  # noqa: ARG005
+    monkeypatch.setattr("onboard.sample_rows", lambda dsn, table, n=5: [])  # noqa: ARG005
+    cmd_extract("postgresql://x", tmp_path)
+
+    reply = '{"table": {"text": "mô tả", "confidence": "low"}, "columns": {}}'
+    capsys.readouterr()
+    cmd_annotate(tmp_path, "postgresql://x", invoke=lambda s, u: reply)  # noqa: ARG005
+
+    out = capsys.readouterr().out
+    assert f"{len(MINI_TABLES)} mục ưu tiên xem trước" in out
+
+
+# --- I3(a): one bad table's sampling must not kill a 150-table run ---------
+
+
+def test_a_sampling_failure_on_one_table_does_not_abort_the_whole_run(
+    tmp_path, monkeypatch, capsys
+):
+    """Trước fix: `sample_rows` lỗi ở BẤT KỲ bảng nào ném ra khỏi một dict
+    comprehension chạy xong hẳn trước `annotate_schema`, huỷ toàn bộ lượt
+    annotate. Một role thiếu quyền SELECT trên một bảng, hay một lần mất
+    kết nối thoáng qua, không được phép giết 149 bảng còn lại."""
+    monkeypatch.setattr("onboard.introspect_schema", lambda dsn, **kw: MINI_TABLES)  # noqa: ARG005
+    cmd_extract("postgresql://x", tmp_path)
+
+    def flaky_sample_rows(dsn, table, n=5):  # noqa: ARG001
+        if table == "payroll":
+            raise psycopg2.OperationalError("permission denied for table payroll")
+        return []
+
+    monkeypatch.setattr("onboard.sample_rows", flaky_sample_rows)
+
+    reply = '{"table": {"text": "mô tả", "confidence": "high"}, "columns": {}}'
+    capsys.readouterr()
+    # Must not raise -- the whole point of the fix.
+    merged = cmd_annotate(tmp_path, "postgresql://x", invoke=lambda s, u: reply)  # noqa: ARG005
+
+    # Every table, including the one whose sampling failed, still got
+    # annotated -- empty samples are a supported `annotate_schema` input.
+    assert set(merged.tables) == {t.name for t in MINI_TABLES}
+    assert merged.tables["payroll"].text == "mô tả"
+
+    out = capsys.readouterr().out
+    assert "Lấy mẫu thất bại: 1/" in out
+
+
+def test_a_sampling_failure_does_not_leave_that_table_without_annotation_input(
+    tmp_path, monkeypatch
+):
+    """Bảng lấy mẫu lỗi phải nhận mẫu RỖNG (input hợp lệ cho
+    annotate_schema), không phải bị loại khỏi dict `samples` hoàn toàn."""
+    monkeypatch.setattr("onboard.introspect_schema", lambda dsn, **kw: MINI_TABLES)  # noqa: ARG005
+
+    from onboard import _sample_all_tables
+
+    def flaky_sample_rows(dsn, table, n=5):  # noqa: ARG001
+        if table == "payroll":
+            raise psycopg2.OperationalError("connection reset")
+        return [{"id": 1}]
+
+    monkeypatch.setattr("onboard.sample_rows", flaky_sample_rows)
+
+    samples, failures = _sample_all_tables("postgresql://x", MINI_TABLES)
+    assert failures == 1
+    assert samples["payroll"] == []
+    assert samples["orders"] == [{"id": 1}]
 
 
 # --- Amendment 3: --dsn optional, ADBA_DSN fallback -------------------------

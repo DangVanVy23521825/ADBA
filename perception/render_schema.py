@@ -34,7 +34,16 @@ def _short_type(data_type: str) -> str:
 def _render_one(table: Table) -> str:
     lines: list[str] = []
     if table.description:
-        lines.append(f"-- {table.description}")
+        # M4: gộp khoảng trắng (xuống dòng, tab, nhiều dấu cách liên tiếp)
+        # thành một dấu cách — CÙNG cách xử lý mô tả CỘT ở dưới
+        # (`collapsed_desc`), áp cho mô tả BẢNG. `schema.yaml` là escape
+        # hatch sửa tay được tài liệu hoá, nên một block scalar YAML chứa
+        # xuống dòng là input thực tế, không phải giả thuyết — không gộp
+        # thì dòng 2 của mô tả trở thành text KHÔNG có tiền tố `-- `, nằm
+        # ngay trước `CREATE TABLE`, phá hỏng cú pháp DDL đưa vào prompt
+        # cho model SQL.
+        collapsed_desc = " ".join(table.description.split())
+        lines.append(f"-- {collapsed_desc}")
     lines.append(f"CREATE TABLE {table.name} (")
 
     pk = set(table.primary_key)

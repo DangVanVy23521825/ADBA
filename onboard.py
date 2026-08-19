@@ -283,6 +283,53 @@ def _guarded_merge(
     return merged, preserved, dropped
 
 
+def _sample_all_tables(dsn: str, tables: tuple[Table, ...]) -> tuple[dict[str, list[dict]], int]:
+    """Lấy mẫu MỖI bảng độc lập — một bảng lỗi không được phép làm mất mẫu
+    của 149 bảng còn lại, cùng nguyên tắc mà `annotate_schema` đã áp dụng
+    cho lỗi model (xem docstring `cmd_annotate`).
+
+    Trước khi có hàm này, `cmd_annotate` lấy mẫu bằng một dict comprehension
+    chạy XONG HẲN trước khi `annotate_schema` được gọi: `samples = {t.name:
+    sample_rows(dsn, t.name, n=3) for t in tables}`. Một lỗi ở BẤT KỲ bảng
+    nào (role chỉ đọc thiếu quyền SELECT trên một bảng, mất kết nối thoáng
+    qua ở bảng 130/150, ...) ném ra khỏi comprehension và huỷ toàn bộ lượt
+    — dù `annotate_schema` đã cố tình được viết để chịu được đúng loại lỗi
+    đó (mẫu rỗng là input hợp lệ, xem `perception/annotate.py`). Sửa: bọc
+    từng lần gọi `sample_rows` trong try/except riêng; bảng lỗi nhận `[]`
+    thay vì làm hỏng cả dict.
+
+    KHÔNG dùng chung một kết nối cho cả lượt (dù rẻ hơn — 150 kết nối TCP
+    thay vì 1): bộ test hiện có (`tests/unit/test_onboard_cli.py`) mock
+    nguyên hàm `onboard.sample_rows`, không mock `psycopg2.connect`, nên
+    một kết nối mở ở TẦNG NÀY sẽ không đi qua test double đó và cố kết nối
+    thật; và dùng chung kết nối còn đòi hỏi tự quản lý trạng thái
+    transaction khi một câu SELECT lỗi (không bật `autocommit`, lỗi ở bảng
+    N để transaction "aborted", lây sang bảng N+1 — xem docstring
+    `perception.introspect.sample_rows`). Cả hai lý do khiến việc gộp kết
+    nối là một refactor rộng hơn phạm vi sửa lỗi I3a này (đổi cả quy ước
+    test double lẫn thêm quản lý transaction) — giữ nguyên một kết nối
+    riêng mỗi bảng như trước, chỉ thêm try/except.
+
+    Trả `(samples, failures)`: bảng lấy mẫu lỗi nhận `[]` (mẫu rỗng, input
+    hợp lệ cho `annotate_schema`) thay vì làm hỏng dict; `failures` đếm số
+    bảng đó để `cmd_annotate` báo cáo, cùng tinh thần với `failures` của
+    `annotate_schema`. Bắt `psycopg2.Error` — lỗi hạ tầng DB (thiếu quyền,
+    mất kết nối, timeout); một `ValueError` từ guard định danh của
+    `sample_rows` KHÔNG bị nuốt ở đây, vì đó là dấu hiệu `introspect_schema`
+    trả về một tên bảng không hợp lệ — lỗi lập trình/môi trường thật, không
+    phải một trục trặc hạ tầng thoáng qua nên bỏ qua được.
+    """
+    samples: dict[str, list[dict]] = {}
+    failures = 0
+    for t in tables:
+        try:
+            samples[t.name] = sample_rows(dsn, t.name, n=3)
+        except psycopg2.Error:
+            samples[t.name] = []
+            failures += 1
+    return samples, failures
+
+
 def cmd_annotate(
     profile_dir: Path | str,
     dsn: str,
@@ -297,21 +344,36 @@ def cmd_annotate(
     chạy" với "đã treo". Vì `annotate_schema` cố ý nuốt lỗi hạ tầng (một
     bảng lỗi không được phép giết cả lượt chạy 150 bảng), hàm này phải tự
     báo cáo tiến độ VÀ số lượng thất bại; im lặng ở đây có thể biến một địa
-    chỉ Ollama gõ sai thành 150 chú giải rỗng được báo là thành công.
+    chỉ Ollama gõ sai thành 150 chú giải rỗng được báo là thành công. Cùng
+    nguyên tắc áp dụng cho bước lấy mẫu — xem `_sample_all_tables`: một
+    bảng lấy mẫu lỗi không được giết lượt chạy 150 bảng.
 
     `force`: bỏ qua chốt chặn "fresh co ngót nhiều" của `_guarded_merge`
     (C1) — xem docstring hàm đó. Mặc định `False`: an toàn hơn là tiện lợi,
     vì hậu quả của việc đoán sai (ghi đè hàng tuần công sức duyệt) không
     đảo ngược được, còn hậu quả của việc chặn nhầm chỉ là chạy lại với
     `--force`.
+
+    I5 — số đầu dòng phải là `review_progress(merged, tables)`, KHÔNG phải
+    `len(pending_review(merged))`. `pending_review` tự ghi rõ TRONG DOCSTRING
+    của nó (viết hoa) rằng đó là một hàng đợi ưu tiên, KHÔNG PHẢI thước đo
+    độ phủ duyệt — nó chỉ đếm mục `confidence == "low"` chưa ai duyệt, bỏ
+    sót MỌI chú giải LLM tự tin (đúng hay sai) và mọi cột LLM bỏ qua hẳn
+    (không hề có entry). `cmd_build` (bên dưới) đã dùng đúng
+    `review_progress(ann, tables)` cho MIN_REVIEWED gate — nếu `annotate`
+    in một con số khác cho "cùng một khái niệm", operator thấy "3 mục cần
+    người duyệt" sau `annotate` rồi vấp đúng cổng đó báo hàng trăm mục còn
+    thiếu ở `build`, hai lệnh trong CÙNG một pipeline mâu thuẫn nhau về
+    cùng một đại lượng. Vẫn giữ `pending_review` — nó thật sự hữu ích như
+    một danh sách "xem cái này trước" — nhưng in RÕ là một dòng khác, tách
+    biệt khỏi con số đo tiến độ.
     """
+    from perception.review_state import review_progress
+
     d = Path(profile_dir)
     tables = _load_structure(d)
     total = len(tables)
-    samples = {
-        t.name: _run_db_call(dsn, f"lấy mẫu bảng {t.name}", lambda t=t: sample_rows(dsn, t.name, n=3))
-        for t in tables
-    }
+    samples, sample_failures = _sample_all_tables(dsn, tables)
 
     tracked_invoke = _with_progress(invoke, tables)
     fresh, failures = annotate_schema(tables, samples, tracked_invoke)
@@ -319,9 +381,18 @@ def cmd_annotate(
     merged, _preserved, dropped = _guarded_merge(existing, fresh, force=force)
     save_annotations(merged, d / SCHEMA_YAML)
 
+    done, review_total = review_progress(merged, tables)
+    print(f"Chú giải xong {total} bảng. Đã duyệt {done}/{review_total} mục.")
     pending = pending_review(merged)
-    print(f"Chú giải xong {total} bảng. {len(pending)} mục cần người duyệt.")
+    print(f"{len(pending)} mục ưu tiên xem trước (model tự nhận không chắc, chưa ai duyệt).")
     print(f"Thất bại: {failures}/{total} bảng.")
+    if sample_failures:
+        print(
+            f"Lấy mẫu thất bại: {sample_failures}/{total} bảng — dùng mẫu "
+            "rỗng cho các bảng đó (model vẫn chú giải được, chỉ mất gợi ý "
+            "từ dữ liệu thật). Thường do thiếu quyền SELECT hoặc mất kết "
+            "nối thoáng qua."
+        )
     _report_dropped(dropped)
     if total > 0 and failures == total:
         print(

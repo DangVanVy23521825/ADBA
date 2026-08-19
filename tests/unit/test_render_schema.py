@@ -184,3 +184,26 @@ def test_column_description_with_whitespace_is_collapsed():
     assert any("notes TEXT,  -- Ghi chú chi tiết về dữ liệu" in line for line in lines)
     # Ensure the malformed multi-line version does NOT appear
     assert "Ghi chú chi tiết\n" not in out
+
+
+def test_table_description_with_whitespace_is_collapsed():
+    """M4: same bug class as columns, half-fixed before this test. A hand
+    edited schema.yaml (documented escape hatch) can carry a YAML block
+    scalar with an embedded newline for a TABLE description -- that
+    newline must not survive into the rendered DDL, or line 2 becomes
+    uncommented text sitting immediately before `CREATE TABLE`, corrupting
+    the DDL fed to the SQL model."""
+    t = Table(
+        name="orders",
+        columns=(Column("id", "integer"),),
+        description="Đơn hàng bán cho khách\n\thàng doanh nghiệp",
+    )
+    out = render_schema([t])
+    lines = out.split("\n")
+    assert any(
+        line == "-- Đơn hàng bán cho khách hàng doanh nghiệp" for line in lines
+    )
+    # The line immediately after the comment must be CREATE TABLE, not a
+    # leftover uncommented fragment of the description.
+    comment_idx = lines.index("-- Đơn hàng bán cho khách hàng doanh nghiệp")
+    assert lines[comment_idx + 1] == "CREATE TABLE orders ("

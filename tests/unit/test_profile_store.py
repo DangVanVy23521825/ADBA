@@ -53,16 +53,49 @@ def test_grants_survive_the_round_trip(tmp_path, monkeypatch):
     assert permitted_tables(profile, "analyst") == frozenset({"orders", "customers"})
 
 
-def test_no_sample_row_data_is_written_anywhere(tmp_path):
-    """Ràng buộc spec: profile bị copy đi khi hỗ trợ kỹ thuật."""
-    _write(tmp_path)
+def test_no_sample_row_data_is_written_anywhere(tmp_path, monkeypatch):
+    """Ràng buộc spec: profile bị copy đi khi hỗ trợ kỹ thuật — dữ liệu MẪU
+    (`sample_rows`, tức DÒNG DỮ LIỆU THẬT của khách) không bao giờ được ghi
+    ra đĩa trong `profile/`.
+
+    M3 — test cũ ở đây tìm literal `"sample_rows"` (TÊN HÀM Python) trong
+    nội dung file, không phải dữ liệu hàng thật. Literal đó không bao giờ
+    xuất hiện dù có rò rỉ dữ liệu thật hay không: `write_profile` (được
+    gọi qua `_write` ở trên) không nhận tham số `samples` — không có
+    ĐƯỜNG ĐI nào để chuỗi "sample_rows" lọt vào output, nên assertion cũ
+    luôn đúng bất kể code có đúng hay không.
+
+    Sửa: chạy CẢ pipeline thật (`extract` → `annotate` → `build`) với
+    `sample_rows` (mock ở tầng `onboard`, nơi nó thật sự được TIÊU THỤ để
+    dựng prompt cho LLM — xem `onboard.cmd_annotate`) trả về một giá trị
+    SENTINEL đặc trưng, mô phỏng dữ liệu hàng thật (vd. một email/số điện
+    thoại khách), rồi xác nhận sentinel đó — không phải tên hàm — không
+    xuất hiện ở bất kỳ đâu trong `profile/` sau khi `build` ghi xong.
+    """
+    from onboard import cmd_annotate, cmd_build, cmd_extract
+
+    monkeypatch.setattr("onboard.introspect_schema", lambda dsn, **kw: MINI_TABLES)  # noqa: ARG005
+    sentinel = "SENTINEL-RAW-ROW-VALUE-9f3a7c21"
+    monkeypatch.setattr(
+        "onboard.sample_rows",
+        lambda dsn, table, n=5: [{"some_column": sentinel}],  # noqa: ARG005
+    )
+    cmd_extract("postgresql://x", tmp_path)
+    reply = '{"table": {"text": "mô tả", "confidence": "high"}, "columns": {}}'
+    cmd_annotate(tmp_path, "postgresql://x", invoke=lambda s, u: reply)  # noqa: ARG005
+    cmd_build(tmp_path, "postgresql://x", grants={"admin": frozenset({ALL_TABLES})})
+
     files = [p for p in tmp_path.rglob("*") if p.is_file()]
     blob = "".join(p.read_text(encoding="utf-8", errors="ignore") for p in files)
-    assert "sample_rows" not in blob
-    # Bất biến thật: write_profile ở BƯỚC NÀY chỉ sinh đúng ba file này.
-    # Đây không phải trần cho mọi thứ thư mục profile được phép chứa mãi
-    # mãi — một task sau ghi thêm report.md vào cùng thư mục là hợp lệ.
-    assert {p.name for p in files} == {PROFILE_JSON, STRUCTURE_JSON, SCHEMA_YAML}
+    assert sentinel not in blob
+    # Bất biến thật: chạy hết extract → annotate → build sinh đúng bốn file
+    # này — ba file `write_profile` ghi, cộng `schema.yaml.bak` (bản sao
+    # lưu nguyên tử của `cmd_annotate`, xem C1). Đây không phải trần cho
+    # mọi thứ thư mục profile được phép chứa mãi mãi — một task sau ghi
+    # thêm report.md vào cùng thư mục là hợp lệ.
+    assert {p.name for p in files} == {
+        PROFILE_JSON, STRUCTURE_JSON, SCHEMA_YAML, f"{SCHEMA_YAML}.bak",
+    }
 
 
 def test_the_schema_yaml_is_editable_by_hand(tmp_path):

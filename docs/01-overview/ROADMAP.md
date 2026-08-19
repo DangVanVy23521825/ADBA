@@ -202,6 +202,7 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Commit | Ngày | Tác giả | Nội dung |
 |---|---|---|---|
+| `0e1f02d` | 2026-08-19 | Đặng Văn Vỹ | docs: sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO |
 | `0e4c5bc` | 2026-08-19 | Đặng Văn Vỹ | feat(model): chế độ triển khai chặn egress, mặc định on-prem |
 | `53dec53` | 2026-08-16 | Đặng Văn Vỹ | docs: bộ tài liệu dự án + đường ống tự cập nhật theo commit |
 | `3d2b768` | 2026-08-15 | Đặng Văn Vỹ | chore: ignore .claude/worktrees/ (worktree cô lập) |
@@ -216,7 +217,6 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 | `8b38bfd` | 2026-05-19 | Đặng Văn Vỹ | Stop tracking training/checkpoint-50 LoRA weights (large binaries). |
 | `49f5159` | 2026-05-19 | Đặng Văn Vỹ | eval finetune Qlora |
 | `1ba1cce` | 2026-05-14 | Đặng Văn Vỹ | set up agents |
-| `f5ca80a` | 2026-03-27 | DangVanVy23521825 | model ready (baseline finetuning unable to be ready) |
 
 <!-- AUTO:end id=commit-history -->
 
@@ -224,10 +224,10 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `0e4c5bc` — feat(model): chế độ triển khai chặn egress, mặc định on-prem |
+| Commit nguồn gần nhất | `0e1f02d` — docs: sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-08-19 |
-| Số commit nguồn | 20 |
+| Số commit nguồn | 21 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

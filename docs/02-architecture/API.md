@@ -279,10 +279,10 @@ Khi lớp HTTP có thật, thêm vào `scripts/update_docs.py` một khối AUTO
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `0e4c5bc` — feat(model): chế độ triển khai chặn egress, mặc định on-prem |
+| Commit nguồn gần nhất | `0e1f02d` — docs: sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-08-19 |
-| Số commit nguồn | 20 |
+| Số commit nguồn | 21 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

@@ -82,6 +82,7 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 **Tài liệu**
 
+- sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO — `0e1f02d` (2026-08-19, Đặng Văn Vỹ)
 - bộ tài liệu dự án + đường ống tự cập nhật theo commit — `53dec53` (2026-08-16, Đặng Văn Vỹ)
 - plan triển khai — đường ống schema context (pha 0+1) — `642bc51` (2026-08-15, Đặng Văn Vỹ)
 - spec — tách permitted_tables khỏi retrieved_tables; ghi kết quả spike — `9bfeb37` (2026-08-15, Đặng Văn Vỹ)
@@ -142,10 +143,10 @@ Cập nhật `PRIMARY_MODEL` trong `.env`, `ollama pull <model>`, rồi chạy l
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `0e4c5bc` — feat(model): chế độ triển khai chặn egress, mặc định on-prem |
+| Commit nguồn gần nhất | `0e1f02d` — docs: sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-08-19 |
-| Số commit nguồn | 20 |
+| Số commit nguồn | 21 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

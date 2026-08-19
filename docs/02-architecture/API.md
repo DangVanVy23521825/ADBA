@@ -99,7 +99,7 @@ data  = client.invoke_json(system_prompt=..., user_prompt=...)  # -> dict, đã 
 |---|---|
 | Local-first | Gọi Ollama tại `OLLAMA_BASE_URL`, model `PRIMARY_MODEL` |
 | Retry | `MODEL_MAX_RETRIES` (mặc định 3) với backoff |
-| Fallback | OpenAI khi Ollama lỗi và `ENABLE_OPENAI_FALLBACK` bật |
+| Fallback | OpenAI khi Ollama lỗi, `ADBA_DEPLOYMENT=hybrid`, và `ENABLE_OPENAI_FALLBACK` bật. Mặc định `onprem` — không có gì rời khỏi mạng khách |
 | Parse JSON | `safe_parse_json()` bóc markdown fence; ném `ValueError` nếu không tìm được object JSON — **không** trả dict rỗng để lỗi im lặng |
 
 ## 2. Contract JSON giữa hệ thống và LLM

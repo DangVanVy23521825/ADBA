@@ -111,7 +111,7 @@ ADBA hiện thực hoá phần **multi-agent collaboration** của khung này.
   xuống mức 7B lượng tử hoá và context 4096 token.
 - **Context 4096 token** là ràng buộc thiết kế sâu nhất: `info_box` phải nén đủ để vừa cùng
   câu hỏi, plan và lịch sử hành động. Đây là lý do có perception layer thay vì nhét cả DDL.
-- **Không phụ thuộc API ngoài**: OpenAI chỉ là fallback, tắt được bằng `ENABLE_OPENAI_FALLBACK=0`.
+- **Không phụ thuộc API ngoài**: mặc định `ADBA_DEPLOYMENT=onprem` chặn mọi lời gọi model ngoài. OpenAI chỉ khả dụng khi đặt `hybrid` một cách tường minh — một quyết định thương mại, không phải mặc định.
 
 ## 5. User Personas
 

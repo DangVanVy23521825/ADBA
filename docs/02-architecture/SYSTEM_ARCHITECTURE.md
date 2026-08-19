@@ -110,7 +110,7 @@ trong khi dữ liệu là `'Miền Bắc'` — lỗi im lặng trả về 0 dòn
 | `seaborn` | `>=0.13.0` | Style biểu đồ | Chỉ dùng theme `seaborn-v0_8-whitegrid` cho đồng nhất |
 | `scipy` | `>=1.11.0` | Thống kê phát hiện bất thường (z-score, IQR) | Có sẵn hàm kiểm định, không cần tự cài đặt |
 | `pydantic` | `>=2.0.0` | Contract cho output LLM | Ranh giới an toàn: plan có chu trình / insight sai định dạng bị chặn tại validate thay vì nổ giữa pipeline |
-| `openai` | `>=1.30.0` | Fallback khi Ollama lỗi | Giữ hệ thống trả lời được khi model cục bộ chết; tắt được bằng `ENABLE_OPENAI_FALLBACK=0` cho triển khai kín |
+| `openai` | `>=1.30.0` | Fallback khi Ollama lỗi | Chỉ dùng khi `ADBA_DEPLOYMENT=hybrid`. Mặc định (`onprem`) chặn hẳn: prompt agent `sql` mang schema, chú giải nghiệp vụ và câu hỏi thật của khách |
 | `streamlit` | `>=1.35.0` | UI chat + bảng + biểu đồ | Một file Python ra được UI có state; React/FastAPI tốn công gấp nhiều lần cho cùng phạm vi demo |
 | `ragas` | `>=0.1.0` | Đánh giá chất lượng sinh | Bộ metric có sẵn cho đánh giá đầu ra LLM |
 | `faker` | `—` | Sinh dữ liệu seed tiếng Việt | Có locale vi_VN — tên/địa chỉ thật hợp cảnh dữ liệu doanh nghiệp Việt Nam |
@@ -274,7 +274,8 @@ kèm giá trị thật; `env.example` là bản mẫu.
 |---|---|---|---|
 | `BACKUP_MODEL` | `"llama3.1:8b-instruct-q4_K_M"` | ✅ | `model/model_config.py` |
 | `DATABASE_URL` | `os.getenv("POSTGRES_URL", "postgresql://adba_user:adba@localhost:5432/adba_db"` | — | `data/seed/seed_data.py`, `graph/tools/sql_tool.py`, `perception/extract_info_box.py` (+2) |
-| `ENABLE_OPENAI_FALLBACK` | `"1"` | ✅ | `model/model_client.py` |
+| `ADBA_DEPLOYMENT` | `"onprem"` | ✅ | `model/model_config.py` |
+| `ENABLE_OPENAI_FALLBACK` | `"1"` — nhưng chỉ có tác dụng khi `ADBA_DEPLOYMENT=hybrid` | ✅ | `model/model_client.py` |
 | `EVAL_MODEL` | `"qwen2.5-coder:7b-instruct-q5_K_M"` | — | `eval/eval_runner.py` |
 | `IMAGE_TAG` | — | ✅ | _chỉ có trong `env.example`_ |
 | `LOG_DIR` | — | ✅ | _chỉ có trong `env.example`_ |
@@ -312,7 +313,7 @@ kèm giá trị thật; `env.example` là bản mẫu.
 |---|---|---|
 | Kết nối DB | `POSTGRES_URL` / `DATABASE_URL` | `sql_tool` đọc `DATABASE_URL` trước, rồi mới tới `POSTGRES_URL` |
 | Model | `PRIMARY_MODEL`, `OLLAMA_BASE_URL`, `OLLAMA_NUM_CTX` | Đặt `OLLAMA_NUM_CTX=4096`; thấp hơn sẽ cắt cụt `info_box` và plan |
-| Fallback | `OPENAI_API_KEY`, `ENABLE_OPENAI_FALLBACK` | Đặt `0` cho triển khai kín |
+| Fallback | `ADBA_DEPLOYMENT`, `OPENAI_API_KEY`, `ENABLE_OPENAI_FALLBACK` | Mặc định `ADBA_DEPLOYMENT=onprem` chặn mọi lời gọi ra ngoài; đặt `hybrid` để mở, và chỉ khi khách đã đồng ý |
 | An toàn | `SQL_TIMEOUT_MS`, `PANDAS_EXEC_TIMEOUT_SECONDS` | Hai trần cứng duy nhất hiện có; ngân sách toàn cục thuộc M3.2 |
 | Ảnh | `IMAGE_TAG` | Ghim sha, không dùng `latest` trên production |
 

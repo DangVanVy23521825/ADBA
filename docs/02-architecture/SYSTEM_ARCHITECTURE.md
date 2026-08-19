@@ -110,7 +110,7 @@ trong khi dữ liệu là `'Miền Bắc'` — lỗi im lặng trả về 0 dòn
 | `seaborn` | `>=0.13.0` | Style biểu đồ | Chỉ dùng theme `seaborn-v0_8-whitegrid` cho đồng nhất |
 | `scipy` | `>=1.11.0` | Thống kê phát hiện bất thường (z-score, IQR) | Có sẵn hàm kiểm định, không cần tự cài đặt |
 | `pydantic` | `>=2.0.0` | Contract cho output LLM | Ranh giới an toàn: plan có chu trình / insight sai định dạng bị chặn tại validate thay vì nổ giữa pipeline |
-| `openai` | `>=1.30.0` | Fallback khi Ollama lỗi | Giữ hệ thống trả lời được khi model cục bộ chết; tắt được bằng `ENABLE_OPENAI_FALLBACK=0` cho triển khai kín |
+| `openai` | `>=1.30.0` | Fallback khi Ollama lỗi | Chỉ dùng khi `ADBA_DEPLOYMENT=hybrid`. Mặc định (`onprem`) chặn hẳn: prompt agent `sql` mang schema, chú giải nghiệp vụ và câu hỏi thật của khách |
 | `streamlit` | `>=1.35.0` | UI chat + bảng + biểu đồ | Một file Python ra được UI có state; React/FastAPI tốn công gấp nhiều lần cho cùng phạm vi demo |
 | `ragas` | `>=0.1.0` | Đánh giá chất lượng sinh | Bộ metric có sẵn cho đánh giá đầu ra LLM |
 | `faker` | `—` | Sinh dữ liệu seed tiếng Việt | Có locale vi_VN — tên/địa chỉ thật hợp cảnh dữ liệu doanh nghiệp Việt Nam |

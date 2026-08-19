@@ -503,3 +503,106 @@ def test_the_missing_structure_message_never_carries_the_dsn(tmp_path):
         _load_structure(tmp_path / "chua-extract")
 
     assert "postgresql://" not in str(excinfo.value)
+
+
+# ── C1: annotate không được xoá công sức người khi extract hỏng ─────────────
+#
+# Ruling B5 phán rằng điều kiện "`fresh` phải phủ toàn bộ schema" thuộc về
+# NƠI GỌI, và nó được mang vào `cmd_refresh`. Nhưng `cmd_annotate` CŨNG là
+# một nơi gọi — nó là bước 2 trong công thức ba lệnh mà chính app.py in ra —
+# và nó không có chốt chặn nào. Review toàn nhánh tái lập được: một
+# `structure.json` rỗng biến hai tuần công sức của analyst thành `{}`, kèm
+# một thông báo mang hình dạng THÀNH CÔNG.
+
+
+def _profile_with_human_work(tmp_path):
+    """Thư mục profile có chú giải người, và một `structure.json` RỖNG."""
+    from perception.annotations import Annotation, SchemaAnnotations, save_annotations
+
+    (tmp_path / STRUCTURE_JSON).write_text("[]", encoding="utf-8")
+    save_annotations(
+        SchemaAnnotations(
+            tables={"orders": Annotation("NGƯỜI VIẾT", reviewed_by="human")},
+            columns={"orders": {"flg_tt": Annotation("CỘT NGƯỜI", reviewed_by="human")}},
+        ),
+        tmp_path / "schema.yaml",
+    )
+    return (tmp_path / "schema.yaml").read_text(encoding="utf-8")
+
+
+def test_annotate_refuses_when_structure_is_empty_but_annotations_exist(tmp_path):
+    from onboard import OnboardError
+
+    raw_before = _profile_with_human_work(tmp_path)
+
+    with pytest.raises(OnboardError) as excinfo:
+        cmd_annotate(tmp_path, "postgresql://u:p@h/db", invoke=lambda s, u: "{}")  # noqa: ARG005
+
+    assert "structure.json" in str(excinfo.value)
+    assert (tmp_path / "schema.yaml").read_text(encoding="utf-8") == raw_before, (
+        "phải chặn TRƯỚC khi ghi, không phải cảnh báo sau khi đã ghi đè"
+    )
+
+
+def test_annotate_force_lets_a_deliberate_operator_through(tmp_path):
+    """Khách xoá thật hơn nửa số bảng thì vẫn phải có đường đi tiếp."""
+    _profile_with_human_work(tmp_path)
+
+    cmd_annotate(
+        tmp_path,
+        "postgresql://u:p@h/db",
+        invoke=lambda s, u: "{}",  # noqa: ARG005
+        force=True,
+    )
+
+    assert load_annotations(tmp_path / "schema.yaml").tables == {}
+
+
+def test_annotate_still_works_normally_when_the_schema_is_intact(tmp_path, monkeypatch):
+    """Chốt chặn không được cản đường chạy bình thường."""
+    monkeypatch.setattr("onboard.introspect_schema", lambda dsn, **kw: MINI_TABLES)  # noqa: ARG005
+    monkeypatch.setattr("onboard.sample_rows", lambda dsn, table, n=5: [])  # noqa: ARG005
+    cmd_extract("postgresql://u:p@h/db", tmp_path)
+
+    reply = '{"table": {"text": "mô tả", "confidence": "high"}, "columns": {}}'
+    cmd_annotate(tmp_path, "postgresql://u:p@h/db", invoke=lambda s, u: reply)  # noqa: ARG005
+
+    assert load_annotations(tmp_path / "schema.yaml").tables["orders"].text == "mô tả"
+
+
+# ── C2: DSN gõ sai không được đẩy mật khẩu ra console ───────────────────────
+#
+# libpq echo NGUYÊN chuỗi kết nối khi DSN không đúng hình dạng URI:
+#   invalid dsn: missing "=" after "postgres//u:pw@h/db" in connection info string
+# Ngòi nổ là một lỗi gõ tầm thường, và mật khẩu production rơi vào terminal,
+# scrollback, log CI, rồi ticket hỗ trợ — đúng kênh mà profile_store đã bịt,
+# chỉ khác một tầng.
+
+_SECRET = "hunter2SECRET"
+
+
+@pytest.mark.parametrize(
+    "bad_dsn",
+    [
+        f"postgres//u:{_SECRET}@h/db",  # thiếu dấu hai chấm
+        f"u:{_SECRET}@h/db",  # không có scheme
+        f"postgresql://u:{_SECRET}@",  # không có host
+    ],
+)
+def test_a_malformed_dsn_is_rejected_without_echoing_the_password(bad_dsn):
+    from onboard import OnboardError, _resolve_dsn
+
+    with pytest.raises(OnboardError) as excinfo:
+        _resolve_dsn(bad_dsn)
+
+    message = str(excinfo.value)
+    assert _SECRET not in message, "mật khẩu không được xuất hiện trong thông báo lỗi"
+    assert bad_dsn not in message, "cả DSN cũng không được in ra"
+    assert "ADBA_DSN" in message, "phải nói rõ kiểm biến môi trường nào"
+
+
+def test_a_well_formed_dsn_passes_through_unchanged():
+    from onboard import _resolve_dsn
+
+    good = f"postgresql://u:{_SECRET}@h:5432/db"
+    assert _resolve_dsn(good) == good

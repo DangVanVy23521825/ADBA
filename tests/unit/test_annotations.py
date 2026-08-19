@@ -247,6 +247,54 @@ def test_load_rejects_bad_reviewed_by_on_table_annotation(tmp_path: Path):
     assert "orders" in message
 
 
+# ── C1: ghi schema.yaml nguyên tử, giữ một bản .bak ─────────────────────────
+
+def test_first_write_creates_no_backup(tmp_path: Path):
+    """Lần ghi đầu tiên không có gì để sao lưu — không được tự bịa ra một
+    file .bak thừa (phá test đếm số file trong profile/)."""
+    path = tmp_path / "schema.yaml"
+    save_annotations(_sample(), path)
+    assert path.exists()
+    assert not (tmp_path / "schema.yaml.bak").exists()
+
+
+def test_second_write_backs_up_the_previous_content(tmp_path: Path):
+    path = tmp_path / "schema.yaml"
+    first = SchemaAnnotations(tables={"orders": _ann("bản đầu", reviewed_by="human")})
+    save_annotations(first, path)
+    first_content = path.read_text(encoding="utf-8")
+
+    second = SchemaAnnotations(tables={"orders": _ann("bản hai", reviewed_by="human")})
+    save_annotations(second, path)
+
+    backup_path = tmp_path / "schema.yaml.bak"
+    assert backup_path.exists()
+    assert backup_path.read_text(encoding="utf-8") == first_content
+    assert load_annotations(path).tables["orders"].text == "bản hai"
+
+
+def test_backup_is_the_single_previous_version_not_a_history(tmp_path: Path):
+    """Chỉ MỘT bản .bak — ghi đè lần lượt, không tích luỹ theo số thứ tự."""
+    path = tmp_path / "schema.yaml"
+    for i in range(3):
+        save_annotations(
+            SchemaAnnotations(tables={"orders": _ann(f"bản {i}", reviewed_by="human")}), path
+        )
+    backup_path = tmp_path / "schema.yaml.bak"
+    assert load_annotations(backup_path).tables["orders"].text == "bản 1"
+    assert load_annotations(path).tables["orders"].text == "bản 2"
+    assert not (tmp_path / "schema.yaml.bak.bak").exists()
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["schema.yaml", "schema.yaml.bak"]
+
+
+def test_write_does_not_leave_a_stray_tmp_file_behind(tmp_path: Path):
+    path = tmp_path / "schema.yaml"
+    save_annotations(_sample(), path)
+    save_annotations(_sample(), path)
+    names = {p.name for p in tmp_path.iterdir()}
+    assert names == {"schema.yaml", "schema.yaml.bak"}
+
+
 def test_load_rejects_bad_confidence_on_column_annotation(tmp_path: Path):
     path = tmp_path / "schema.yaml"
     path.write_text(

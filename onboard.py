@@ -16,9 +16,13 @@ import argparse
 import json
 import os
 import sys
+import urllib.parse
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypeVar
+
+import psycopg2
 
 from model.model_client import ModelClient
 from perception.annotate import annotate_schema
@@ -35,12 +39,15 @@ from perception.introspect import introspect_schema, sample_rows
 from perception.profile_store import (
     SCHEMA_YAML,
     STRUCTURE_JSON,
+    dsn_host_for_error,
     read_profile,
     structure_from_plain,
     structure_to_plain,
     write_profile,
 )
 from perception.schema_model import Table
+
+_T = TypeVar("_T")
 
 DSN_ENV_VAR = "ADBA_DSN"
 
@@ -62,9 +69,41 @@ class OnboardError(RuntimeError):
 OLLAMA_ENV_VAR = "OLLAMA_BASE_URL"
 
 
+def _run_db_call(dsn: str, step: str, call: Callable[[], _T]) -> _T:
+    """Chạy một lệnh gọi DB (`introspect_schema`/`sample_rows`), bọc lỗi kết
+    nối thành `OnboardError` chỉ nêu HOST — không bao giờ DSN hay mật khẩu.
+
+    `main()` chỉ bắt `OnboardError` (xem docstring class đó); không có gì
+    ở đây thì một lỗi kết nối từ `psycopg2` thoát ra thành traceback trần.
+    Với DSN không đúng dạng URI, libpq/psycopg2 echo NGUYÊN VĂN chuỗi DSN
+    vào thông báo lỗi parse (`invalid dsn: missing "=" after "..." in
+    connection info string`) — nếu DSN đó mang mật khẩu, mật khẩu lộ ra
+    console/lịch sử shell/log CI/ticket hỗ trợ. `onboard._resolve_dsn` đã
+    chặn hình dạng đó từ trước khi tới đây (C2), nhưng khối `except` này
+    vẫn tồn tại làm lớp phòng thủ thứ hai cho MỌI lỗi `psycopg2` khác (host
+    không resolve được, sai port, bị từ chối kết nối, ...) — những lỗi đó
+    tự thân thường không mang mật khẩu, nhưng vẫn phải biến thành
+    `OnboardError` để không thoát ra thành traceback trần.
+
+    Dùng `perception.profile_store.dsn_host_for_error` để lấy host — CHUNG
+    kỹ thuật với `_strip_password` (chỉ đọc `.hostname`/`.port` từ
+    `urlsplit`), không phát minh cách bóc credential thứ hai.
+    """
+    try:
+        return call()
+    except psycopg2.Error as e:
+        host = dsn_host_for_error(dsn)
+        raise OnboardError(
+            f"Không kết nối được database lúc {step} (host {host}): "
+            f"{type(e).__name__}. Kiểm tra host/port, mạng, và rằng "
+            "Postgres đang chạy tại đó. Không in DSN ở đây vì nó có thể "
+            "mang mật khẩu."
+        ) from e
+
+
 def cmd_extract(dsn: str, profile_dir: Path | str) -> tuple[Table, ...]:
     """Đọc cấu trúc DB, ghi `structure.json`. Không đụng tới chú giải."""
-    tables = introspect_schema(dsn)
+    tables = _run_db_call(dsn, "extract", lambda: introspect_schema(dsn))
     d = Path(profile_dir)
     d.mkdir(parents=True, exist_ok=True)
     (d / STRUCTURE_JSON).write_text(
@@ -132,10 +171,124 @@ def _with_progress(
     return wrapped
 
 
+# Ngưỡng "co ngót nhiều" cho `_guarded_merge` (C1). `fresh` phải, theo đúng
+# tinh thần docstring của `merge_annotations`, phủ toàn bộ schema hiện có —
+# nếu nó chỉ còn phủ CHƯA ĐẾN MỘT NỬA số bảng mà `schema.yaml` đang biết
+# tới, đó gần như chắc chắn là một lượt `extract` hỏng (ADBA_DSN trỏ nhầm
+# DB rỗng/staging, nhầm schema ngoài `public`), không phải khách hàng vừa
+# xoá thật hơn một nửa số bảng của họ trong một lượt. 0.5 chọn có chủ đích:
+# một đợt dọn dẹp/loại bỏ bảng deprecated thật sự hiếm khi chạm mốc này
+# trong một lần chạy, còn trỏ nhầm DB thì luôn chạm (thường về 0). So trên
+# TỔNG SỐ BẢNG trong `schema.yaml` hiện có — không lọc riêng mục `human` —
+# vì đây là một chốt chặn RẺ, chạy TRƯỚC khi ghép, lúc chưa biết trong số
+# bị mất có bao nhiêu là `human`; biết được điều đó đòi hỏi đã ghép xong,
+# tức đã quá muộn để "chặn trước khi ghi" (yêu cầu C1).
+SHRINK_ABORT_RATIO = 0.5
+
+
+def _human_entries(ann: SchemaAnnotations) -> tuple[frozenset[str], frozenset[tuple[str, str]]]:
+    """Tập (bảng, cột) có `reviewed_by == human` trong `ann`."""
+    tables = frozenset(name for name, a in ann.tables.items() if a.reviewed_by == HUMAN)
+    columns = frozenset(
+        (table, col)
+        for table, cols in ann.columns.items()
+        for col, a in cols.items()
+        if a.reviewed_by == HUMAN
+    )
+    return tables, columns
+
+
+def _preserved_and_dropped(before: SchemaAnnotations, merged: SchemaAnnotations) -> tuple[int, int]:
+    """Đếm mục `human` của `before` còn sống sót (và bị loại) trong `merged`.
+
+    Một mục `human` trong `before` mà tên bảng/cột của nó vẫn còn mặt trong
+    `merged` CHẮC CHẮN vẫn là `human` sau khi ghép — `merge_annotations`
+    luôn giữ nguyên mục `existing` khi nó là `human` (quy tắc ghép, không
+    đổi ở đây) — nên chỉ cần kiểm tra còn mặt hay không, không cần đọc lại
+    `reviewed_by` của `merged`.
+    """
+    before_tables, before_columns = _human_entries(before)
+    merged_table_names = frozenset(merged.tables)
+    merged_columns = frozenset(
+        (table, col) for table, cols in merged.columns.items() for col in cols
+    )
+    preserved = (
+        len(before_tables & merged_table_names) + len(before_columns & merged_columns)
+    )
+    dropped = len(before_tables) + len(before_columns) - preserved
+    return preserved, dropped
+
+
+def _report_dropped(dropped: int) -> None:
+    if dropped > 0:
+        print(
+            f"CẢNH BÁO: {dropped} mục do người duyệt bị loại vì bảng/cột "
+            "tương ứng không còn trong schema."
+        )
+
+
+def _guarded_merge(
+    existing: SchemaAnnotations, fresh: SchemaAnnotations, *, force: bool
+) -> tuple[SchemaAnnotations, int, int]:
+    """Ghép chú giải, CHẶN LẠI trước khi ghi nếu `fresh` trông như một lượt
+    extract hỏng chứ không phải một schema thật sự co lại. Trả
+    `(merged, preserved, dropped)`.
+
+    `merge_annotations` (không đổi ở đây — xem Constraints) đòi hỏi `fresh`
+    phủ toàn bộ schema và TỰ NÓ không kiểm tra điều đó; nó xoá mọi mục
+    (kể cả `human`) vắng mặt trong `fresh`, theo đúng docstring của nó. Một
+    `ADBA_DSN` trỏ nhầm (DB rỗng, staging, sai schema ngoài `public` —
+    `introspect_schema` hardcode `schema="public"`) khiến `extract` ghi
+    `structure.json` rỗng hoặc thiếu, và từ đó `fresh` cũng rỗng/thiếu theo
+    — hàm này là chốt chặn cho đúng chuỗi nhân quả đó, KHÔNG thay quy tắc
+    ghép.
+
+    Hai trường hợp bị chặn khi `force=False` VÀ `existing` không rỗng:
+      1. `fresh` rỗng hoàn toàn (`structure.json` rỗng) — luôn chặn.
+      2. `fresh` phủ chưa tới `SHRINK_ABORT_RATIO` số bảng `existing` đang
+         có — chặn ("co ngót nhiều", xem hằng số ở trên).
+    `force=True` bỏ qua cả hai, cho operator biết chủ đích một đường đi
+    qua — đúng lúc họ THẬT SỰ vừa xoá phần lớn schema.
+    """
+    existing_table_count = len(existing.tables)
+    fresh_table_count = len(fresh.tables)
+
+    if not force and existing_table_count > 0:
+        if fresh_table_count == 0:
+            raise OnboardError(
+                "Từ chối ghép chú giải: structure.json hiện có 0 bảng, "
+                f"trong khi schema.yaml đang có {existing_table_count} bảng "
+                "đã chú giải (kể cả mục người duyệt). Ghép sẽ XOÁ TOÀN BỘ "
+                "chú giải hiện có. Đây gần như chắc chắn là ADBA_DSN trỏ "
+                "nhầm (DB rỗng, môi trường staging, hoặc schema ngoài "
+                "'public') chứ không phải khách hàng vừa xoá sạch bảng. "
+                f"Kiểm tra biến môi trường {DSN_ENV_VAR}, chạy lại `extract` "
+                "rồi `annotate`. Nếu bảng thật sự đã bị xoá hết, chạy lại "
+                "`annotate` với --force."
+            )
+        if fresh_table_count < existing_table_count * SHRINK_ABORT_RATIO:
+            raise OnboardError(
+                f"Từ chối ghép chú giải: structure.json chỉ còn "
+                f"{fresh_table_count} bảng, giảm hơn một nửa so với "
+                f"{existing_table_count} bảng schema.yaml đang có chú giải. "
+                "Ghép sẽ xoá chú giải của mọi bảng biến mất, kể cả mục "
+                f"người duyệt. Kiểm tra biến môi trường {DSN_ENV_VAR} — đây "
+                "thường là dấu hiệu trỏ nhầm DB/schema, không phải một đợt "
+                "xoá bảng thật sự lớn. Nếu đây đúng là chủ đích, chạy lại "
+                "`annotate` với --force."
+            )
+
+    merged = merge_annotations(existing, fresh)
+    preserved, dropped = _preserved_and_dropped(existing, merged)
+    return merged, preserved, dropped
+
+
 def cmd_annotate(
     profile_dir: Path | str,
     dsn: str,
     invoke: Callable[[str, str], str] = _local_invoke,
+    *,
+    force: bool = False,
 ) -> SchemaAnnotations:
     """Sinh chú giải và ghép vào bản đang có, giữ nguyên mục người sửa.
 
@@ -145,20 +298,31 @@ def cmd_annotate(
     bảng lỗi không được phép giết cả lượt chạy 150 bảng), hàm này phải tự
     báo cáo tiến độ VÀ số lượng thất bại; im lặng ở đây có thể biến một địa
     chỉ Ollama gõ sai thành 150 chú giải rỗng được báo là thành công.
+
+    `force`: bỏ qua chốt chặn "fresh co ngót nhiều" của `_guarded_merge`
+    (C1) — xem docstring hàm đó. Mặc định `False`: an toàn hơn là tiện lợi,
+    vì hậu quả của việc đoán sai (ghi đè hàng tuần công sức duyệt) không
+    đảo ngược được, còn hậu quả của việc chặn nhầm chỉ là chạy lại với
+    `--force`.
     """
     d = Path(profile_dir)
     tables = _load_structure(d)
     total = len(tables)
-    samples = {t.name: sample_rows(dsn, t.name, n=3) for t in tables}
+    samples = {
+        t.name: _run_db_call(dsn, f"lấy mẫu bảng {t.name}", lambda t=t: sample_rows(dsn, t.name, n=3))
+        for t in tables
+    }
 
     tracked_invoke = _with_progress(invoke, tables)
     fresh, failures = annotate_schema(tables, samples, tracked_invoke)
-    merged = merge_annotations(load_annotations(d / SCHEMA_YAML), fresh)
+    existing = load_annotations(d / SCHEMA_YAML)
+    merged, _preserved, dropped = _guarded_merge(existing, fresh, force=force)
     save_annotations(merged, d / SCHEMA_YAML)
 
     pending = pending_review(merged)
     print(f"Chú giải xong {total} bảng. {len(pending)} mục cần người duyệt.")
     print(f"Thất bại: {failures}/{total} bảng.")
+    _report_dropped(dropped)
     if total > 0 and failures == total:
         print(
             "CẢNH BÁO: toàn bộ bảng chú giải thất bại — đây là dấu hiệu "
@@ -422,6 +586,8 @@ def cmd_refresh(
     profile_dir: Path | str,
     dsn: str,
     invoke: Callable[[str, str], str] = _local_invoke,
+    *,
+    force: bool = False,
 ) -> tuple[int, int]:
     """Đọc lại cấu trúc, chú giải lại, ghép vào bản cũ.
 
@@ -431,13 +597,21 @@ def cmd_refresh(
     nên nó không được phóng đại.
 
     Vì lẽ đó, `preserved` được đếm từ KẾT QUẢ SAU KHI GHÉP (`merged`), không
-    phải từ `before` (chú giải trước khi ghép). `merge_annotations` loại bỏ
-    những mục mà bảng/cột của chúng không còn trong schema mới, kể cả mục
-    `human` — đếm từ `before` sẽ báo "giữ nguyên" cho những mục vừa bị xoá,
-    đúng lúc thông báo này tồn tại để làm bằng chứng KHÔNG bị mất. Số mục
-    `human` bị loại vì bảng/cột đã biến mất được đếm riêng (`dropped`) và chỉ
-    in ra khi khác 0 — im lặng khi không có gì bị loại là đúng, che giấu khi
-    có thứ bị loại thì không.
+    phải từ `before` (chú giải trước khi ghép) — xem `_preserved_and_dropped`
+    (shared với `cmd_annotate`, C1). `merge_annotations` loại bỏ những mục mà
+    bảng/cột của chúng không còn trong schema mới, kể cả mục `human` — đếm
+    từ `before` sẽ báo "giữ nguyên" cho những mục vừa bị xoá, đúng lúc thông
+    báo này tồn tại để làm bằng chứng KHÔNG bị mất.
+
+    Dòng cảnh báo "N mục bị loại" KHÔNG được in ở đây nữa — nó đã in bên
+    trong `cmd_annotate` (được gọi ngay dưới), qua `_report_dropped`, dùng
+    CHÍNH giá trị `existing`/`merged` này. In lại ở đây sẽ trùng lặp dòng
+    đó trong output của một lượt `refresh`.
+
+    `force` được CHUYỂN THẲNG xuống `cmd_annotate`: `refresh` tự nó cũng có
+    thể trúng đúng lỗi C1 (nếu ADBA_DSN trỏ nhầm ngay lúc refresh, `extract`
+    bên trong ghi `structure.json` rỗng/thiếu) — không có lý do để `refresh`
+    miễn nhiễm với chốt chặn mà `annotate` đứng riêng phải tuân theo.
 
     Đọc `before` PHẢI xảy ra trước `cmd_extract`: `cmd_extract` ghi đè
     `structure.json`, và sau đó không còn cách nào so sánh với schema cũ.
@@ -449,43 +623,34 @@ def cmd_refresh(
 
     d = Path(profile_dir)
     before = load_annotations(d / SCHEMA_YAML)
-    before_human_tables = {
-        name for name, a in before.tables.items() if a.reviewed_by == HUMAN
-    }
-    before_human_columns = {
-        (table, col)
-        for table, cols in before.columns.items()
-        for col, a in cols.items()
-        if a.reviewed_by == HUMAN
-    }
 
     cmd_extract(dsn, d)
-    merged = cmd_annotate(d, dsn, invoke=invoke)
+    merged = cmd_annotate(d, dsn, invoke=invoke, force=force)
 
-    preserved_tables = {
-        name for name in before_human_tables
-        if name in merged.tables and merged.tables[name].reviewed_by == HUMAN
-    }
-    preserved_columns = {
-        (table, col) for table, col in before_human_columns
-        if col in merged.columns.get(table, {})
-        and merged.columns[table][col].reviewed_by == HUMAN
-    }
-    preserved = len(preserved_tables) + len(preserved_columns)
-    dropped = (
-        len(before_human_tables) + len(before_human_columns) - preserved
-    )
-
+    preserved, _dropped = _preserved_and_dropped(before, merged)
     print(f"Giữ nguyên {preserved} mục do người duyệt.")
-    if dropped > 0:
-        print(
-            f"CẢNH BÁO: {dropped} mục do người duyệt bị loại vì bảng/cột "
-            "tương ứng không còn trong schema."
-        )
     return len(merged.tables), preserved
 
 
 def _resolve_dsn(cli_dsn: str | None) -> str:
+    """Lấy DSN từ `--dsn` hoặc `ADBA_DSN`, và xác nhận nó ĐÚNG DẠNG URI.
+
+    Kiểm tra hình dạng ở ĐÂY, TRƯỚC khi bất kỳ lệnh con nào đưa DSN xuống
+    `psycopg2.connect` (C2). Một DSN không đúng dạng URI (thiếu `scheme://`
+    — vd. lỗi gõ `postgres//...` thay vì `postgresql://...`, một khoảng
+    trắng thừa, một artefact copy-paste) khiến libpq/psycopg2 dùng cú pháp
+    `key=value` cổ để parse, và khi cú pháp đó cũng không khớp, nó echo
+    NGUYÊN VĂN chuỗi DSN vào thông báo lỗi (`invalid dsn: missing "=" after
+    "..." in connection info string`) — nếu DSN mang mật khẩu, mật khẩu đó
+    lộ ra console, lịch sử shell, log CI, và bất cứ đâu operator paste
+    thông báo lỗi đó vào (vd. một ticket hỗ trợ). Một DSN URI-shaped với
+    port/query sai KHÔNG lộ theo cách này (xem test); nên chỉ hình dạng
+    không phải URI mới cần chặn ở đây.
+
+    Thông báo lỗi không lặp lại DSN (đang cầm sẵn nó mới gọi lệnh, không
+    cần nhắc lại) và không đoán mật khẩu là gì — chỉ nói ĐÚNG biến môi
+    trường cần kiểm tra và hình dạng đúng phải có.
+    """
     dsn = cli_dsn or os.environ.get(DSN_ENV_VAR)
     if not dsn:
         print(
@@ -495,6 +660,17 @@ def _resolve_dsn(cli_dsn: str | None) -> str:
             file=sys.stderr,
         )
         sys.exit(1)
+
+    parts = urllib.parse.urlsplit(dsn)
+    if not parts.scheme or not parts.hostname:
+        raise OnboardError(
+            f"DSN không đúng dạng URI (thiếu 'scheme://' hoặc host). Kiểm "
+            f"tra biến môi trường {DSN_ENV_VAR} (hoặc cờ --dsn nếu dùng nó): "
+            "DSN phải có dạng 'postgresql://user:password@host:port/dbname'. "
+            "Không in lại DSN ở đây vì nó có thể mang mật khẩu — lỗi gõ "
+            "thường gặp nhất là thiếu dấu ':' trong 'postgresql://' "
+            "(vd. gõ nhầm 'postgres//...')."
+        )
     return dsn
 
 
@@ -522,6 +698,15 @@ def main() -> None:
 
     p_annotate = sub.add_parser("annotate", help="sinh chú giải bằng model local")
     _add_dsn_profile_args(p_annotate)
+    p_annotate.add_argument(
+        "--force",
+        action="store_true",
+        help=(
+            "bỏ qua chốt chặn khi structure.json rỗng hoặc co ngót nhiều so "
+            "với schema.yaml đang có (xem OnboardError khi không có cờ này) — "
+            "chỉ dùng khi bảng thật sự đã bị xoá phần lớn, có chủ đích"
+        ),
+    )
 
     p_build = sub.add_parser("build", help="dựng profile từ cấu trúc + chú giải")
     _add_dsn_profile_args(p_build)
@@ -544,6 +729,11 @@ def main() -> None:
 
     p_refresh = sub.add_parser("refresh", help="đọc lại schema và chú giải phần mới")
     _add_dsn_profile_args(p_refresh)
+    p_refresh.add_argument(
+        "--force",
+        action="store_true",
+        help="như --force của `annotate` — refresh gọi cmd_annotate bên trong, cùng chốt chặn",
+    )
 
     args = ap.parse_args()
     try:
@@ -564,7 +754,7 @@ def _dispatch(args) -> None:
     if args.cmd == "extract":
         cmd_extract(dsn, args.profile)
     elif args.cmd == "annotate":
-        cmd_annotate(args.profile, dsn)
+        cmd_annotate(args.profile, dsn, force=args.force)
     elif args.cmd == "build":
         grants = {}
         for spec in args.grant:
@@ -590,7 +780,7 @@ def _dispatch(args) -> None:
         report = cmd_verify(args.profile, args.golden, args.user, k=args.k)
         raise SystemExit(0 if report.passed else 1)
     elif args.cmd == "refresh":
-        cmd_refresh(args.profile, dsn)
+        cmd_refresh(args.profile, dsn, force=args.force)
 
 
 if __name__ == "__main__":

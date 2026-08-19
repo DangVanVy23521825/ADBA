@@ -30,6 +30,7 @@ bị đọc sai (và mật khẩu rơi nguyên dạng vào path/query/fragment) 
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import os
 import urllib.parse
@@ -60,6 +61,29 @@ PASSWORD_ENV_VAR = "ADBA_DB_PASSWORD"
 def _host_port(parts: urllib.parse.SplitResult) -> str:
     host = parts.hostname or ""
     return f"{host}:{parts.port}" if parts.port is not None else host
+
+
+def dsn_host_for_error(dsn: str) -> str:
+    """`host[:port]` của một DSN, KHÔNG BAO GIỜ username hay mật khẩu.
+
+    Dùng bởi `onboard.py` khi một lệnh gọi DB thất bại và cần nêu DSN nào
+    trong thông báo lỗi (traceback bị bọc thành `OnboardError`, xem C2):
+    thông báo phải nói được HOST nào đang có vấn đề mà không lặp lại toàn
+    bộ DSN — chính chỗ mật khẩu có thể lộ ra (libpq echo nguyên DSN vào lỗi
+    parse khi nó không đúng dạng `key=value` cổ).
+
+    Dùng CHUNG kỹ thuật với `_strip_password`: chỉ đọc `.hostname`/`.port`
+    từ `urlsplit`, không bao giờ chạm `.username`/`.password`. Nếu DSN
+    không parse được thành URI có host (đáng lẽ không tới đây, vì
+    `onboard._resolve_dsn` đã chặn từ trước — nhưng hàm này không được tự
+    nó là nguồn traceback mới khi gọi từ một khối `except`), trả `"?"` thay
+    vì ném lỗi.
+    """
+    try:
+        parts = urllib.parse.urlsplit(dsn)
+        return _host_port(parts) or "?"
+    except Exception:
+        return "?"
 
 
 def _strip_password(dsn: str) -> tuple[str, bool]:
@@ -235,6 +259,34 @@ def read_profile(directory: Path | str) -> ConnectionProfile:
     cờ là False, hoặc vì biến môi trường chưa set — hàm này không lỗi; nó
     trả DSN đọc từ đĩa nguyên vẹn, vì có nơi gọi `read_profile` chỉ để đọc
     cấu trúc/grants, không bao giờ mở kết nối.
+
+    `schema_mode` LẤY TỪ `profile.json`, KHÔNG được recompute ở đây. `build`
+    là nơi DUY NHẤT được quyết công tắc này (spec 3.3/10.3): `build_profile`
+    ở trên vẫn được gọi (nó dựng `tables`/`fingerprint`/render), nhưng giá
+    trị `schema_mode` nó trả về bị GHI ĐÈ bằng giá trị đọc từ đĩa ngay sau
+    đó. Trước bản sửa này, mode bị tính lại từ kích thước RENDER — và vì
+    `annotated` (tham số `tables` truyền vào `build_profile`) mang mô tả từ
+    `schema.yaml` HIỆN TẠI, một lượt chú giải thêm mô tả sau khi `build` đã
+    chạy có thể tự đẩy mode từ "full" (lúc build, lúc `verify` đo recall)
+    sang "retrieval" (lúc chạy thật) mà không ai biết — `verify` khi đó
+    chứng nhận một cấu hình khách hàng không hề dùng. Xem task C1/C3.
+
+    `fingerprint` KHÔNG bị lỗi tương tự nên vẫn để `build_profile` tự tính:
+    `schema_fingerprint` cố ý bỏ qua mô tả (chỉ tên bảng/cột/kiểu/PK/FK),
+    nên `apply_annotations` (chỉ đổi trường `description`) không đổi được
+    giá trị fingerprint dù chú giải có đổi bao nhiêu. Hơn nữa không nơi nào
+    trong code sản phẩm đọc `ConnectionProfile.fingerprint` — chỉ
+    `write_profile` ghi nó ra `profile.json`, còn `profile_is_stale` tự tính
+    `schema_fingerprint` độc lập trên `tables` truyền vào, không đi qua
+    `read_profile`. Recompute ở đây vô hại, và đúng ra còn phản ánh đúng
+    hơn nếu `structure.json` đổi mà chưa `build` lại.
+
+    Một `profile.json` ghi TRƯỚC bản sửa này (thiếu khoá `schema_mode`) mặc
+    định về `"full"` — hướng an toàn được chọn có chủ đích, NGƯỢC với cách
+    `dsn_password_stripped` mặc định `False`: đoán sai "retrieval" có thể
+    âm thầm bỏ sót bảng JOIN (đúng thứ lỗi C3 đang sửa); đoán sai "full" chỉ
+    tốn thêm token — hỏng ồn ào (context/token vượt ngưỡng) chứ không âm
+    thầm cho ra câu trả lời sai.
     """
     d = Path(directory)
     meta_path = d / PROFILE_JSON
@@ -250,12 +302,13 @@ def read_profile(directory: Path | str) -> ConnectionProfile:
         stripped=bool(meta.get("dsn_password_stripped", False)),
     )
 
-    return build_profile(
+    profile = build_profile(
         dsn=dsn,
         tables=annotated,
         grants={u: frozenset(t) for u, t in meta.get("grants", {}).items()},
         threshold_tokens=meta.get("threshold_tokens", DEFAULT_THRESHOLD_TOKENS),
     )
+    return dataclasses.replace(profile, schema_mode=meta.get("schema_mode", "full"))
 
 
 def profile_is_stale(directory: Path | str, tables: Sequence[Table]) -> bool:

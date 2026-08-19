@@ -258,3 +258,71 @@ def test_raw_password_round_trips_functionally_via_environment_variable(
         urllib.parse.urlsplit(profile.dsn).password
     )
     assert recovered_password == password
+
+
+# ── C3: schema_mode chốt lúc build, không tính lại lúc đọc ──────────────────
+#
+# `read_profile` từng gọi lại `build_profile`, vốn TÍNH LẠI schema_mode từ
+# kích thước bản render. Mà bản render đó gồm cả chú giải, nên mode trở thành
+# hàm của việc analyst viết bao nhiêu chữ.
+#
+# Ngòi nổ là chính lời khuyên của hệ thống: `report.md` bảo operator "bổ sung
+# mô tả cho các bảng bị thiếu rồi chạy lại". Thêm mô tả đúng là thứ đẩy một
+# schema cận ngưỡng vượt qua nó. `verify` ĐẠT ở mode `full`, khách chạy mode
+# `retrieval` với recall chưa ai đo. `profile_is_stale` không bắt được vì
+# fingerprint cố ý bỏ qua description.
+
+
+def test_annotating_a_built_profile_cannot_change_its_schema_mode(tmp_path):
+    from perception.annotations import Annotation, save_annotations
+
+    write_profile(
+        tmp_path,
+        dsn="postgresql://u:p@h:5432/d",
+        tables=MINI_TABLES,
+        annotations=SchemaAnnotations(),
+        grants=GRANTS,
+        threshold_tokens=200,
+    )
+    mode_at_build = json.loads(
+        (tmp_path / "profile.json").read_text(encoding="utf-8")
+    )["schema_mode"]
+    mode_before = read_profile(tmp_path).schema_mode
+
+    # Đúng thứ report.md khuyên analyst làm khi recall thấp.
+    save_annotations(
+        SchemaAnnotations(
+            tables={
+                t.name: Annotation(
+                    "Mô tả nghiệp vụ rất dài để đẩy schema vượt ngưỡng token. " * 20,
+                    reviewed_by="human",
+                )
+                for t in MINI_TABLES
+            }
+        ),
+        tmp_path / "schema.yaml",
+    )
+
+    assert read_profile(tmp_path).schema_mode == mode_before == mode_at_build, (
+        "chú giải thêm vào không được lật công tắc schema_mode mà build đã chốt"
+    )
+
+
+def test_schema_mode_comes_from_profile_json_not_from_recomputation(tmp_path):
+    """Chứng minh trực tiếp nguồn sự thật là file, không phải phép tính lại."""
+    write_profile(
+        tmp_path,
+        dsn="postgresql://u:p@h:5432/d",
+        tables=MINI_TABLES,
+        annotations=SchemaAnnotations(),
+        grants=GRANTS,
+    )
+    meta_path = tmp_path / "profile.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    assert meta["schema_mode"] == "full", "schema nhỏ nên build chốt full"
+
+    # Sửa tay giá trị trên đĩa: nếu read_profile tính lại thì nó sẽ bỏ qua.
+    meta["schema_mode"] = "retrieval"
+    meta_path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+
+    assert read_profile(tmp_path).schema_mode == "retrieval"

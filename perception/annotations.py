@@ -9,6 +9,9 @@ không sửa lần thứ hai, và trần đó tụt vĩnh viễn.
 from __future__ import annotations
 
 import dataclasses
+import os
+import shutil
+import tempfile
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -100,11 +103,50 @@ def _from_plain(raw: Mapping, *, path: Path, table: str, column: str | None = No
     return Annotation(text=raw.get("text", ""), reviewed_by=reviewed_by, confidence=confidence)
 
 
+def _atomic_write_with_backup(path: Path, content: str) -> None:
+    """Ghi `content` ra `path` không bao giờ để lộ trạng thái nửa vời.
+
+    `schema.yaml` mang trần độ chính xác của hệ thống. Một `write_text`
+    thường ghi trực tiếp vào `path` — nếu tiến trình (hay máy) chết giữa
+    chừng, file bị cắt cụt, và không có cách nào phân biệt "vừa bị cắt cụt"
+    với "khách thật sự chỉ chú giải nửa vời". Ghi vào một file tạm CÙNG THƯ
+    MỤC (bắt buộc: `os.replace` giữa hai đường dẫn trên cùng filesystem là
+    một syscall rename, nguyên tử trên mọi hệ POSIX/NT) rồi thay bằng
+    `os.replace` — tại mọi thời điểm trước lần gọi đó, file đích cũ (nếu
+    có) vẫn nguyên vẹn.
+
+    Giữ đúng MỘT bản `.bak` — bản ngay trước lần ghi này, không phải một
+    lịch sử tích luỹ (mỗi lần ghi đè `.bak` cũ bằng nội dung cũ hiện tại).
+    Chỉ tạo `.bak` khi `path` đã tồn tại từ trước: lần ghi đầu tiên (file
+    chưa từng có) không có gì để sao lưu, và không được tự bịa ra một file
+    thừa trong `profile/` (xem test_no_sample_row_data_is_written_anywhere
+    ở tests/unit/test_profile_store.py — nó đếm đúng số file trong đó).
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        # copy2 (không phải move/replace): bản GỐC phải còn nguyên tại
+        # `path` cho tới khi `os.replace` bên dưới hoán đổi nội dung mới
+        # vào — nếu backup thất bại giữa chừng, `path` vẫn là bản cũ hợp lệ.
+        shutil.copy2(path, path.with_name(path.name + ".bak"))
+
+    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(tmp_name, path)
+    except BaseException:
+        Path(tmp_name).unlink(missing_ok=True)
+        raise
+
+
 def save_annotations(ann: SchemaAnnotations, path: Path | str) -> None:
     """Ghi ra YAML đọc được bằng mắt.
 
     Định dạng người đọc được là có chủ ý: khi giao diện hỏng hoặc khách muốn
     sửa hàng loạt, file này vẫn là đường thoát.
+
+    Ghi NGUYÊN TỬ, kèm giữ một bản `.bak` — xem `_atomic_write_with_backup`.
     """
     payload = {
         "tables": {name: _to_plain(a) for name, a in sorted(ann.tables.items())},
@@ -113,10 +155,8 @@ def save_annotations(ann: SchemaAnnotations, path: Path | str) -> None:
             for table, cols in sorted(ann.columns.items())
         },
     }
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    Path(path).write_text(
-        yaml.safe_dump(payload, allow_unicode=True, sort_keys=False), encoding="utf-8"
-    )
+    content = yaml.safe_dump(payload, allow_unicode=True, sort_keys=False)
+    _atomic_write_with_backup(Path(path), content)
 
 
 def load_annotations(path: Path | str) -> SchemaAnnotations:

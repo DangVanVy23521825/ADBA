@@ -14,7 +14,7 @@
     "url": "https://bird-bench.oss-cn-beijing.aliyuncs.com/dev.zip",
     "filename": "dev.zip",
     "fetch_mode": "http",
-    "sha256": "",
+    "sha256": "cdd6d19faeb45a23970b98d3ef6c40a87987c95459c2cf12076897a60cf5a630",
     "license": "CC BY-SA 4.0",
     "license_url": "https://bird-bench.github.io/",
     "commercial_use": true,

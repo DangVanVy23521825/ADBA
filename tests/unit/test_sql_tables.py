@@ -79,3 +79,58 @@ def test_cte_declared_in_one_statement_does_not_shadow_a_real_table_in_another()
     """
     sql = "WITH payroll AS (SELECT 1 AS x) SELECT * FROM orders; SELECT * FROM payroll"
     assert tables_in_sql(sql) == frozenset({"orders", "payroll"})
+
+
+# --- Postgres identifier-folding rule: only UNQUOTED identifiers fold ------
+#
+# Bug found against a real BIRD Postgres database: `lapTimes`,
+# `driverStandings`, ... are camelCase in the catalog (normal output of
+# Entity Framework / Hibernate / Prisma / Rails). The old code lowercased
+# every table name unconditionally, so `SELECT * FROM "lapTimes"` (quoted —
+# Postgres keeps the case exactly) got folded to `laptimes`, which never
+# matches `permitted_tables()` (which reads case-preserved catalog names) —
+# a legitimate, permitted query was refused. Postgres's own rule is the only
+# one that makes both sides agree: unquoted identifiers fold to lower case,
+# quoted identifiers keep their case exactly.
+
+
+def test_unquoted_camel_case_folds_to_lower():
+    assert tables_in_sql("SELECT * FROM lapTimes") == frozenset({"laptimes"})
+
+
+def test_quoted_camel_case_is_preserved_verbatim():
+    assert tables_in_sql('SELECT * FROM "lapTimes"') == frozenset({"lapTimes"})
+
+
+def test_quoted_already_lowercase_is_unaffected():
+    """The common case must stay byte-identical: a quoted lowercase name
+    folds to the exact same string an unquoted one would."""
+    assert tables_in_sql('SELECT * FROM "orders"') == frozenset({"orders"})
+
+
+def test_schema_qualified_quoted_table_unquoted_schema_preserves_table_case():
+    assert tables_in_sql('SELECT * FROM myschema."lapTimes"') == frozenset({"lapTimes"})
+
+
+def test_schema_qualified_unquoted_table_quoted_schema_still_folds_table():
+    """The schema qualifier is discarded either way (existing behaviour —
+    permitted_tables() is keyed by table name only), so its own quoting is
+    irrelevant to the table name's case: `"Public".orders` still folds
+    `orders` to lower case because the TABLE part itself is unquoted."""
+    assert tables_in_sql('SELECT * FROM "Public".orders') == frozenset({"orders"})
+
+
+def test_schema_qualified_both_parts_quoted_preserves_table_case():
+    assert tables_in_sql('SELECT * FROM "myschema"."lapTimes"') == frozenset({"lapTimes"})
+
+
+def test_doubled_quote_inside_a_quoted_identifier_is_unescaped_not_truncated():
+    """`""` inside a double-quoted identifier is Postgres's escape for a
+    literal `"` in the name (analogous to `''` inside a single-quoted
+    string literal) — it must decode to one `"`, not silently truncate the
+    name at the first doubled quote."""
+    assert tables_in_sql('SELECT * FROM "weird""name"') == frozenset({'weird"name'})
+
+
+def test_quoted_table_with_alias_still_resolves_the_real_name_not_the_alias():
+    assert tables_in_sql('SELECT * FROM "lapTimes" lt') == frozenset({"lapTimes"})

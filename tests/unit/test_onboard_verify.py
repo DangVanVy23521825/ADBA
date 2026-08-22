@@ -6,6 +6,7 @@ from onboard import OnboardError, cmd_verify
 from perception.connection_profile import ALL_TABLES
 from perception.profile_store import write_profile
 from perception.annotations import SchemaAnnotations
+from perception.schema_model import Column, Table
 from tests.fixtures.mini_schema import MINI_TABLES
 
 GOLDEN = [
@@ -274,3 +275,65 @@ def test_report_keeps_annotation_guidance_when_grants_do_not_fully_explain_the_m
     assert "orders" in text
     assert "quyền" in text
     assert "Chú giải schema" in text
+
+
+# --- Identifier-case bug found against a real BIRD Postgres database ------
+#
+# A schema like BIRD's formula1 has camelCase tables (`lapTimes`). Golden
+# SQL against it is written unquoted (`SELECT * FROM lapTimes`), which
+# tables_in_sql() now folds to `laptimes` per Postgres's own rule — that
+# never matches the catalog's `lapTimes`, so the miss shows up here exactly
+# like a genuine gap. Sending the operator to fix annotations for a table
+# that is already perfectly annotated wastes their time; the report must
+# name identifier case as the cause instead, the same way it already does
+# for the empty-grants case.
+
+_CAMEL_TABLES = MINI_TABLES + (
+    Table(name="lapTimes", columns=(Column("raceId", "integer"),),
+          primary_key=("raceId",), description="Thời gian mỗi vòng đua"),
+)
+
+
+def _write_camel_profile(tmp_path, grants):
+    write_profile(tmp_path, dsn="postgresql://x", tables=_CAMEL_TABLES,
+                  annotations=SchemaAnnotations(), grants=grants)
+
+
+def test_report_flags_case_mismatch_instead_of_blaming_annotations(tmp_path):
+    """`lapTimes` is granted and perfectly fine — the miss is purely a
+    quoting/case artifact of the unquoted golden SQL, not an annotation gap.
+    """
+    _write_camel_profile(tmp_path, {"admin": frozenset({ALL_TABLES})})
+    golden = _write_golden(tmp_path, "golden.jsonl", [
+        json.dumps({"question": "vòng đua nhanh nhất", "sql": "SELECT * FROM lapTimes"},
+                   ensure_ascii=False),
+    ])
+
+    report = cmd_verify(tmp_path, golden, user="admin")
+    assert report.recall == 0.0  # confirms the miss actually happened
+
+    text = (tmp_path / "report.md").read_text(encoding="utf-8")
+    assert "lapTimes" in text
+    assert "hoa" in text.lower() or "case" in text.lower()
+    # This is not an annotation problem — must not send the operator there.
+    assert "Chú giải schema" not in text
+
+
+def test_report_still_gives_annotation_guidance_when_the_missing_table_truly_does_not_exist(tmp_path):
+    """`ghost_table` has no case-insensitive match anywhere in the profile
+    — this is a genuine gap, not a case artifact, so the ordinary
+    annotation guidance must still appear and no case-mismatch text must
+    be fabricated for it.
+    """
+    _write_camel_profile(tmp_path, {"admin": frozenset({ALL_TABLES})})
+    golden = _write_golden(tmp_path, "golden.jsonl", [
+        json.dumps({"question": "bảng không tồn tại", "sql": "SELECT * FROM ghost_table"},
+                   ensure_ascii=False),
+    ])
+
+    report = cmd_verify(tmp_path, golden, user="admin")
+    assert report.recall == 0.0
+
+    text = (tmp_path / "report.md").read_text(encoding="utf-8")
+    assert "Chú giải schema" in text
+    assert "hoa" not in text.lower()

@@ -207,3 +207,78 @@ def test_table_description_with_whitespace_is_collapsed():
     # leftover uncommented fragment of the description.
     comment_idx = lines.index("-- Đơn hàng bán cho khách hàng doanh nghiệp")
     assert lines[comment_idx + 1] == "CREATE TABLE orders ("
+
+
+# --- Emit names the model can actually use (identifier-case bug) ----------
+#
+# If the rendered DDL says `CREATE TABLE lapTimes (...)`, a model copying
+# that literally will write `FROM lapTimes`, which Postgres folds to
+# `laptimes` and fails to find. The schema shown to the model must be the
+# schema it can actually query — quote any identifier that would not
+# survive being typed back unquoted.
+
+
+def test_plain_lowercase_table_name_stays_unquoted():
+    t = Table(name="orders", columns=(Column("id", "integer"),))
+    assert 'CREATE TABLE orders (' in render_schema([t])
+    assert '"orders"' not in render_schema([t])
+
+
+def test_camel_case_table_name_is_quoted():
+    t = Table(name="lapTimes", columns=(Column("raceId", "integer"),))
+    out = render_schema([t])
+    assert 'CREATE TABLE "lapTimes" (' in out
+
+
+def test_reserved_word_table_name_is_quoted():
+    t = Table(name="order", columns=(Column("id", "integer"),))
+    out = render_schema([t])
+    assert 'CREATE TABLE "order" (' in out
+
+
+def test_camel_case_column_name_is_quoted():
+    t = Table(name="laps", columns=(Column("raceId", "integer"),))
+    out = render_schema([t])
+    assert '"raceId" INT' in out
+
+
+def test_plain_lowercase_column_name_stays_unquoted():
+    t = Table(name="laps", columns=(Column("race_id", "integer"),))
+    out = render_schema([t])
+    assert 'race_id INT' in out
+    assert '"race_id"' not in out
+
+
+def test_reserved_word_column_name_is_quoted():
+    t = Table(name="events", columns=(Column("order", "integer"),))
+    out = render_schema([t])
+    assert '"order" INT' in out
+
+
+def test_column_name_starting_with_a_digit_is_quoted():
+    t = Table(name="metrics", columns=(Column("2fa_codes", "integer"),))
+    out = render_schema([t])
+    assert '"2fa_codes" INT' in out
+
+
+def test_foreign_key_reference_quotes_camel_case_table_and_column():
+    t = Table(
+        name="lapTimes",
+        columns=(Column("raceId", "integer"),),
+        foreign_keys={"raceId": "Races(raceId)"},
+    )
+    out = render_schema([t])
+    assert 'REFERENCES "Races"("raceId")' in out
+
+
+def test_foreign_key_reference_stays_unquoted_for_plain_lowercase_names():
+    orders = next(t for t in MINI_TABLES if t.name == "orders")
+    out = render_schema([orders])
+    assert "REFERENCES customers(id)" in out
+    assert '"customers"' not in out
+
+
+def test_doubled_quote_is_escaped_when_quoting_an_identifier_with_a_literal_quote():
+    t = Table(name='weird"name', columns=(Column("id", "integer"),))
+    out = render_schema([t])
+    assert 'CREATE TABLE "weird""name" (' in out

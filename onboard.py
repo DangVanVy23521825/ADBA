@@ -642,11 +642,27 @@ def cmd_verify(
     grant_blocked = frozenset(
         t for t in all_missing if t in existing_names and t not in permitted
     )
-    # "Chắc chắn do quyền": hoặc user không có bảng nào được cấp (không cần
-    # xét từng bảng để biết lý do), hoặc MỌI bảng thiếu trên MỌI câu trượt
-    # đều là bảng có thật nhưng ngoài quyền — không còn khoảng trống nào để
-    # đổ cho chú giải.
-    fully_grants_caused = bool(report.misses) and (not permitted or grant_blocked == all_missing)
+    # "Lệch chữ hoa/thường, không phải do chú giải": tables_in_sql() gấp một
+    # tên KHÔNG quote về chữ thường (đúng quy tắc Postgres — spec mục 2),
+    # nên trên một schema camelCase (`lapTimes`, kiểu Entity Framework/
+    # Hibernate/Prisma/Rails tạo ra), SQL mẫu viết không quote (`FROM
+    # lapTimes`) cho ra `laptimes`, không khớp `existing_names` — dù bảng
+    # THẬT (`lapTimes`) có mặt, được cấp quyền, và chú giải đầy đủ. Nhận ra
+    # bằng cách so không phân biệt hoa/thường: `t` không có mặt trong
+    # `existing_names` (so chính xác) nhưng CÓ một bảng trong đó trùng tên
+    # khi hạ hết về chữ thường. Điều kiện `t not in existing_names` giữ hai
+    # tập này rời nhau — một bảng đã lọt vào `grant_blocked` (so chính xác)
+    # không bao giờ lọt thêm vào đây.
+    existing_by_lower = {n.lower(): n for n in existing_names}
+    case_mismatched = frozenset(
+        t for t in all_missing if t not in existing_names and t.lower() in existing_by_lower
+    )
+    # "Chắc chắn không phải do chú giải": hoặc user không có bảng nào được
+    # cấp (không cần xét từng bảng để biết lý do), hoặc MỌI bảng thiếu trên
+    # MỌI câu trượt đều được giải thích bởi quyền hoặc lệch chữ hoa/thường —
+    # không còn khoảng trống nào để đổ cho chú giải.
+    accounted_for = grant_blocked | case_mismatched
+    fully_grants_caused = bool(report.misses) and (not permitted or accounted_for == all_missing)
 
     if not permitted:
         lines += [
@@ -671,6 +687,18 @@ def cmd_verify(
                 f"không phải do chú giải: `{sorted(grant_blocked)}` không nằm "
                 f"trong quyền của user `{user}`. Xem lại `--grant` nếu đây không "
                 "phải chủ đích, rồi chạy lại.",
+            ]
+        if case_mismatched:
+            matches = sorted(existing_by_lower[t] for t in case_mismatched)
+            lines += [
+                "",
+                f"{len(case_mismatched)} bảng trong các câu trượt trên lệch CHỮ "
+                f"HOA/THƯỜNG, không phải do chú giải: `{sorted(case_mismatched)}` "
+                f"khớp đúng bảng có thật `{matches}` trong profile khi so không "
+                "phân biệt hoa/thường — SQL mẫu (hoặc câu hỏi) viết tên bảng "
+                "không quote nên bị Postgres hạ về chữ thường, trong khi bảng "
+                "thật giữ nguyên chữ hoa/thường. Quote đúng tên bảng trong SQL "
+                f"(vd. `\"{matches[0]}\"`), KHÔNG sửa chú giải cho các bảng này.",
             ]
         if not fully_grants_caused:
             lines += [

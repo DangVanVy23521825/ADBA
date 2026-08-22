@@ -5,11 +5,12 @@ import pytest
 
 from graph.tools import sql_tool
 from perception.connection_profile import ALL_TABLES, build_profile
+from perception.schema_model import Column, Table
 from tests.fixtures.mini_schema import MINI_TABLES
 
 
-def _profile(grants):
-    return build_profile(dsn="postgresql://u:p@h:5432/d", tables=MINI_TABLES, grants=grants)
+def _profile(grants, tables=MINI_TABLES):
+    return build_profile(dsn="postgresql://u:p@h:5432/d", tables=tables, grants=grants)
 
 
 def test_query_touching_a_forbidden_table_is_refused():
@@ -155,3 +156,43 @@ def test_multiple_statements_are_refused_even_when_all_are_select():
     with pytest.raises(sql_tool.TableNotPermittedError):
         sql_tool.assert_tables_permitted(
             "SELECT * FROM orders; SELECT * FROM customers", p, "admin")
+
+
+# --- Identifier-case bug found against a real BIRD Postgres database ------
+#
+# permitted_tables() reads case-preserved catalog names (introspect_schema
+# never lowercases). Before the fix, tables_in_sql() lowercased every table
+# name unconditionally, so a legitimate quoted query against a camelCase
+# table (`lapTimes`, `driverStandings`, ... — normal output of Entity
+# Framework/Hibernate/Prisma/Rails) was refused even though the table was
+# granted. The fix folds like Postgres: quoted identifiers keep case,
+# unquoted ones fold to lower.
+
+_CAMEL_TABLES = MINI_TABLES + (
+    Table(name="lapTimes", columns=(Column("raceId", "integer"),),
+          primary_key=("raceId",)),
+)
+
+
+def test_quoted_camel_case_table_is_accepted_when_granted():
+    p = _profile({"sales": frozenset({"lapTimes"})}, tables=_CAMEL_TABLES)
+    sql_tool.assert_tables_permitted('SELECT * FROM "lapTimes"', p, "sales")
+
+
+def test_unquoted_camel_case_table_is_still_refused_because_it_folds_to_a_different_name():
+    """`FROM lapTimes` (unquoted) folds to `laptimes` in real Postgres, which
+    is not the granted table (`lapTimes`) — this must still be refused,
+    exactly like real Postgres would fail to find the table. Fail closed:
+    a table the guard cannot confidently resolve is never allowed through.
+    """
+    p = _profile({"sales": frozenset({"lapTimes"})}, tables=_CAMEL_TABLES)
+    with pytest.raises(sql_tool.TableNotPermittedError):
+        sql_tool.assert_tables_permitted("SELECT * FROM lapTimes", p, "sales")
+
+
+def test_quoted_camel_case_table_is_still_refused_when_genuinely_not_granted():
+    """The fix must not become a blanket bypass — a quoted table the user
+    was never granted is still refused."""
+    p = _profile({"sales": frozenset({"orders"})}, tables=_CAMEL_TABLES)
+    with pytest.raises(sql_tool.TableNotPermittedError, match="lapTimes"):
+        sql_tool.assert_tables_permitted('SELECT * FROM "lapTimes"', p, "sales")

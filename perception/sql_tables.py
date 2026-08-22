@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import sqlparse
 from sqlparse.sql import Function, Identifier, IdentifierList, Parenthesis, TokenList
-from sqlparse.tokens import CTE, DML, Keyword
+from sqlparse.tokens import CTE, DML, Keyword, Name, Punctuation
+from sqlparse.tokens import String as StringToken
 
 _SOURCE_KEYWORDS = {"FROM", "JOIN", "INNER JOIN", "LEFT JOIN", "RIGHT JOIN",
                     "FULL JOIN", "CROSS JOIN", "LEFT OUTER JOIN",
@@ -23,12 +24,56 @@ _SOURCE_KEYWORDS = {"FROM", "JOIN", "INNER JOIN", "LEFT JOIN", "RIGHT JOIN",
 _FROM_ARG_FUNCTIONS = {"EXTRACT", "SUBSTRING", "TRIM", "OVERLAY"}
 
 
+def _fold(token) -> str:
+    """Gấp MỘT token định danh theo đúng quy tắc của Postgres.
+
+    Không quote  -> hạ về chữ thường (đây là điều Postgres tự làm khi
+    người dùng gõ `FROM lapTimes`: nó tìm bảng `laptimes`).
+    Có quote (`"..."`) -> giữ nguyên chữ hoa/thường, sau khi bỏ cặp ngoặc
+    kép bao ngoài và giải mã `""` (escape của MỘT dấu ngoặc kép trong tên,
+    giống `''` bên trong một chuỗi literal) thành `"`.
+
+    Đây là hai phía của MỘT bug: permitted_tables() trả tên y nguyên từ
+    catalog (introspect_schema không hạ chữ), còn hàm này (tables_in_sql)
+    từng hạ TẤT CẢ về chữ thường vô điều kiện — trên một schema có bảng
+    `lapTimes`, hai phía không bao giờ khớp, dù câu SQL trỏ đúng bảng được
+    cấp quyền. Gấp đúng theo Postgres là quy tắc DUY NHẤT khiến hai phía
+    khớp nhau: một SQL không quote nhắm đúng bảng `laptimes` (không phải
+    `lapTimes`) trong Postgres thật, nên KHÔNG khớp `permitted_tables()`
+    chứa `lapTimes` — đúng như Postgres thật sẽ báo lỗi "không tìm thấy
+    bảng". Một SQL quote `"lapTimes"` giữ nguyên chữ hoa/thường thì khớp.
+    """
+    if token.ttype is StringToken.Symbol:
+        inner = token.value[1:-1]  # bỏ cặp " bao ngoài
+        return inner.replace('""', '"')
+    return token.value.lower()
+
+
 def _real_name(identifier: Identifier) -> str | None:
-    """Tên bảng thật, bỏ alias và bỏ tiền tố schema."""
-    name = identifier.get_real_name()
-    if not name:
-        return None
-    return name.lower()
+    """Tên bảng thật, bỏ alias và bỏ tiền tố schema.
+
+    Tự dò thay vì gọi `Identifier.get_real_name()`: hàm đó strip quote qua
+    `remove_quotes` (không giải mã `""`) và không cho biết token tìm được
+    có bị quote hay không — thứ ta cần để quyết định gấp chữ hay giữ
+    nguyên. Thuật toán dò dot cuối cùng lặp lại chính xác logic của
+    `get_real_name()` (a.b.c -> phần sau dấu chấm CUỐI CÙNG), chỉ khác ở
+    bước cuối: đọc `token.ttype` để gọi `_fold`.
+
+    Tiền tố schema (nếu có) bị bỏ hoàn toàn như hành vi cũ — permitted_tables()
+    chỉ khoá theo tên bảng, không theo schema — nên việc phần schema có
+    quote hay không (`"Public".orders` so với `Public."orders"`) không ảnh
+    hưởng gì tới tên trả về ở đây; chỉ cách quote của CHÍNH phần tên bảng
+    mới quyết định nó có bị hạ chữ hay không.
+    """
+    dot_idx = None
+    for idx, tok in enumerate(identifier.tokens):
+        if tok.ttype is Punctuation and tok.value == ".":
+            dot_idx = idx
+    tokens = identifier.tokens[dot_idx + 1:] if dot_idx is not None else identifier.tokens
+    for tok in tokens:
+        if tok.ttype is Name or tok.ttype is StringToken.Symbol:
+            return _fold(tok)
+    return None
 
 
 def _cte_names(statement: TokenList) -> set[str]:
@@ -113,7 +158,11 @@ def _collect(node: TokenList, out: set[str], suppress_keywords: bool = False) ->
 def tables_in_sql(sql: str) -> frozenset[str]:
     """Trả tập tên bảng thật mà câu SQL chạm tới.
 
-    Alias bị bỏ, tên CTE bị loại, tiền tố schema bị cắt, tên hạ về chữ thường.
+    Alias bị bỏ, tên CTE bị loại, tiền tố schema bị cắt. Tên được gấp chữ
+    hoa/thường theo ĐÚNG quy tắc của Postgres, không hạ hết về chữ thường
+    vô điều kiện (xem `_fold`): định danh không quote hạ về chữ thường,
+    định danh có quote (`"..."`) giữ nguyên. Đây là điều kiện để khớp với
+    `permitted_tables()`, vốn trả tên y nguyên từ catalog (case-preserved).
     SQL rỗng hoặc không parse được trả về tập rỗng thay vì ném lỗi — eval
     cần đếm được, không cần dừng.
     """

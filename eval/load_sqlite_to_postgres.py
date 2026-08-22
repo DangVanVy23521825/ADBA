@@ -463,10 +463,15 @@ def load_sqlite_to_postgres(
             pg_con.commit()
 
             print("adding foreign key constraints...", flush=True)
-            for table in tables:
-                for stmt in build_add_foreign_key_sql(table, schema):
-                    pg_cur.execute(stmt)
-            pg_con.commit()
+            unvalidated = _add_foreign_keys(pg_con, pg_cur, tables, schema)
+            if unvalidated:
+                print(
+                    f"  {len(unvalidated)} khoá ngoại thêm dạng NOT VALID vì dữ "
+                    "liệu nguồn vi phạm chính khai báo của nó:",
+                    flush=True,
+                )
+                for name in unvalidated:
+                    print(f"    {name}", flush=True)
 
         return row_counts
     except Exception:
@@ -475,6 +480,50 @@ def load_sqlite_to_postgres(
     finally:
         sqlite_con.close()
         pg_con.close()
+
+
+def _add_foreign_keys(pg_con, pg_cur, tables, schema: str) -> list[str]:
+    """Thêm khoá ngoại, lùi về `NOT VALID` khi dữ liệu nguồn vi phạm.
+
+    SQLite KHÔNG cưỡng chế khoá ngoại trừ khi bật `PRAGMA foreign_keys`, nên
+    dữ liệu benchmark thường xuyên vi phạm chính khai báo của mình — BIRD
+    `formula_1` có 22 dòng `races` trỏ tới `circuitId` không tồn tại trong
+    `circuits`. Đó không phải lỗi của bản nạp; đó là tính chất của dữ liệu,
+    và cũng đúng thứ khiến BIRD là phép thử tốt.
+
+    Bỏ hẳn khoá ngoại thì sai: `expand_by_foreign_keys` của retriever dùng
+    chúng, và `render_schema` in chúng vào prompt — mất khoá ngoại là mất
+    thông tin quan hệ mà model cần. Nhưng để nguyên thì lệnh nạp chết.
+
+    `NOT VALID` giải đúng bài: ràng buộc được ghi vào catalog (nên
+    `introspect_schema` vẫn đọc thấy) và vẫn cưỡng chế với dòng MỚI, chỉ
+    không kiểm lại dòng đã có.
+
+    Thử bản validated trước để dữ liệu sạch vẫn được kiểm thật, và trả về
+    tên những ràng buộc phải lùi — im lặng chấp nhận toàn vẹn tham chiếu bị
+    gãy sẽ giấu mất một tính chất thật của bộ dữ liệu.
+    """
+    import psycopg2
+    from psycopg2 import sql
+
+    unvalidated: list[str] = []
+    for table in tables:
+        for i, stmt in enumerate(build_add_foreign_key_sql(table, schema)):
+            try:
+                pg_cur.execute(stmt)
+                pg_con.commit()
+            except psycopg2.errors.ForeignKeyViolation:
+                pg_con.rollback()
+                # `stmt` là `sql.Composed` (định danh đã quote an toàn), không
+                # phải chuỗi — ghép bằng Composed chứ không nối chuỗi.
+                pg_cur.execute(sql.Composed([stmt, sql.SQL(" NOT VALID")]))
+                pg_con.commit()
+                fk = table.foreign_keys[i]
+                unvalidated.append(
+                    f"{table.name}({', '.join(fk.columns)}) → "
+                    f"{fk.ref_table}({', '.join(fk.ref_columns)})"
+                )
+    return unvalidated
 
 
 def _load_table_data(

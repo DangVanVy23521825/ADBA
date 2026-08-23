@@ -76,7 +76,18 @@ class ColumnDef:
 class ForeignKeyDef:
     """One FK constraint. `columns`/`ref_columns` are parallel and ordered
     by SQLite's `seq` field — required for composite foreign keys, where
-    column order must match the referenced table's key order."""
+    column order must match the referenced table's key order.
+
+    As read straight off `PRAGMA foreign_key_list` (i.e. before
+    `resolve_foreign_keys` runs), `ref_columns` entries may be `None`:
+    SQLite permits `REFERENCES parent` with no column list, which
+    implicitly targets `parent`'s primary key and reports `to = NULL` for
+    every such row. `ref_table` may also disagree in case with the actual
+    table name — SQLite resolves table names case-insensitively, Postgres
+    does not. `resolve_foreign_keys` is what turns this raw, possibly
+    ambiguous reading into something safe to hand to
+    `build_add_foreign_key_sql`.
+    """
 
     columns: tuple[str, ...]
     ref_table: str
@@ -89,6 +100,13 @@ class TableDef:
     columns: tuple[ColumnDef, ...]
     primary_key: tuple[str, ...] = field(default_factory=tuple)
     foreign_keys: tuple[ForeignKeyDef, ...] = field(default_factory=tuple)
+    # Column sets covered by a UNIQUE index/constraint in SQLite, read from
+    # `PRAGMA index_list` + `PRAGMA index_info` (see `_read_unique_indexes`).
+    # Does NOT include the primary key itself (tracked separately above) —
+    # only *other* uniqueness SQLite already guarantees. Needed for bug 3:
+    # a foreign key may target one of these instead of the primary key, and
+    # Postgres requires a real unique constraint/index to back it.
+    unique_column_sets: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
 
     def column_names(self) -> tuple[str, ...]:
         return tuple(c.name for c in self.columns)
@@ -246,12 +264,60 @@ def _read_one_table(cur: sqlite3.Cursor, name: str) -> TableDef:
     fk_rows = cur.fetchall()
     foreign_keys = _group_foreign_keys(fk_rows)
 
+    unique_column_sets = _read_unique_indexes(cur, name, primary_key)
+
     return TableDef(
         name=name,
         columns=tuple(columns),
         primary_key=primary_key,
         foreign_keys=foreign_keys,
+        unique_column_sets=unique_column_sets,
     )
+
+
+def _read_unique_indexes(
+    cur: sqlite3.Cursor, name: str, primary_key: tuple[str, ...]
+) -> tuple[tuple[str, ...], ...]:
+    """Column sets covered by a UNIQUE index/constraint on `name`, read via
+    `PRAGMA index_list` + `PRAGMA index_info`.
+
+    Excludes:
+      - the autoindex backing the primary key itself (origin `'pk'`) —
+        `primary_key` above already tracks that, and duplicating it here
+        would only invite confusion, never a wrong answer.
+      - partial indexes — Postgres does not accept a partial unique index
+        as a foreign key target, so one is no more useful here than no
+        index at all.
+      - expression indexes — `PRAGMA index_info` reports a column's `cid`
+        as negative and its name as `None` for an indexed expression
+        rather than a plain column; such an index cannot be re-expressed
+        as `UNIQUE (col, ...)` in Postgres, so it is skipped rather than
+        guessed at.
+
+    This is what lets bug 3 (a foreign key targeting a non-unique-looking
+    column) tell "SQLite already guarantees uniqueness here, just not via
+    the primary key" apart from "SQLite never guaranteed uniqueness here
+    at all" — the former can be ported faithfully, the latter genuinely
+    cannot.
+    """
+    cur.execute(f"PRAGMA index_list('{name}')")
+    # PRAGMA index_list columns: seq, name, unique, origin, partial.
+    index_rows = cur.fetchall()
+
+    unique_sets: list[tuple[str, ...]] = []
+    for _seq, idx_name, is_unique, origin, partial in index_rows:
+        if not is_unique or origin == "pk" or partial:
+            continue
+        cur.execute(f"PRAGMA index_info('{idx_name}')")
+        # PRAGMA index_info columns: seqno, cid, name.
+        cols = [row[2] for row in cur.fetchall()]
+        if any(c is None for c in cols):
+            continue  # expression index — no plain column list to port
+        col_tuple = tuple(cols)
+        if col_tuple == primary_key:
+            continue  # a non-'pk'-origin index can still duplicate the PK
+        unique_sets.append(col_tuple)
+    return tuple(unique_sets)
 
 
 def _group_foreign_keys(
@@ -276,6 +342,181 @@ def _group_foreign_keys(
             )
         )
     return tuple(result)
+
+
+# ---------------------------------------------------------------------------
+# Resolving foreign keys (still pure Python — no Postgres involved)
+# ---------------------------------------------------------------------------
+#
+# `read_sqlite_schema()` reads `PRAGMA foreign_key_list` verbatim, which
+# means a `TableDef` coming straight out of it can carry three things
+# `build_add_foreign_key_sql` cannot cope with (each one found by running
+# this loader against a real BIRD database, not hypothesised):
+#
+#   1. `ref_columns` containing `None` — an implicit `REFERENCES parent`
+#      with no column list, which SQLite resolves against `parent`'s
+#      primary key. (`debit_card_specializing`, `european_football_2`.)
+#   2. `ref_table` disagreeing in case with the table's real name — SQLite
+#      folds table names case-insensitively, Postgres does not.
+#      (`european_football_2`: `country`/`Country`.)
+#   3. `ref_columns` naming a column that is neither the referenced
+#      table's primary key nor covered by any SQLite UNIQUE index —
+#      something SQLite never required to be unique, which Postgres's
+#      `REFERENCES` genuinely cannot express, full stop.
+#      (`card_games`, `european_football_2`: `Team.team_fifa_api_id`.)
+#
+# `resolve_foreign_keys` is the single place all three are settled, so
+# every other function in this module can assume a `ForeignKeyDef` it
+# receives already has a real `ref_table` and fully-named `ref_columns`
+# that Postgres can actually enforce.
+
+
+@dataclass(frozen=True)
+class ForeignKeyResolution:
+    """Result of resolving every table's foreign keys against the full set
+    of tables in one database.
+
+    `tables` mirrors the input, in the same order, except each table's
+    `foreign_keys` has been rewritten: implicit targets filled in, table
+    name casing corrected, and unresolvable foreign keys dropped.
+
+    `skipped` is one human-readable line per dropped foreign key — the
+    caller is expected to print these, never swallow them (a missing FK
+    degrades ADBA's retriever, which uses `expand_by_foreign_keys` and
+    prints FKs via `render_schema`).
+
+    `required_unique_indexes` lists the `(table_name, columns)` pairs that
+    need a `CREATE UNIQUE INDEX` in Postgres before the foreign keys
+    targeting them can be added — SQLite already guarantees uniqueness
+    there (a UNIQUE index, not the primary key), Postgres just needs it
+    spelled out as a real constraint/index to accept a `REFERENCES` onto
+    it. Deduplicated: two foreign keys targeting the same column set only
+    need the index created once.
+    """
+
+    tables: tuple[TableDef, ...]
+    skipped: tuple[str, ...]
+    required_unique_indexes: tuple[tuple[str, tuple[str, ...]], ...]
+
+
+def resolve_foreign_keys(tables: tuple[TableDef, ...]) -> ForeignKeyResolution:
+    """Resolve every foreign key in `tables` against `tables` itself.
+
+    Must see every table in the database at once — resolving a case
+    mismatch or an implicit primary-key target both require looking up
+    the *referenced* table, which may not be the one `PRAGMA
+    foreign_key_list` was just read for.
+    """
+    by_exact_name = {t.name: t for t in tables}
+    by_lower_name: dict[str, list[TableDef]] = {}
+    for t in tables:
+        by_lower_name.setdefault(t.name.lower(), []).append(t)
+
+    skipped: list[str] = []
+    required_unique_indexes: dict[tuple[str, tuple[str, ...]], None] = {}
+    resolved_tables: list[TableDef] = []
+
+    for table in tables:
+        kept_fks: list[ForeignKeyDef] = []
+        for fk in table.foreign_keys:
+            label = (
+                f"{table.name}({', '.join(fk.columns)}) -> "
+                f"{fk.ref_table}({', '.join(c if c is not None else '?' for c in fk.ref_columns)})"
+            )
+
+            ref_table_def = by_exact_name.get(fk.ref_table)
+            if ref_table_def is None:
+                candidates = by_lower_name.get(fk.ref_table.lower(), [])
+                if len(candidates) == 1:
+                    ref_table_def = candidates[0]
+                elif len(candidates) > 1:
+                    skipped.append(
+                        f"{label}: {len(candidates)} tables match "
+                        f"{fk.ref_table!r} case-insensitively — ambiguous, "
+                        "cannot resolve"
+                    )
+                    continue
+                else:
+                    skipped.append(
+                        f"{label}: no table named {fk.ref_table!r} "
+                        "(even case-insensitively) — dangling reference, "
+                        "dropping this foreign key"
+                    )
+                    continue
+
+            ref_columns = fk.ref_columns
+            if any(c is None for c in ref_columns):
+                pk = ref_table_def.primary_key
+                if len(ref_columns) == 1 and len(pk) == 1:
+                    ref_columns = pk
+                else:
+                    reason = (
+                        "a composite primary key"
+                        if len(pk) > 1
+                        else "no primary key"
+                    )
+                    skipped.append(
+                        f"{label}: SQLite left the target column implicit "
+                        f"(bare 'REFERENCES {ref_table_def.name}'), but "
+                        f"{ref_table_def.name} has {reason} — cannot "
+                        "resolve which column(s) it means, dropping this "
+                        "foreign key"
+                    )
+                    continue
+
+            target_set = frozenset(ref_columns)
+            if ref_table_def.primary_key and frozenset(ref_table_def.primary_key) == target_set:
+                pass  # primary key already backs it — nothing more needed
+            else:
+                matching_unique = next(
+                    (
+                        u
+                        for u in ref_table_def.unique_column_sets
+                        if frozenset(u) == target_set
+                    ),
+                    None,
+                )
+                if matching_unique is None:
+                    skipped.append(
+                        f"{label}: {ref_table_def.name}"
+                        f"({', '.join(ref_columns)}) is neither the primary "
+                        "key nor covered by a UNIQUE index in the source — "
+                        "Postgres requires a unique/primary-key target for "
+                        "a foreign key and none exists, dropping this "
+                        "foreign key"
+                    )
+                    continue
+                required_unique_indexes.setdefault(
+                    (ref_table_def.name, matching_unique), None
+                )
+
+            kept_fks.append(
+                ForeignKeyDef(
+                    columns=fk.columns,
+                    ref_table=ref_table_def.name,
+                    ref_columns=ref_columns,
+                )
+            )
+
+        # Always rebuild, even when no FK was dropped: a kept FK may still
+        # have had its `ref_table` case-corrected or its `ref_columns`
+        # filled in from an implicit reference, so reusing `table` as-is
+        # here would silently discard those rewrites.
+        resolved_tables.append(
+            TableDef(
+                name=table.name,
+                columns=table.columns,
+                primary_key=table.primary_key,
+                foreign_keys=tuple(kept_fks),
+                unique_column_sets=table.unique_column_sets,
+            )
+        )
+
+    return ForeignKeyResolution(
+        tables=tuple(resolved_tables),
+        skipped=tuple(skipped),
+        required_unique_indexes=tuple(required_unique_indexes.keys()),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -354,6 +595,31 @@ def build_add_foreign_key_sql(
     return tuple(statements)
 
 
+def _unique_index_name(table_name: str, columns: tuple[str, ...]) -> str:
+    return f"uq_{table_name}_{'_'.join(columns)}"
+
+
+def build_add_unique_index_sql(
+    table_name: str, columns: tuple[str, ...], schema: str = DEFAULT_SCHEMA
+) -> sql.Composed:
+    """`CREATE UNIQUE INDEX IF NOT EXISTS ... ON <schema>.<table> (...)`.
+
+    Used only for `ForeignKeyResolution.required_unique_indexes` (bug 3):
+    SQLite already guarantees uniqueness on `columns` via its own UNIQUE
+    index, just not through `table_name`'s primary key, and Postgres needs
+    that spelled out as a real index before it will accept a `REFERENCES`
+    onto them. `IF NOT EXISTS` makes this idempotent when two foreign keys
+    in the same database target the same column set.
+    """
+    cols = sql.SQL(", ").join(sql.Identifier(c) for c in columns)
+    return sql.SQL("CREATE UNIQUE INDEX IF NOT EXISTS {} ON {}.{} ({})").format(
+        sql.Identifier(_unique_index_name(table_name, columns)),
+        sql.Identifier(schema),
+        sql.Identifier(table_name),
+        cols,
+    )
+
+
 def render_composed(obj: sql.Composable) -> str:
     """Render a `psycopg2.sql.Composable` tree to text WITHOUT a live
     Postgres connection.
@@ -430,6 +696,19 @@ def load_sqlite_to_postgres(
     if not tables:
         raise LoadError(f"no tables found in {sqlite_path!r}")
 
+    resolution = resolve_foreign_keys(tables)
+    tables = resolution.tables
+    if resolution.skipped:
+        print(
+            f"{sqlite_path}: {len(resolution.skipped)} foreign key(s) "
+            "SQLite allows but Postgres cannot express — dropping them "
+            "(schema and data load continue; ADBA's retriever will not see "
+            "these relationships):",
+            flush=True,
+        )
+        for msg in resolution.skipped:
+            print(f"  {msg}", flush=True)
+
     table_names = tuple(t.name for t in tables)
 
     sqlite_con = sqlite3.connect(sqlite_path)
@@ -461,6 +740,19 @@ def load_sqlite_to_postgres(
                     sqlite_con, pg_cur, table, schema, batch_size
                 )
             pg_con.commit()
+
+            if resolution.required_unique_indexes:
+                print(
+                    f"  adding {len(resolution.required_unique_indexes)} "
+                    "supporting UNIQUE index(es) — SQLite already "
+                    "guarantees uniqueness there, just not via the primary "
+                    "key:",
+                    flush=True,
+                )
+                for tbl_name, cols in resolution.required_unique_indexes:
+                    print(f"    {tbl_name}({', '.join(cols)})", flush=True)
+                    pg_cur.execute(build_add_unique_index_sql(tbl_name, cols, schema))
+                pg_con.commit()
 
             print("adding foreign key constraints...", flush=True)
             unvalidated = _add_foreign_keys(pg_con, pg_cur, tables, schema)
@@ -542,11 +834,28 @@ def _load_table_data(
     sqlite_cur = sqlite_con.cursor()
     sqlite_cur.execute(f'SELECT {select_cols} FROM "{table.name}"')
 
-    insert_sql = sql.SQL("INSERT INTO {}.{} ({}) VALUES %s").format(
+    insert_prefix = sql.SQL("INSERT INTO {}.{} ({})").format(
         sql.Identifier(schema),
         sql.Identifier(table.name),
         sql.SQL(", ").join(sql.Identifier(c) for c in col_names),
     )
+    # `execute_values` needs a plain string, not a `sql.Composed`, and its
+    # `_split_sql` byte-scans that string for `%.` two-character tokens to
+    # find the single `%s` VALUES placeholder — it has no idea some of
+    # those `%` came from inside a quoted identifier, not a placeholder.
+    # BIRD's `california_schools.frpm` has columns literally named
+    # `Percent (%) Eligible Free (K-12)`; once quoted, the rendered
+    # identifier contains `%)`, and `_split_sql` chokes on it with
+    # `ValueError: unsupported format character: ')'` — not a psycopg2
+    # bug, just what happens when a real `%` collides with `execute_values`'
+    # placeholder syntax. `sql.Composed.as_string()` needs a real
+    # connection/cursor to quote identifiers (see `render_composed`'s
+    # docstring), which `pg_cur` is — so render here, then double every
+    # literal `%` psycopg2 just emitted (`_split_sql` unescapes `%%` back
+    # to one `%`, which is exactly what makes this round-trip correctly)
+    # before appending the one true `%s` placeholder, which must stay
+    # single.
+    insert_sql = insert_prefix.as_string(pg_cur).replace("%", "%%") + " VALUES %s"
 
     total = 0
     print(f"loading {table.name}...", end="", flush=True)

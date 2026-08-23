@@ -9,12 +9,14 @@ from eval.load_sqlite_to_postgres import (
     LoadError,
     TableDef,
     build_add_foreign_key_sql,
+    build_add_unique_index_sql,
     build_create_table_sql,
     build_drop_table_sql,
     load_sqlite_to_postgres,
     map_sqlite_type,
     read_sqlite_schema,
     render_composed,
+    resolve_foreign_keys,
 )
 
 DSN = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
@@ -200,6 +202,31 @@ class TestReadSqliteSchema:
         table_names = {t.name for t in read_sqlite_schema(db)}
         assert table_names == {"order"}
 
+    def test_percent_and_parens_column_name_is_read_verbatim(self, tmp_path):
+        # Bug 1's shape: california_schools.frpm's real columns, byte for
+        # byte. The bug report displayed these as e.g.
+        # 'Percent (%) Eligible Free (K-12)' with single quotes around
+        # them, but those quotes are Python's own repr() punctuation from
+        # printing a PRAGMA table_info() row tuple — not characters SQLite
+        # stores. Confirmed directly against california_schools.sqlite's
+        # real PRAGMA table_info('frpm') output: no quote characters
+        # appear in any column name, only spaces, parentheses, '%', and
+        # '/'. This fixture's column name carries no quotes either, and
+        # read_sqlite_schema must hand it back exactly as declared.
+        db = _make_sqlite(
+            tmp_path,
+            [
+                'CREATE TABLE frpm (CDSCode TEXT PRIMARY KEY, '
+                '"Percent (%) Eligible Free (K-12)" REAL, '
+                '"Enrollment (Ages 5-17)" REAL)'
+            ],
+        )
+        (t,) = read_sqlite_schema(db)
+        assert "Percent (%) Eligible Free (K-12)" in t.column_names()
+        assert "Enrollment (Ages 5-17)" in t.column_names()
+        # No column name accidentally carries a literal quote character.
+        assert not any("'" in c or '"' in c for c in t.column_names())
+
 
 class TestGeneratedDdl:
     """Assert on the DDL/plan psycopg2.sql.Composable trees build, using
@@ -367,6 +394,245 @@ class TestEndToEndPlanAgainstRealBirdShapedFixture:
         fk_ddl = render_composed(fk_stmt)
         assert 'ALTER TABLE "public"."order"' in fk_ddl
         assert 'REFERENCES "public"."account" ("account_id")' in fk_ddl
+
+
+class TestPercentInColumnName:
+    """Bug 1: BIRD's california_schools.frpm has columns literally named
+    'Percent (%) Eligible Free (K-12)' — no quotes in the real data (see
+    TestReadSqliteSchema.test_percent_and_parens_column_name_is_read_verbatim
+    below; the single quotes in the bug report are Python's own repr()
+    punctuation, not characters SQLite stores).
+
+    `_load_table_data` bulk-inserts via `psycopg2.extras.execute_values`,
+    which converts its query to a string and then byte-scans it for `%.`
+    two-character tokens (see `psycopg2.extras._split_sql`) to find the
+    single `%s` VALUES placeholder — with no awareness that some of those
+    `%` characters came from inside an already-quoted identifier rather
+    than a placeholder. A column name containing `%)` renders to `..."Percent
+    (%) Eligible..."...`, and `_split_sql` raises `ValueError: unsupported
+    format character: ')'` on the `%)` it finds there — not a `%)s`
+    placeholder, just a real character sequence colliding with
+    `execute_values`'s scanning. The fix doubles every `%` in the rendered,
+    already-quoted identifier text (`_split_sql` unescapes `%%` back to a
+    single `%`) before appending the one genuine `%s` placeholder.
+    """
+
+    def _rendered_insert_prefix(self, table_name: str, col_names: list[str]) -> str:
+        from psycopg2 import sql
+
+        prefix = sql.SQL("INSERT INTO {}.{} ({})").format(
+            sql.Identifier("public"),
+            sql.Identifier(table_name),
+            sql.SQL(", ").join(sql.Identifier(c) for c in col_names),
+        )
+        return render_composed(prefix)
+
+    def test_unescaped_percent_column_breaks_execute_values_split(self):
+        from psycopg2.extras import _split_sql
+
+        rendered = self._rendered_insert_prefix(
+            "frpm", ["Percent (%) Eligible Free (K-12)"]
+        )
+        unescaped = rendered + " VALUES %s"
+        with pytest.raises(ValueError, match="unsupported format character"):
+            _split_sql(unescaped.encode())
+
+    def test_escaped_percent_column_survives_execute_values_split(self):
+        from psycopg2.extras import _split_sql
+
+        rendered = self._rendered_insert_prefix(
+            "frpm", ["Percent (%) Eligible Free (K-12)"]
+        )
+        escaped = rendered.replace("%", "%%") + " VALUES %s"
+        pre, post = _split_sql(escaped.encode())
+        # The literal '%' from the column name must survive the escape/
+        # unescape round trip intact, right where the identifier put it.
+        assert b'"Percent (%) Eligible Free (K-12)"' in b"".join(pre)
+
+
+class TestForeignKeyResolution:
+    """resolve_foreign_keys() is where bugs 2, 3, and 4 are all settled —
+    see its module-level comment for why all three showed up only when
+    running this loader against real BIRD databases. Every fixture here
+    is a small real SQLite database built in tmp_path, read through the
+    actual read_sqlite_schema()/PRAGMA path, exactly like the loader
+    itself would encounter it — nothing hand-constructed as a TableDef.
+    """
+
+    def test_implicit_target_resolves_to_single_column_primary_key(self, tmp_path):
+        # Bug 2: debit_card_specializing.yearmonth -> customers, no column
+        # named. PRAGMA foreign_key_list reports `to = NULL`.
+        db = _make_sqlite(
+            tmp_path,
+            [
+                "CREATE TABLE customers (CustomerID INTEGER PRIMARY KEY, "
+                "name TEXT)",
+                "CREATE TABLE yearmonth (CustomerID INTEGER, Date TEXT, "
+                "PRIMARY KEY (CustomerID, Date), "
+                "FOREIGN KEY (CustomerID) REFERENCES customers)",
+            ],
+        )
+        tables = read_sqlite_schema(db)
+        raw_fk = {t.name: t for t in tables}["yearmonth"].foreign_keys[0]
+        assert raw_fk.ref_columns == (None,)  # sanity: this is really bug 2's shape
+
+        resolution = resolve_foreign_keys(tables)
+        assert resolution.skipped == ()
+        by_name = {t.name: t for t in resolution.tables}
+        fk = by_name["yearmonth"].foreign_keys[0]
+        assert fk.ref_table == "customers"
+        assert fk.ref_columns == ("CustomerID",)
+
+    def test_implicit_target_onto_composite_primary_key_is_skipped_and_reported(
+        self, tmp_path
+    ):
+        # Bug 2's stated edge case: the referenced table's primary key is
+        # composite, so an implicit (column-less) REFERENCES cannot be
+        # resolved without guessing — must skip, not guess.
+        db = _make_sqlite(
+            tmp_path,
+            [
+                "CREATE TABLE parent (a INTEGER, b INTEGER, PRIMARY KEY (a, b))",
+                "CREATE TABLE child (id INTEGER PRIMARY KEY, "
+                "ref INTEGER REFERENCES parent)",
+            ],
+        )
+        tables = read_sqlite_schema(db)
+        resolution = resolve_foreign_keys(tables)
+
+        by_name = {t.name: t for t in resolution.tables}
+        assert by_name["child"].foreign_keys == ()
+        assert len(resolution.skipped) == 1
+        assert "composite primary key" in resolution.skipped[0]
+        assert "child" in resolution.skipped[0] and "parent" in resolution.skipped[0]
+
+    def test_implicit_target_onto_table_with_no_primary_key_is_skipped_and_reported(
+        self, tmp_path
+    ):
+        db = _make_sqlite(
+            tmp_path,
+            [
+                "CREATE TABLE parent (a INTEGER, b INTEGER)",  # no PK at all
+                "CREATE TABLE child (id INTEGER PRIMARY KEY, "
+                "ref INTEGER REFERENCES parent)",
+            ],
+        )
+        tables = read_sqlite_schema(db)
+        resolution = resolve_foreign_keys(tables)
+
+        by_name = {t.name: t for t in resolution.tables}
+        assert by_name["child"].foreign_keys == ()
+        assert len(resolution.skipped) == 1
+        assert "no primary key" in resolution.skipped[0]
+
+    def test_foreign_key_onto_non_unique_column_is_skipped_and_reported(self, tmp_path):
+        # Bug 3: card_games.legalities -> cards(uuid) where `uuid` carries
+        # no PRIMARY KEY or UNIQUE constraint in the source at all — Postgres
+        # genuinely cannot express a FOREIGN KEY onto it.
+        db = _make_sqlite(
+            tmp_path,
+            [
+                "CREATE TABLE cards (id INTEGER PRIMARY KEY, uuid TEXT)",
+                "CREATE TABLE legalities (id INTEGER PRIMARY KEY, "
+                "card_uuid TEXT REFERENCES cards(uuid))",
+            ],
+        )
+        tables = read_sqlite_schema(db)
+        resolution = resolve_foreign_keys(tables)
+
+        by_name = {t.name: t for t in resolution.tables}
+        assert by_name["legalities"].foreign_keys == ()
+        assert resolution.required_unique_indexes == ()
+        assert len(resolution.skipped) == 1
+        assert "cards" in resolution.skipped[0] and "uuid" in resolution.skipped[0]
+        assert "neither the primary key nor covered by a UNIQUE index" in resolution.skipped[0]
+
+    def test_foreign_key_onto_unique_indexed_non_pk_column_is_kept_with_supporting_index(
+        self, tmp_path
+    ):
+        # The reasonable alternative this module chose for bug 3: when
+        # SQLite's own schema already declares the target UNIQUE (just not
+        # as the primary key), port that as a real Postgres unique index
+        # instead of dropping a foreign key relationship that is, in fact,
+        # perfectly resolvable. Mirrors card_games.cards.uuid exactly.
+        db = _make_sqlite(
+            tmp_path,
+            [
+                "CREATE TABLE cards (id INTEGER PRIMARY KEY, uuid TEXT UNIQUE)",
+                "CREATE TABLE legalities (id INTEGER PRIMARY KEY, "
+                "card_uuid TEXT REFERENCES cards(uuid))",
+            ],
+        )
+        tables = read_sqlite_schema(db)
+        resolution = resolve_foreign_keys(tables)
+
+        assert resolution.skipped == ()
+        assert resolution.required_unique_indexes == (("cards", ("uuid",)),)
+        by_name = {t.name: t for t in resolution.tables}
+        fk = by_name["legalities"].foreign_keys[0]
+        assert fk.ref_table == "cards"
+        assert fk.ref_columns == ("uuid",)
+
+        ddl = render_composed(build_add_unique_index_sql("cards", ("uuid",)))
+        assert "CREATE UNIQUE INDEX IF NOT EXISTS" in ddl
+        assert '"public"."cards"' in ddl
+        assert '("uuid")' in ddl
+
+    def test_foreign_key_target_table_name_resolved_case_insensitively(self, tmp_path):
+        # Bug 4: european_football_2's League.country_id -> country(id)
+        # while the real table is "Country" (PascalCase). SQLite folds
+        # table names case-insensitively; Postgres does not, and the
+        # loader must preserve the real table's case rather than the
+        # lowercase spelling the foreign key happens to use.
+        db = _make_sqlite(
+            tmp_path,
+            [
+                'CREATE TABLE "Country" (id INTEGER PRIMARY KEY, name TEXT)',
+                'CREATE TABLE league (id INTEGER PRIMARY KEY, '
+                "country_id INTEGER REFERENCES country(id))",
+            ],
+        )
+        tables = read_sqlite_schema(db)
+        raw_fk = {t.name: t for t in tables}["league"].foreign_keys[0]
+        assert raw_fk.ref_table == "country"  # sanity: lowercase, as SQLite reports it
+
+        resolution = resolve_foreign_keys(tables)
+        assert resolution.skipped == ()
+        by_name = {t.name: t for t in resolution.tables}
+        fk = by_name["league"].foreign_keys[0]
+        assert fk.ref_table == "Country"  # resolved to the real, case-preserved name
+
+        ddl = render_composed(build_add_foreign_key_sql(by_name["league"])[0])
+        assert 'REFERENCES "public"."Country" ("id")' in ddl
+
+    def test_dangling_reference_even_case_insensitively_is_skipped_and_reported(
+        self, tmp_path
+    ):
+        db = _make_sqlite(
+            tmp_path,
+            ["CREATE TABLE t (id INTEGER PRIMARY KEY)"],
+        )
+        # Hand-construct a TableDef with a FK to a table that doesn't
+        # exist at all, even case-insensitively (SQLite itself would
+        # refuse to declare this with foreign_keys pragma enforcement at
+        # DDL time in some configurations, but PRAGMA foreign_key_list
+        # only reads whatever the DDL says — a genuinely dangling
+        # reference is exactly what resolve_foreign_keys must also catch,
+        # not just case/None-target issues).
+        tables = read_sqlite_schema(db)
+        (t,) = tables
+        broken = TableDef(
+            name=t.name,
+            columns=t.columns,
+            primary_key=t.primary_key,
+            foreign_keys=(
+                ForeignKeyDef(columns=("id",), ref_table="nonexistent", ref_columns=("id",)),
+            ),
+        )
+        resolution = resolve_foreign_keys((broken,))
+        assert resolution.tables[0].foreign_keys == ()
+        assert len(resolution.skipped) == 1
+        assert "nonexistent" in resolution.skipped[0]
 
 
 class TestLoadErrorGuards:

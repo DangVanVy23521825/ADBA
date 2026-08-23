@@ -71,3 +71,4 @@ data/benchmarks/
 
 # Profile sinh ra khi chạy thử demo Chinook — không phải nguồn.
 data/demo/chinook/profile/
+data/demo/chinook/profile-noann/

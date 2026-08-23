@@ -34,7 +34,7 @@ from perception.annotations import (
     pending_review,
     save_annotations,
 )
-from perception.connection_profile import ConnectionProfile
+from perception.connection_profile import DEFAULT_THRESHOLD_TOKENS, ConnectionProfile
 from perception.introspect import introspect_schema, sample_rows
 from perception.profile_store import (
     SCHEMA_YAML,
@@ -444,6 +444,7 @@ def cmd_build(
     dsn: str,
     grants: Mapping[str, frozenset[str]],
     min_reviewed: float = 0.0,
+    threshold_tokens: int = DEFAULT_THRESHOLD_TOKENS,
 ) -> ConnectionProfile:
     """Ghép cấu trúc + chú giải thành `profile/` đọc được lúc chạy.
 
@@ -481,7 +482,14 @@ def cmd_build(
             "lượt `build` khác."
         )
 
-    write_profile(d, dsn=dsn, tables=tables, annotations=ann, grants=grants)
+    write_profile(
+        d,
+        dsn=dsn,
+        tables=tables,
+        annotations=ann,
+        grants=grants,
+        threshold_tokens=threshold_tokens,
+    )
     profile = read_profile(d)
     print(f"profile → {d}  ({len(profile.tables)} bảng, chế độ {profile.schema_mode})")
     return profile
@@ -903,6 +911,17 @@ def main() -> None:
         help="user=bang1,bang2 hoặc user=* (lặp lại được)",
     )
     p_build.add_argument("--min-reviewed", type=float, default=0.0)
+    p_build.add_argument(
+        "--threshold-tokens",
+        type=int,
+        default=DEFAULT_THRESHOLD_TOKENS,
+        help=(
+            "ngưỡng token quyết định chế độ `full` hay `retrieval`, chốt MỘT LẦN "
+            f"tại đây (mặc định {DEFAULT_THRESHOLD_TOKENS}). Hạ xuống để ép "
+            "`retrieval` trên schema nhỏ — dùng khi muốn ĐO retriever, hoặc khi "
+            "muốn tiết kiệm token trên schema cỡ vừa."
+        ),
+    )
 
     # `verify` không nhận `--dsn`: nó chỉ đọc `profile/` đã dựng sẵn qua
     # `read_profile` (không bao giờ mở kết nối DB thật), nên không có gì để
@@ -961,7 +980,13 @@ def _dispatch(args) -> None:
                 sys.exit(1)
             user, _, tables_csv = spec.partition("=")
             grants[user] = frozenset(t.strip() for t in tables_csv.split(",") if t.strip())
-        cmd_build(args.profile, dsn, grants, min_reviewed=args.min_reviewed)
+        cmd_build(
+            args.profile,
+            dsn,
+            grants,
+            min_reviewed=args.min_reviewed,
+            threshold_tokens=args.threshold_tokens,
+        )
     elif args.cmd == "verify":
         report = cmd_verify(args.profile, args.golden, args.user, k=args.k)
         raise SystemExit(0 if report.passed else 1)

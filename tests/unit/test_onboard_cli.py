@@ -970,3 +970,57 @@ def test_a_dsn_scheme_with_the_wrong_case_is_rejected_not_silently_lowercased():
     message = str(excinfo.value)
     assert _SECRET not in message
     assert bad_dsn not in message
+
+
+# -- --threshold-tokens: chot che do schema tai build -----------------------
+#
+# `schema_mode` duoc quyet MOT LAN luc build va doc lai tu `profile.json` sau
+# do. Co nay la cho duy nhat nguoi van hanh dat duoc nguong do.
+#
+# Hai ly do dung: ep `retrieval` tren schema nho de DO retriever (schema mau
+# deu duoi nguong nen mac dinh luon ra `full`, va o `full` thi recall tat yeu
+# bang 1 vi moi bang luon co mat), va tiet kiem token tren schema co vua.
+
+
+def test_a_low_threshold_forces_retrieval_mode(tmp_path, monkeypatch):
+    from onboard import cmd_build
+
+    monkeypatch.setattr("onboard.introspect_schema", lambda dsn, **kw: MINI_TABLES)  # noqa: ARG005
+    cmd_extract("postgresql://u:p@h/db", tmp_path)
+
+    profile = cmd_build(tmp_path, "postgresql://u:p@h/db", grants={}, threshold_tokens=1)
+
+    assert profile.schema_mode == "retrieval"
+
+
+def test_the_default_threshold_leaves_a_small_schema_in_full_mode(tmp_path, monkeypatch):
+    from onboard import cmd_build
+
+    monkeypatch.setattr("onboard.introspect_schema", lambda dsn, **kw: MINI_TABLES)  # noqa: ARG005
+    cmd_extract("postgresql://u:p@h/db", tmp_path)
+
+    profile = cmd_build(tmp_path, "postgresql://u:p@h/db", grants={})
+
+    assert profile.schema_mode == "full", (
+        "khong truyen co thi hanh vi phai y het truoc khi them no"
+    )
+
+
+def test_the_chosen_threshold_is_recorded_on_disk(tmp_path, monkeypatch):
+    """Nguong phai nam trong profile.json, khong chi trong doi tuong tra ve.
+
+    `read_profile` dung lai profile tu dia o moi lan chay sau; neu nguong
+    khong duoc ghi thi lan doc ke tiep lai dung mac dinh va che do doi am
+    tham -- dung loai troi dat ma C3 sinh ra de chan.
+    """
+    import json
+
+    from onboard import cmd_build
+
+    monkeypatch.setattr("onboard.introspect_schema", lambda dsn, **kw: MINI_TABLES)  # noqa: ARG005
+    cmd_extract("postgresql://u:p@h/db", tmp_path)
+    cmd_build(tmp_path, "postgresql://u:p@h/db", grants={}, threshold_tokens=1)
+
+    meta = json.loads((tmp_path / "profile.json").read_text(encoding="utf-8"))
+    assert meta["threshold_tokens"] == 1
+    assert meta["schema_mode"] == "retrieval"

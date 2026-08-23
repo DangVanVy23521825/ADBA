@@ -295,3 +295,68 @@ def test_a_201_character_value_is_truncated():
     prompt = build_annotation_prompt(TABLES[0], [{"id": 1, "flg_tt": value}])
     assert f'"{value}"' not in prompt
     assert ("x" * 200 + "…") in prompt
+
+
+# -- Chu Han lot vao tieng Viet -> ha xuong low ----------------------------
+#
+# Qwen huan luyen chu yeu tren tieng Trung va thinh thoang ro token Han vao
+# giua mot tu tieng Viet. Do duoc tren BIRD formula_1: 10/89 muc dinh (11%).
+# Chuoi duoi day la mau THAT lay tu lan chay do.
+#
+# Mo ta kieu nay qua duoc moi kiem tra khac -- co text, parse duoc, model tu
+# nhan "high" -- nen neu khong bat thi no vao thang prompt sinh SQL va analyst
+# khong bao gio thay no (pending_review chi lay muc "low").
+
+_HONG = "Bảng chứa thông tin về các tr阿森 đua xe F1."
+
+
+def test_a_description_with_han_characters_is_downgraded_to_low():
+    reply = f'{{"table": {{"text": "{_HONG}", "confidence": "high"}}, "columns": {{}}}}'
+    ann, failures = annotate_schema(TABLES, SAMPLES, lambda s, u: reply)  # noqa: ARG005
+
+    entry = ann.tables["orders"]
+    assert entry.confidence == "low", "model tu nhan high, nhung chuoi nay hong"
+    assert entry.text == _HONG, "giu nguyen text -- nguoi sua mot tu nhanh hon viet lai"
+    assert failures == 0, "van co chu giai, chi la can nguoi xem -- khong phai that bai"
+
+
+def test_a_contaminated_entry_reaches_the_review_queue():
+    """Day moi la diem cua ban sua: no phai HIEN RA cho analyst."""
+    from perception.annotations import pending_review
+
+    reply = f'{{"table": {{"text": "{_HONG}", "confidence": "high"}}, "columns": {{}}}}'
+    ann, _ = annotate_schema(TABLES, SAMPLES, lambda s, u: reply)  # noqa: ARG005
+
+    assert ("orders", None) in pending_review(ann)
+
+
+def test_a_contaminated_column_description_is_downgraded_too():
+    reply = (
+        '{"table": {"text": "Đơn hàng", "confidence": "high"}, '
+        f'"columns": {{"flg_tt": {{"text": "{_HONG}", "confidence": "high"}}}}}}'
+    )
+    ann, _ = annotate_schema(TABLES, SAMPLES, lambda s, u: reply)  # noqa: ARG005
+
+    assert ann.columns["orders"]["flg_tt"].confidence == "low"
+
+
+def test_clean_vietnamese_keeps_the_confidence_the_model_reported():
+    """Khong duoc ha oan moi thu -- day la ly do bo loc phai hep."""
+    reply = (
+        '{"table": {"text": "Bảng đơn hàng bán lẻ, mỗi dòng một đơn.", '
+        '"confidence": "high"}, "columns": {}}'
+    )
+    ann, _ = annotate_schema(TABLES, SAMPLES, lambda s, u: reply)  # noqa: ARG005
+
+    assert ann.tables["orders"].confidence == "high"
+
+
+def test_vietnamese_diacritics_are_not_mistaken_for_cjk():
+    """Dau tieng Viet nam trong Latin Extended, khong dinh dai CJK."""
+    reply = (
+        '{"table": {"text": "Đơn hàng — ướm thử, ễnh ương, quỹ, ngoằn ngoèo.", '
+        '"confidence": "high"}, "columns": {}}'
+    )
+    ann, _ = annotate_schema(TABLES, SAMPLES, lambda s, u: reply)  # noqa: ARG005
+
+    assert ann.tables["orders"].confidence == "high"

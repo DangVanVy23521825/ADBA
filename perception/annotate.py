@@ -124,7 +124,34 @@ def _parse(raw: str) -> dict:
     return {}
 
 
-def _confidence(value) -> str:
+# Hán, Nhật (hiragana/katakana), Hàn. Prompt yêu cầu tiếng Việt, nên ký tự
+# thuộc các dải này trong mô tả nghĩa là model vừa trượt sang ngôn ngữ khác.
+_CJK = re.compile(r"[぀-ヿ㐀-䶿一-鿿가-힯]")
+
+
+def _confidence(value, text: str = "") -> str:
+    """Độ tự tin của một mục chú giải, hạ xuống `low` khi có dấu hiệu hỏng.
+
+    Model local là Qwen — huấn luyện chủ yếu trên tiếng Trung — và nó thỉnh
+    thoảng rò token Hán vào giữa một từ tiếng Việt: `trường` thành `tr阿森`.
+    Đo được trên BIRD formula_1: 10/89 mục dính, tức 11%.
+
+    Một mô tả như thế vẫn qua được mọi kiểm tra khác — nó có text, parse
+    được, model tự nhận `high` — nên nếu không bắt ở đây thì nó lọt thẳng
+    vào prompt sinh SQL, và analyst không bao giờ thấy nó trong hàng đợi
+    duyệt (`pending_review` chỉ lấy mục `low`).
+
+    Hạ xuống `low` chứ không loại bỏ: phần còn lại của câu thường vẫn dùng
+    được, và người sửa một từ nhanh hơn viết lại từ đầu. Đây cũng là lý do
+    không tính nó là thất bại — bảng vẫn có chú giải, chỉ là cần người xem.
+
+    Đánh đổi đã cân nhắc: một mô tả tiếng Việt hợp lệ có chứa chữ Hán —
+    bảng về khách hàng Trung Quốc chẳng hạn — sẽ bị hạ oan xuống `low`.
+    Hậu quả là nó vào hàng đợi duyệt. Đó là cái giá rẻ, ngược lại thì một
+    mô tả hỏng đi thẳng vào prompt mà không ai biết.
+    """
+    if text and _CJK.search(text):
+        return "low"
     return value if value in _ALLOWED_CONFIDENCE else "low"
 
 
@@ -166,7 +193,7 @@ def annotate_schema(
         table_ann[table.name] = Annotation(
             text=text,
             reviewed_by=LLM,
-            confidence=_confidence(t.get("confidence")) if text else "low",
+            confidence=_confidence(t.get("confidence"), text) if text else "low",
         )
         if not text:
             failures += 1
@@ -177,7 +204,7 @@ def annotate_schema(
             name: Annotation(
                 text=body.get("text", ""),
                 reviewed_by=LLM,
-                confidence=_confidence(body.get("confidence")),
+                confidence=_confidence(body.get("confidence"), body.get("text", "")),
             )
             for name, body in cols.items()
             if name in known and isinstance(body, dict) and body.get("text")

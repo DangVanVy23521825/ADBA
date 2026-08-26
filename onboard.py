@@ -135,40 +135,54 @@ def _load_structure(profile_dir: Path) -> tuple[Table, ...]:
 def _local_invoke(system: str, user: str) -> str:
     """Gọi model local qua `ModelClient`.
 
+    `agent_type="annotate"` — RIÊNG cho bước chú giải, KHÔNG mượn ngân sách
+    của `"insight"` nữa. Trước đây `annotate` mượn `agent_type="insight"`
+    (`AGENT_MAX_TOKENS["insight"] = 512`), và chính việc mượn đó là nguyên
+    nhân bảng rộng (`Match` 115 cột, `cards` 74, `Laboratory` 44, `frpm`
+    29) bị cắt cụt câu trả lời rồi tính nhầm là thất bại — bất kỳ ai chỉnh
+    ngân sách của `insight` cho tác vụ insight cũng vô tình chỉnh luôn
+    annotate. `model/model_config.py` giờ có mục `"annotate"` độc lập
+    (`AGENT_TIMEOUT_S`, `AGENT_TEMPERATURES`, `AGENT_MAX_TOKENS`); cỡ lô
+    cột của bảng rộng (`perception.annotate._column_batches`) suy ra trực
+    tiếp từ `AGENT_MAX_TOKENS["annotate"]`.
+
     `enable_openai_fallback=False` được truyền TƯỜNG MINH, không dựa vào
     mặc định của `ModelClient` (vốn bật fallback qua biến môi trường
-    `ENABLE_OPENAI_FALLBACK`) hay vào việc `agent_type="insight"` hiện
-    không nằm trong tập agent được phép fallback của `ModelClient.invoke`.
-    Prompt annotate mang tên bảng, tên cột, và DÒNG DỮ LIỆU THẬT của khách
-    — nó không được rời khỏi mạng của họ dù tập agent được phép fallback
-    đổi ở nơi khác trong tương lai.
+    `ENABLE_OPENAI_FALLBACK`) hay vào việc agent hiện tại có nằm trong tập
+    agent được phép fallback của `ModelClient.invoke` hay không. Prompt
+    annotate mang tên bảng, tên cột, và DÒNG DỮ LIỆU THẬT của khách — nó
+    không được rời khỏi mạng của họ dù tập agent được phép fallback đổi ở
+    nơi khác trong tương lai.
     """
-    return ModelClient(agent_type="insight", enable_openai_fallback=False).invoke(
+    return ModelClient(agent_type="annotate", enable_openai_fallback=False).invoke(
         system_prompt=system, user_prompt=user
     )
 
 
-def _with_progress(
-    invoke: Callable[[str, str], str], tables: tuple[Table, ...]
-) -> Callable[[str, str], str]:
-    """Bọc `invoke` để in tiến độ theo từng bảng.
+def _with_progress(tables: tuple[Table, ...]) -> Callable[[Table, int, int], None]:
+    """Tạo callback in tiến độ theo BẢNG, để truyền vào
+    `annotate_schema(..., on_table_start=...)`.
 
-    `annotate_schema` gọi `invoke` đúng một lần cho mỗi bảng, theo đúng
-    thứ tự của `tables` (kể cả khi `invoke` ném lỗi — lỗi đó bị nó tự bắt
-    và tính là một lần thất bại, không lặp lại bảng đó). Nhờ vậy một bộ
-    đếm tuần tự ở đây khớp chính xác với bảng đang được xử lý mà không cần
-    `annotate_schema` phải lộ ra một tham số callback riêng.
+    Trước khi có chunking, `annotate_schema` gọi `invoke` đúng một lần cho
+    mỗi bảng nên đếm SỐ LẦN GỌI `invoke` (cách làm cũ của hàm này) trùng
+    khớp với số bảng đã xử lý. Bảng rộng giờ bị chia thành nhiều lô cột
+    (`perception.annotate._column_batches`), mỗi lô một lượt gọi `invoke`
+    riêng — một bảng 115 cột có thể tốn hơn chục lượt gọi. Đếm theo lượt
+    gọi sẽ chạy VƯỢT quá `total` ngay khi gặp bảng rộng đầu tiên, và những
+    bảng sau đó bị in tên sai (chỉ số lệch) hoặc lộ ra "?" khi chỉ số vượt
+    khỏi `tables` — im lặng biến "đang xử lý bảng thứ mấy" thành một con số
+    sai mà operator không có cách nào phát hiện.
+
+    `annotate_schema` gọi `on_table_start(table, index, total)` đúng MỘT
+    LẦN cho mỗi bảng, trước lô đầu tiên của bảng đó — bất kể bảng đó tốn
+    bao nhiêu lượt gọi bên trong. Đếm ở tầng BẢNG thay vì tầng LƯỢT GỌI nên
+    luôn đúng bằng `total`, không phụ thuộc độ rộng của từng bảng.
     """
-    total = len(tables)
-    state = {"i": 0}
 
-    def wrapped(system: str, user: str) -> str:
-        state["i"] += 1
-        name = tables[state["i"] - 1].name if state["i"] - 1 < total else "?"
-        print(f"  [{state['i']}/{total}] {name}", flush=True)
-        return invoke(system, user)
+    def on_table_start(table: Table, index: int, total: int) -> None:
+        print(f"  [{index}/{total}] {table.name}", flush=True)
 
-    return wrapped
+    return on_table_start
 
 
 # Ngưỡng "co ngót nhiều" cho `_guarded_merge` (C1/N4). Chốt chặn phải nổ khi
@@ -391,8 +405,8 @@ def cmd_annotate(
     total = len(tables)
     samples, sample_failures = _sample_all_tables(dsn, tables)
 
-    tracked_invoke = _with_progress(invoke, tables)
-    fresh, failures = annotate_schema(tables, samples, tracked_invoke)
+    on_table_start = _with_progress(tables)
+    fresh, failures = annotate_schema(tables, samples, invoke, on_table_start=on_table_start)
     existing = load_annotations(d / SCHEMA_YAML)
     merged, _preserved, dropped = _guarded_merge(existing, fresh, force=force)
     save_annotations(merged, d / SCHEMA_YAML)

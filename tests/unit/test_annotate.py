@@ -1,5 +1,6 @@
 import json
 
+import model.model_config as model_config
 from perception.annotate import annotate_schema, build_annotation_prompt
 from perception.schema_model import Column, Table
 
@@ -360,3 +361,113 @@ def test_vietnamese_diacritics_are_not_mistaken_for_cjk():
     ann, _ = annotate_schema(TABLES, SAMPLES, lambda s, u: reply)  # noqa: ARG005
 
     assert ann.tables["orders"].confidence == "high"
+
+
+# --- Wide-table chunking ----------------------------------------------------
+#
+# `_local_invoke`'s output budget (`AGENT_MAX_TOKENS["annotate"]`) is a fixed
+# number of tokens; a wide table's full column list does not fit, so the
+# reply gets cut off mid-JSON and the table is silently counted as a
+# failure. The fix batches a table's columns across several `invoke` calls
+# and merges the results. These tests force a tiny budget via monkeypatch so
+# a small fixture table (not a 44/115-column fixture) already needs more
+# than one batch -- see `perception.annotate._column_batches` for the exact
+# arithmetic this mirrors.
+
+def _wide_table(name: str, n: int) -> Table:
+    return Table(
+        name=name,
+        columns=tuple(Column(f"col{i}", "text") for i in range(n)),
+        primary_key=("col0",),
+    )
+
+
+def test_a_narrow_table_still_makes_exactly_one_call():
+    """Most real tables are narrow; chunking must not touch that path."""
+    calls = []
+
+    def _invoke(system, user):
+        calls.append(user)
+        return json.dumps({"table": {"text": "Bảng hẹp", "confidence": "high"}, "columns": {}})
+
+    table = _wide_table("narrow", 3)
+    ann, failures = annotate_schema((table,), {"narrow": []}, _invoke)
+
+    assert len(calls) == 1
+    assert ann.tables["narrow"].text == "Bảng hẹp"
+    assert failures == 0
+
+
+def test_a_wide_table_is_split_and_every_column_appears_once(monkeypatch):
+    # budget=200 -> entries_per_call = floor(200*0.75/45) = 3
+    # -> first batch 2 columns, later batches 3 columns each.
+    monkeypatch.setitem(model_config.AGENT_MAX_TOKENS, "annotate", 200)
+
+    table = _wide_table("wide", 7)
+    calls = []
+
+    def _invoke(system, user):  # noqa: ARG001
+        calls.append(user)
+        present = [c.name for c in table.columns if c.name in user]
+        cols = {name: {"text": f"mô tả {name}", "confidence": "high"} for name in present}
+        payload = {"table": {"text": "Bảng rộng", "confidence": "high"}, "columns": cols}
+        return json.dumps(payload, ensure_ascii=False)
+
+    ann, failures = annotate_schema((table,), {"wide": []}, _invoke)
+
+    assert len(calls) > 1, "bảng 7 cột với ngân sách nhỏ phải cần nhiều hơn một lượt gọi"
+    got = set(ann.columns.get("wide", {}))
+    assert got == {c.name for c in table.columns}
+    assert failures == 0
+    assert ann.tables["wide"].text == "Bảng rộng"
+
+
+def test_one_batch_failing_does_not_discard_the_other_batches_columns(monkeypatch):
+    monkeypatch.setitem(model_config.AGENT_MAX_TOKENS, "annotate", 200)
+
+    table = _wide_table("wide", 7)
+
+    def _invoke(system, user):  # noqa: ARG001
+        # The batch carrying col5/col6 (the last batch) fails outright --
+        # simulates Ollama down/timeout for just that batch.
+        if "col5" in user or "col6" in user:
+            raise ConnectionError("connection refused")
+        present = [c.name for c in table.columns if c.name in user]
+        cols = {name: {"text": f"mô tả {name}", "confidence": "high"} for name in present}
+        payload = {"table": {"text": "Bảng rộng", "confidence": "high"}, "columns": cols}
+        return json.dumps(payload, ensure_ascii=False)
+
+    ann, failures = annotate_schema((table,), {"wide": []}, _invoke)
+
+    got = set(ann.columns.get("wide", {}))
+    assert got == {"col0", "col1", "col2", "col3", "col4"}
+    assert "col5" not in got and "col6" not in got
+    # The table description rode along with the first batch, which did not
+    # fail -- the table itself is not counted as a failure just because one
+    # of its later batches was.
+    assert ann.tables["wide"].text == "Bảng rộng"
+    assert failures == 0
+
+
+def test_the_table_description_appears_once_not_duplicated_per_batch(monkeypatch):
+    monkeypatch.setitem(model_config.AGENT_MAX_TOKENS, "annotate", 200)
+
+    table = _wide_table("wide", 7)
+    call_count = {"n": 0}
+
+    def _invoke(system, user):  # noqa: ARG001
+        call_count["n"] += 1
+        present = [c.name for c in table.columns if c.name in user]
+        cols = {name: {"text": f"mô tả {name}", "confidence": "high"} for name in present}
+        # A misbehaving model that emits a "table" key on every batch, each
+        # with different text -- only the FIRST one must be kept.
+        payload = {
+            "table": {"text": f"lượt {call_count['n']}", "confidence": "high"},
+            "columns": cols,
+        }
+        return json.dumps(payload, ensure_ascii=False)
+
+    ann, _ = annotate_schema((table,), {"wide": []}, _invoke)
+
+    assert call_count["n"] > 1
+    assert ann.tables["wide"].text == "lượt 1"

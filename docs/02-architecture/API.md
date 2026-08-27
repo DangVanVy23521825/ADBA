@@ -99,7 +99,7 @@ data  = client.invoke_json(system_prompt=..., user_prompt=...)  # -> dict, đã 
 |---|---|
 | Local-first | Gọi Ollama tại `OLLAMA_BASE_URL`, model `PRIMARY_MODEL` |
 | Retry | `MODEL_MAX_RETRIES` (mặc định 3) với backoff |
-| Fallback | OpenAI khi Ollama lỗi và `ENABLE_OPENAI_FALLBACK` bật |
+| Fallback | OpenAI khi Ollama lỗi, `ADBA_DEPLOYMENT=hybrid`, và `ENABLE_OPENAI_FALLBACK` bật. Mặc định `onprem` — không có gì rời khỏi mạng khách |
 | Parse JSON | `safe_parse_json()` bóc markdown fence; ném `ValueError` nếu không tìm được object JSON — **không** trả dict rỗng để lỗi im lặng |
 
 ## 2. Contract JSON giữa hệ thống và LLM
@@ -279,10 +279,10 @@ Khi lớp HTTP có thật, thêm vào `scripts/update_docs.py` một khối AUTO
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `53dec53` — docs: bộ tài liệu dự án + đường ống tự cập nhật theo commit |
+| Commit nguồn gần nhất | `0e1f02d` — docs: sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-08-16 |
-| Số commit nguồn | 19 |
+| Ngày commit | 2026-08-19 |
+| Số commit nguồn | 22 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

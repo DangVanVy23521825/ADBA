@@ -290,7 +290,7 @@ STACK_RATIONALE: dict[str, tuple[str, str]] = {
     "matplotlib": ("Sinh biểu đồ PNG", "Backend `Agg` chạy không cần màn hình — hợp với server; xuất base64 nhúng thẳng vào state"),
     "seaborn": ("Style biểu đồ", "Chỉ dùng theme `seaborn-v0_8-whitegrid` cho đồng nhất"),
     "pydantic": ("Contract cho output LLM", "Ranh giới an toàn: plan có chu trình / insight sai định dạng bị chặn tại validate thay vì nổ giữa pipeline"),
-    "openai": ("Fallback khi Ollama lỗi", "Giữ hệ thống trả lời được khi model cục bộ chết; tắt được bằng `ENABLE_OPENAI_FALLBACK=0` cho triển khai kín"),
+    "openai": ("Fallback khi Ollama lỗi", "Chỉ dùng khi `ADBA_DEPLOYMENT=hybrid`. Mặc định (`onprem`) chặn hẳn: prompt agent `sql` mang schema, chú giải nghiệp vụ và câu hỏi thật của khách"),
     "streamlit": ("UI chat + bảng + biểu đồ", "Một file Python ra được UI có state; React/FastAPI tốn công gấp nhiều lần cho cùng phạm vi demo"),
     "ragas": ("Đánh giá chất lượng sinh", "Bộ metric có sẵn cho đánh giá đầu ra LLM"),
     "faker": ("Sinh dữ liệu seed tiếng Việt", "Có locale vi_VN — tên/địa chỉ thật hợp cảnh dữ liệu doanh nghiệp Việt Nam"),

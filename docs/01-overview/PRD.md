@@ -111,7 +111,7 @@ ADBA hiện thực hoá phần **multi-agent collaboration** của khung này.
   xuống mức 7B lượng tử hoá và context 4096 token.
 - **Context 4096 token** là ràng buộc thiết kế sâu nhất: `info_box` phải nén đủ để vừa cùng
   câu hỏi, plan và lịch sử hành động. Đây là lý do có perception layer thay vì nhét cả DDL.
-- **Không phụ thuộc API ngoài**: OpenAI chỉ là fallback, tắt được bằng `ENABLE_OPENAI_FALLBACK=0`.
+- **Không phụ thuộc API ngoài**: mặc định `ADBA_DEPLOYMENT=onprem` chặn mọi lời gọi model ngoài. OpenAI chỉ khả dụng khi đặt `hybrid` một cách tường minh — một quyết định thương mại, không phải mặc định.
 
 ## 5. User Personas
 
@@ -202,21 +202,21 @@ Dự án coi là thành công khi đồng thời:
 
 | Đường dẫn | File | File .py | Dòng | Vai trò |
 |---|---|---|---|---|
-| `ADBA_Project_Context_Prompt_v2.md` | 1 | 0 | 982 | — |
+| `ADBA_Project_Context_Prompt_v2.md` | 1 | 0 | 851 | — |
 | `README.md` | 1 | 0 | 269 | — |
 | `app.py` | 1 | 1 | 271 | Streamlit UI — điểm vào duy nhất cho người dùng cuối |
 | `data` | 12 | 1 | 68.524 | DDL 3 domain, seed, và dataset huấn luyện/đánh giá (JSONL) |
-| `docker-compose.yml` | 1 | 0 | 47 | — |
+| `docker-compose.yml` | 1 | 0 | 21 | — |
 | `docs` | 16 | 0 | — | Bộ tài liệu dự án (chính file này) |
 | `eval` | 4 | 3 | 1.071 | Runner đo baseline / PEFT và so sánh hai lần chạy |
 | `graph` | 16 | 16 | 1.907 | LangGraph: state, các node agent, và tool thực thi |
-| `model` | 3 | 3 | 265 | ModelClient (Ollama local-first, fallback OpenAI) + tham số theo agent |
+| `model` | 3 | 3 | 356 | ModelClient (Ollama local-first, fallback OpenAI) + tham số theo agent |
 | `perception` | 5 | 1 | 3.080 | Perception layer — introspect PostgreSQL sinh `info_box` JSON |
 | `prompts` | 5 | 0 | 551 | System prompt của từng skill, dạng file text tách khỏi code |
 | `requirements.txt` | 1 | 0 | 17 | — |
 | `schemas` | 3 | 3 | 735 | Pydantic contract: ExecutionPlan (Supervisor) và InsightOutput (Insight) |
 | `scripts` | 7 | 3 | 1.644 | Tiện ích vận hành: áp schema, kiểm tra kết nối, sinh tài liệu |
-| `tests` | 9 | 9 | 1.925 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
+| `tests` | 10 | 10 | 2.115 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
 | `training` | 13 | 5 | 3.795 | Sinh dữ liệu, LoRA/QLoRA notebook, checkpoint và kết quả |
 | `.cursorrules` | 1 | 0 | 0 | — |
 | `.github` | 1 | 0 | 29 | CI/CD — unit test, build & push image lên GHCR |
@@ -228,10 +228,10 @@ Dự án coi là thành công khi đồng thời:
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `53dec53` — docs: bộ tài liệu dự án + đường ống tự cập nhật theo commit |
+| Commit nguồn gần nhất | `0e1f02d` — docs: sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-08-16 |
-| Số commit nguồn | 19 |
+| Ngày commit | 2026-08-19 |
+| Số commit nguồn | 22 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

@@ -76,8 +76,13 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 > Chưa có tag phiên bản nào. Sau khi gắn tag (`git tag v1.0.0`), khối này tự tách theo từng phiên bản.
 
+**Tính năng mới**
+
+- chế độ triển khai chặn egress, mặc định on-prem — `0e4c5bc` (2026-08-19, Đặng Văn Vỹ)
+
 **Tài liệu**
 
+- sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO — `0e1f02d` (2026-08-19, Đặng Văn Vỹ)
 - bộ tài liệu dự án + đường ống tự cập nhật theo commit — `53dec53` (2026-08-16, Đặng Văn Vỹ)
 - plan triển khai — đường ống schema context (pha 0+1) — `642bc51` (2026-08-15, Đặng Văn Vỹ)
 - spec — tách permitted_tables khỏi retrieved_tables; ghi kết quả spike — `9bfeb37` (2026-08-15, Đặng Văn Vỹ)
@@ -92,6 +97,7 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 **Khác**
 
+- Update README for clarity and language consistency — `910c784` (2026-06-15, Đặng Văn Vỹ)
 - readme change — `0fded65` (2026-05-19, Đặng Văn Vỹ)
 - add readme — `6415751` (2026-05-19, Đặng Văn Vỹ)
 - Stop tracking training/checkpoint-50 LoRA weights (large binaries). — `8b38bfd` (2026-05-19, Đặng Văn Vỹ)
@@ -138,10 +144,10 @@ Cập nhật `PRIMARY_MODEL` trong `.env`, `ollama pull <model>`, rồi chạy l
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `53dec53` — docs: bộ tài liệu dự án + đường ống tự cập nhật theo commit |
+| Commit nguồn gần nhất | `0e1f02d` — docs: sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-08-16 |
-| Số commit nguồn | 19 |
+| Ngày commit | 2026-08-19 |
+| Số commit nguồn | 22 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

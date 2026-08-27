@@ -76,10 +76,10 @@ Chi tiết cơ chế, cách thêm khối mới, cách xử lý sự cố: [DOCS_
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `53dec53` — docs: bộ tài liệu dự án + đường ống tự cập nhật theo commit |
+| Commit nguồn gần nhất | `0e1f02d` — docs: sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-08-16 |
-| Số commit nguồn | 19 |
+| Ngày commit | 2026-08-19 |
+| Số commit nguồn | 22 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

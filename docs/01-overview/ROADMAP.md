@@ -202,6 +202,8 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Commit | Ngày | Tác giả | Nội dung |
 |---|---|---|---|
+| `0e1f02d` | 2026-08-19 | Đặng Văn Vỹ | docs: sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO |
+| `0e4c5bc` | 2026-08-19 | Đặng Văn Vỹ | feat(model): chế độ triển khai chặn egress, mặc định on-prem |
 | `53dec53` | 2026-08-16 | Đặng Văn Vỹ | docs: bộ tài liệu dự án + đường ống tự cập nhật theo commit |
 | `3d2b768` | 2026-08-15 | Đặng Văn Vỹ | chore: ignore .claude/worktrees/ (worktree cô lập) |
 | `642bc51` | 2026-08-15 | Đặng Văn Vỹ | docs: plan triển khai — đường ống schema context (pha 0+1) |
@@ -209,14 +211,12 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 | `4c90f63` | 2026-08-15 | Đặng Văn Vỹ | docs: spec — agent chạy nội bộ trên schema của khách hàng |
 | `20249d8` | 2026-08-12 | Đặng Văn Vỹ | docs: spec — chuẩn bị đường nối cho đa khách hàng |
 | `f2c4a08` | 2026-08-12 | Đặng Văn Vỹ | docs: spec hardening production + tách tool qua MCP |
+| `910c784` | 2026-06-15 | Đặng Văn Vỹ | Update README for clarity and language consistency |
 | `0fded65` | 2026-05-19 | Đặng Văn Vỹ | readme change |
 | `d18f115` | 2026-05-19 | Đặng Văn Vỹ | docs: README theo Best-README-Template; bỏ AGENTS.md khỏi remote |
 | `6415751` | 2026-05-19 | Đặng Văn Vỹ | add readme |
 | `8b38bfd` | 2026-05-19 | Đặng Văn Vỹ | Stop tracking training/checkpoint-50 LoRA weights (large binaries). |
 | `49f5159` | 2026-05-19 | Đặng Văn Vỹ | eval finetune Qlora |
-| `1ba1cce` | 2026-05-14 | Đặng Văn Vỹ | set up agents |
-| `f5ca80a` | 2026-03-27 | DangVanVy23521825 | model ready (baseline finetuning unable to be ready) |
-| `ab628bd` | 2026-03-25 | DangVanVy23521825 | data preparation for initial fine-tuning lora |
 
 <!-- AUTO:end id=commit-history -->
 
@@ -224,10 +224,10 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `53dec53` — docs: bộ tài liệu dự án + đường ống tự cập nhật theo commit |
+| Commit nguồn gần nhất | `0e1f02d` — docs: sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-08-16 |
-| Số commit nguồn | 19 |
+| Ngày commit | 2026-08-19 |
+| Số commit nguồn | 22 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

@@ -327,6 +327,7 @@ flowchart LR
 
 | File | Số mẫu | Kích thước | Vai trò | Phân bố skill |
 |---|---|---|---|---|
+| `data/golden_vi.jsonl` | 20 | 4 KB | — | — |
 | `data/long_context_excluded.jsonl` | 28 | 711 KB | Mẫu vượt 4096 token — loại để không cắt cụt lúc train | text-to-sql (28) |
 | `data/supervisor_routing_samples.jsonl` | 200 | 1.5 MB | Mẫu routing bổ sung cho Supervisor v2 | supervisor-routing (200) |
 | `data/test.jsonl` | 98 | 725 KB | Tập kiểm thử — dùng bởi `eval/eval_runner.py` | text-to-sql (32), data-analysis (30), supervisor-routing (18), insight-generation (14), error-reflection (4) |
@@ -379,10 +380,10 @@ giữa các lần chạy. Không dùng làm bản sao lưu production.
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `0e1f02d` — docs: sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO |
+| Commit nguồn gần nhất | `4601a03` — fix(perception): tên cột không mang nghĩa thì luôn low, bất kể model chấm gì |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-08-19 |
-| Số commit nguồn | 22 |
+| Ngày commit | 2026-08-27 |
+| Số commit nguồn | 96 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

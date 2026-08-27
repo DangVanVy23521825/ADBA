@@ -242,10 +242,10 @@ sequenceDiagram
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `0e1f02d` — docs: sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO |
+| Commit nguồn gần nhất | `4601a03` — fix(perception): tên cột không mang nghĩa thì luôn low, bất kể model chấm gì |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-08-19 |
-| Số commit nguồn | 22 |
+| Ngày commit | 2026-08-27 |
+| Số commit nguồn | 96 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

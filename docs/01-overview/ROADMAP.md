@@ -202,21 +202,21 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Commit | Ngày | Tác giả | Nội dung |
 |---|---|---|---|
+| `4601a03` | 2026-08-27 | Đặng Văn Vỹ | fix(perception): tên cột không mang nghĩa thì luôn low, bất kể model chấm gì |
+| `da433e3` | 2026-08-26 | Đặng Văn Vỹ | fix(perception): chia lô cột cho bảng rộng, annotate có ngân sách riêng |
+| `749bdd7` | 2026-08-23 | Đặng Văn Vỹ | fix(eval): resolve four BIRD loader bugs found against real Postgres |
+| `5433c78` | 2026-08-23 | Đặng Văn Vỹ | chore: ignore profile-noann (mốc đo, không phải nguồn) |
+| `1df5dd6` | 2026-08-23 | Đặng Văn Vỹ | fix(perception): chú giải lẫn chữ Hán bị hạ xuống low, vào hàng đợi duyệt |
+| `ff31b35` | 2026-08-23 | Đặng Văn Vỹ | feat(demo): Chinook làm schema demo phát hành lại được |
+| `42ece63` | 2026-08-23 | Đặng Văn Vỹ | feat(onboard): --threshold-tokens chốt chế độ schema tại build |
+| `5337fd2` | 2026-08-22 | Đặng Văn Vỹ | fix(perception): gấp định danh SQL đúng quy tắc Postgres, không hạ hết về chữ thường |
+| `7cd8480` | 2026-08-22 | Đặng Văn Vỹ | fix(eval): khoá ngoại lùi về NOT VALID khi dữ liệu nguồn vi phạm |
+| `7cfa6ee` | 2026-08-22 | Đặng Văn Vỹ | chore(eval): ghim sha256 của BIRD dev.zip |
+| `3116622` | 2026-08-22 | Đặng Văn Vỹ | feat(eval): bridge BIRD SQLite databases into Postgres for onboarding evals |
 | `0e1f02d` | 2026-08-19 | Đặng Văn Vỹ | docs: sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO |
 | `0e4c5bc` | 2026-08-19 | Đặng Văn Vỹ | feat(model): chế độ triển khai chặn egress, mặc định on-prem |
-| `53dec53` | 2026-08-16 | Đặng Văn Vỹ | docs: bộ tài liệu dự án + đường ống tự cập nhật theo commit |
-| `3d2b768` | 2026-08-15 | Đặng Văn Vỹ | chore: ignore .claude/worktrees/ (worktree cô lập) |
-| `642bc51` | 2026-08-15 | Đặng Văn Vỹ | docs: plan triển khai — đường ống schema context (pha 0+1) |
-| `9bfeb37` | 2026-08-15 | Đặng Văn Vỹ | docs: spec — tách permitted_tables khỏi retrieved_tables; ghi kết quả spike |
-| `4c90f63` | 2026-08-15 | Đặng Văn Vỹ | docs: spec — agent chạy nội bộ trên schema của khách hàng |
-| `20249d8` | 2026-08-12 | Đặng Văn Vỹ | docs: spec — chuẩn bị đường nối cho đa khách hàng |
-| `f2c4a08` | 2026-08-12 | Đặng Văn Vỹ | docs: spec hardening production + tách tool qua MCP |
-| `910c784` | 2026-06-15 | Đặng Văn Vỹ | Update README for clarity and language consistency |
-| `0fded65` | 2026-05-19 | Đặng Văn Vỹ | readme change |
-| `d18f115` | 2026-05-19 | Đặng Văn Vỹ | docs: README theo Best-README-Template; bỏ AGENTS.md khỏi remote |
-| `6415751` | 2026-05-19 | Đặng Văn Vỹ | add readme |
-| `8b38bfd` | 2026-05-19 | Đặng Văn Vỹ | Stop tracking training/checkpoint-50 LoRA weights (large binaries). |
-| `49f5159` | 2026-05-19 | Đặng Văn Vỹ | eval finetune Qlora |
+| `2dfb752` | 2026-08-19 | Đặng Văn Vỹ | fix(onboard): sáu lỗi round 3 — N1-N6 từ review lại |
+| `4709459` | 2026-08-19 | Đặng Văn Vỹ | fix(onboard): sáu lỗi Important/Minor từ review toàn nhánh |
 
 <!-- AUTO:end id=commit-history -->
 
@@ -224,10 +224,10 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `0e1f02d` — docs: sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO |
+| Commit nguồn gần nhất | `4601a03` — fix(perception): tên cột không mang nghĩa thì luôn low, bất kể model chấm gì |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-08-19 |
-| Số commit nguồn | 22 |
+| Ngày commit | 2026-08-27 |
+| Số commit nguồn | 96 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

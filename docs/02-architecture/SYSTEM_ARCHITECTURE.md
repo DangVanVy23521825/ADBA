@@ -104,6 +104,7 @@ trong khi dữ liệu là `'Miền Bắc'` — lỗi im lặng trả về 0 dòn
 | `psycopg2-binary` | `>=2.9.9` | Driver PostgreSQL | Cần `SET LOCAL statement_timeout`, `EXPLAIN`, và `psycopg2.sql.Identifier` để quote định danh an toàn — thứ ORM che mất |
 | `python-dotenv` | `>=1.0.0` | Nạp cấu hình từ `.env` | Chuẩn 12-factor, tránh hardcode credential |
 | `sqlalchemy` | `>=2.0.0` | Tiện ích kết nối/pool | Dùng ở mức thấp; agent sinh SQL thô nên ORM không phải trung tâm |
+| `sqlparse` | `>=0.5.0` | — | — |
 | `pandas` | `>=2.0.0` | Vật mang dữ liệu giữa các agent | SQL → DataFrame → Python → Viz dùng chung một kiểu, serialize được qua `df_to_state()` |
 | `numpy` | `>=1.26.0` | Tính toán số | Phụ thuộc nền của pandas/scipy, cũng nằm trong namespace sandbox |
 | `matplotlib` | `>=3.8.0` | Sinh biểu đồ PNG | Backend `Agg` chạy không cần màn hình — hợp với server; xuất base64 nhúng thẳng vào state |
@@ -243,19 +244,22 @@ riêng qua MCP, và egress bị chặn ở tầng mạng. Chi tiết:
 |---|---|---|---|---|
 | `ADBA_Project_Context_Prompt_v2.md` | 1 | 0 | 851 | — |
 | `README.md` | 1 | 0 | 269 | — |
-| `app.py` | 1 | 1 | 271 | Streamlit UI — điểm vào duy nhất cho người dùng cuối |
-| `data` | 12 | 1 | 68.524 | DDL 3 domain, seed, và dataset huấn luyện/đánh giá (JSONL) |
+| `app.py` | 1 | 1 | 354 | Streamlit UI — điểm vào duy nhất cho người dùng cuối |
+| `conftest.py` | 1 | 1 | 2 | — |
+| `data` | 16 | 1 | 84.504 | DDL 3 domain, seed, và dataset huấn luyện/đánh giá (JSONL) |
 | `docker-compose.yml` | 1 | 0 | 21 | — |
-| `docs` | 16 | 0 | — | Bộ tài liệu dự án (chính file này) |
-| `eval` | 4 | 3 | 1.071 | Runner đo baseline / PEFT và so sánh hai lần chạy |
-| `graph` | 16 | 16 | 1.907 | LangGraph: state, các node agent, và tool thực thi |
-| `model` | 3 | 3 | 356 | ModelClient (Ollama local-first, fallback OpenAI) + tham số theo agent |
-| `perception` | 5 | 1 | 3.080 | Perception layer — introspect PostgreSQL sinh `info_box` JSON |
-| `prompts` | 5 | 0 | 551 | System prompt của từng skill, dạng file text tách khỏi code |
-| `requirements.txt` | 1 | 0 | 17 | — |
+| `docs` | 18 | 0 | — | Bộ tài liệu dự án (chính file này) |
+| `eval` | 12 | 8 | 2.719 | Runner đo baseline / PEFT và so sánh hai lần chạy |
+| `graph` | 16 | 16 | 2.084 | LangGraph: state, các node agent, và tool thực thi |
+| `model` | 3 | 3 | 374 | ModelClient (Ollama local-first, fallback OpenAI) + tham số theo agent |
+| `onboard.py` | 1 | 1 | 1.012 | — |
+| `pages` | 1 | 1 | 85 | — |
+| `perception` | 16 | 12 | 5.296 | Perception layer — introspect PostgreSQL sinh `info_box` JSON |
+| `prompts` | 5 | 0 | 510 | System prompt của từng skill, dạng file text tách khỏi code |
+| `requirements.txt` | 1 | 0 | 18 | — |
 | `schemas` | 3 | 3 | 735 | Pydantic contract: ExecutionPlan (Supervisor) và InsightOutput (Insight) |
 | `scripts` | 7 | 3 | 1.644 | Tiện ích vận hành: áp schema, kiểm tra kết nối, sinh tài liệu |
-| `tests` | 10 | 10 | 2.115 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
+| `tests` | 37 | 34 | 8.103 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
 | `training` | 13 | 5 | 3.795 | Sinh dữ liệu, LoRA/QLoRA notebook, checkpoint và kết quả |
 | `.cursorrules` | 1 | 0 | 0 | — |
 | `.github` | 1 | 0 | 29 | CI/CD — unit test, build & push image lên GHCR |
@@ -273,7 +277,7 @@ kèm giá trị thật; `env.example` là bản mẫu.
 | Biến | Mặc định trong code | Có trong `env.example` | Nơi đọc |
 |---|---|---|---|
 | `BACKUP_MODEL` | `"llama3.1:8b-instruct-q4_K_M"` | — | `model/model_config.py` |
-| `DATABASE_URL` | `os.getenv("POSTGRES_URL", "postgresql://adba_user:adba@localhost:5432/adba_db"` | — | `data/seed/seed_data.py`, `graph/tools/sql_tool.py`, `perception/extract_info_box.py` (+2) |
+| `DATABASE_URL` | `"postgresql://adba_user:adba@localhost:5432/adba_db"` | — | `data/seed/seed_data.py`, `perception/extract_info_box.py`, `training/generate_data.py` (+1) |
 | `ENABLE_OPENAI_FALLBACK` | — | — | `model/model_client.py` |
 | `EVAL_MODEL` | `"qwen2.5-coder:7b-instruct-q5_K_M"` | — | `eval/eval_runner.py` |
 | `MODEL_MAX_RETRIES` | `"3"` | — | `model/model_config.py` |
@@ -320,10 +324,10 @@ kèm giá trị thật; `env.example` là bản mẫu.
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `0e1f02d` — docs: sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO |
+| Commit nguồn gần nhất | `4601a03` — fix(perception): tên cột không mang nghĩa thì luôn low, bất kể model chấm gì |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-08-19 |
-| Số commit nguồn | 22 |
+| Ngày commit | 2026-08-27 |
+| Số commit nguồn | 96 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

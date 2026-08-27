@@ -47,6 +47,11 @@ Quy tắc:
 - Thà nhận không chắc còn hơn đoán nghe hợp lý. Một mô tả sai được đánh dấu
   "high" sẽ không ai kiểm lại, và mọi truy vấn dựa vào nó sẽ sai âm thầm.
 - Chỉ mô tả cột nào bạn thực sự suy ra được; bỏ qua cột hiển nhiên như id.
+- CHỈ trả về đúng những cột liệt kê trong mục "Cột:" ở trên — không thêm
+  cột nào khác vào "columns" dù bạn đoán được ý nghĩa của nó. Một bảng
+  rộng có thể được hỏi qua NHIỀU lượt riêng biệt, mỗi lượt chỉ mang một
+  phần cột; tự ý mô tả thêm sẽ đẩy câu trả lời vượt giới hạn độ dài và bị
+  cắt cụt giữa chừng, hỏng luôn cả những cột đúng lẽ ra phải trả lời được.
 """
 
 SYSTEM_PROMPT = """\
@@ -101,8 +106,13 @@ def _truncate(value):
     return value
 
 
-def _truncate_row(row: Mapping) -> dict:
-    return {k: _truncate(v) for k, v in row.items()}
+def _truncate_row(row: Mapping, keep: frozenset[str] | None = None) -> dict:
+    """`keep=None` giữ mọi khoá (hành vi cũ, bảng hẹp/một lô). `keep` khác
+    `None` chỉ giữ những khoá có trong đó — xem lý do trong
+    `build_annotation_prompt`.
+    """
+    items = row.items() if keep is None else ((k, v) for k, v in row.items() if k in keep)
+    return {k: _truncate(v) for k, v in items}
 
 
 def build_annotation_prompt(
@@ -113,23 +123,36 @@ def build_annotation_prompt(
     Dòng mẫu là thứ phân biệt "cột boolean tên flg_tt" với "cờ đánh dấu đơn
     đã thanh toán" — không có chúng thì model chỉ đoán từ tên.
 
-    `columns`: liệt kê cột nào trong phần "Cột:" của prompt. Mặc định
-    `None` dùng TOÀN BỘ `table.columns` — hành vi cũ, không đổi cho bảng
-    hẹp (một lô duy nhất). Bảng rộng bị chia lô (`_column_batches`) truyền
-    vào đúng tập con của lô đó, để model không thấy — và không phải trả lời
-    về — những cột không thuộc lượt gọi này. Metadata bảng (tên, khoá
-    chính, số dòng, dòng mẫu) KHÔNG đổi theo lô: chúng rẻ và mọi lô đều cần
-    để mô tả đúng ngữ cảnh, kể cả lô không mang mô tả bảng.
+    `columns`: liệt kê cột nào trong phần "Cột:" của prompt VÀ lọc dòng
+    mẫu chỉ còn đúng các khoá đó. Mặc định `None` giữ TOÀN BỘ
+    `table.columns`/toàn bộ khoá của dòng mẫu — hành vi cũ, không đổi cho
+    bảng hẹp (một lô duy nhất).
+
+    Bảng rộng bị chia lô (`_column_batches`) PHẢI lọc cả hai, không chỉ
+    "Cột:". Đo được trên bảng `Match` thật (bird_all, 115 cột): lô đầu chỉ
+    xin 7 cột trong "Cột:", nhưng `sample_rows` trả về DÒNG ĐẦY ĐỦ (cả 115
+    cột) — dòng mẫu vẫn phơi ra `goal`, `shoton`, `home_player_9`, ... dù
+    chúng không nằm trong lô. Model bám vào những khoá đó trong JSON mẫu
+    và tự ý mô tả thêm cột NGOÀI lô, đẩy số mục vượt xa cỡ lô đã tính toán
+    (7 mục) — output vượt ngân sách và bị Ollama cắt ngang giữa chừng,
+    đúng lỗi gốc mà chunking phải sửa, chỉ khác là cắt ở nội dung sample
+    thay vì ở "Cột:". Hậu quả cụ thể: JSON không bao giờ đóng, `_parse` trả
+    `{}`, mô tả bảng (đi kèm lô này) mất trắng dù cả 7 cột lẫn "table" đều
+    ĐÃ xuất hiện đầy đủ trong phần output kịp sinh ra trước khi bị cắt.
+    Lọc dòng mẫu đúng theo `columns` của lô đóng luôn cả input lẫn tín hiệu
+    khiến model lạc đề, không chỉ input.
     """
+    cols_list = table.columns if columns is None else columns
     cols = "\n".join(
         f"  {c.name} {c.data_type}"
         + (" [GENERATED]" if c.is_generated else "")
         + (f" [FK → {table.foreign_keys[c.name]}]" if c.name in table.foreign_keys else "")
-        for c in (table.columns if columns is None else columns)
+        for c in cols_list
     )
     pk = ", ".join(table.primary_key) or "(không có)"
     row_count = "(chưa biết)" if table.row_count is None else table.row_count
-    truncated_rows = [_truncate_row(row) for row in list(samples)[:3]]
+    keep = None if columns is None else frozenset(c.name for c in cols_list)
+    truncated_rows = [_truncate_row(row, keep) for row in list(samples)[:3]]
     rows = json.dumps(truncated_rows, ensure_ascii=False, default=str, indent=1)
     return (
         f"Bảng: {table.name}\n"
@@ -176,7 +199,32 @@ def _parse(raw: str) -> dict:
 _CJK = re.compile(r"[぀-ヿ㐀-䶿一-鿿가-힯]")
 
 
-def _confidence(value, text: str = "") -> str:
+# Tên KHÔNG mang thông tin ngữ nghĩa. Ba dạng, đo trên 798 cột của
+# bird_all: 61 cột (7%) khớp — đủ nhỏ để hàng đợi duyệt vẫn dùng được.
+#
+#   `^[A-Za-z]{1,3}\d+$`  A2, A11, col3, f1 — mã thuần, không mang nghĩa
+#   không nguyên âm       B365D, CPK, CRP, BSH — viết tắt đã nén hết nguyên âm
+#   một chữ cái           x, n — không thể suy ra gì
+#
+# Cả ba đều là tên mà THÔNG TIN KHÔNG TỒN TẠI trong đầu vào: không ở tên
+# cột, không ở kiểu dữ liệu, và giá trị mẫu là số nên không phân biệt được
+# "lương trung bình" với "mã xã". Model buộc phải đoán.
+_CODE_LIKE = re.compile(r"^[A-Za-z]{1,3}\d+$")
+
+
+def _name_is_opaque(name: str) -> bool:
+    """Tên này có tự nói lên nó là gì không?"""
+    if not name:
+        return False
+    if _CODE_LIKE.match(name):
+        return True
+    chu = re.sub(r"[^A-Za-z]", "", name).lower()
+    if len(chu) == 1:
+        return True
+    return len(chu) >= 2 and not set(chu) & set("aeiouy")
+
+
+def _confidence(value, text: str = "", name: str = "") -> str:
     """Độ tự tin của một mục chú giải, hạ xuống `low` khi có dấu hiệu hỏng.
 
     Model local là Qwen — huấn luyện chủ yếu trên tiếng Trung — và nó thỉnh
@@ -196,7 +244,24 @@ def _confidence(value, text: str = "") -> str:
     bảng về khách hàng Trung Quốc chẳng hạn — sẽ bị hạ oan xuống `low`.
     Hậu quả là nó vào hàng đợi duyệt. Đó là cái giá rẻ, ngược lại thì một
     mô tả hỏng đi thẳng vào prompt mà không ai biết.
+
+    `name` — tên bảng/cột — hạ xuống `low` khi nó không mang thông tin gì
+    (`_name_is_opaque`). Đo được trên BIRD `financial.district`, bảng có cột
+    `A2`..`A16`: model bịa ra "A11 = Mã xã" (thật ra là LƯƠNG TRUNG BÌNH),
+    "A12 = Tỷ lệ dân số" (thật ra là TỶ LỆ THẤT NGHIỆP 1995), và tự chấm
+    `high` cho 7 trong 10 cột. Nó đúng ở chỗ dễ (`A9 = Số dân`) và sai ở chỗ
+    khó — tức là ngược đúng chiều so với thứ cần.
+
+    Không phải vì model kém: với `A11`, thông tin KHÔNG TỒN TẠI trong đầu
+    vào. Không ở tên, không ở kiểu, và giá trị mẫu là số nên không phân biệt
+    được lương với mã xã. Buộc phải đoán, nên `confidence` của chính nó
+    không dùng được ở đúng những cột cần nhất.
+
+    Bản sửa này không làm model đoán đúng hơn. Nó chỉ đưa 10/10 cột đó vào
+    hàng đợi duyệt thay vì 3 — và người là chỗ duy nhất sửa được.
     """
+    if name and _name_is_opaque(name):
+        return "low"
     if text and _CJK.search(text):
         return "low"
     return value if value in _ALLOWED_CONFIDENCE else "low"
@@ -373,13 +438,17 @@ def annotate_schema(
                     merged_columns[name] = Annotation(
                         text=body.get("text", ""),
                         reviewed_by=LLM,
-                        confidence=_confidence(body.get("confidence"), body.get("text", "")),
+                        confidence=_confidence(
+                            body.get("confidence"), body.get("text", ""), name
+                        ),
                     )
 
         table_ann[table.name] = Annotation(
             text=text,
             reviewed_by=LLM,
-            confidence=_confidence(confidence_raw, text) if text else "low",
+            confidence=(
+                _confidence(confidence_raw, text, table.name) if text else "low"
+            ),
         )
         if not text:
             failures += 1

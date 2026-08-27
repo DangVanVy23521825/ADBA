@@ -73,6 +73,27 @@ def test_the_prompt_carries_column_names_and_sample_values():
     assert "orders" in prompt
 
 
+def test_a_batch_prompt_only_shows_sample_values_for_its_own_columns():
+    """Regression: bảng `Match` thật (bird_all, 115 cột) trượt đúng lỗi này.
+
+    Lô đầu chỉ xin 7 cột trong "Cột:", nhưng `sample_rows` trả về DÒNG ĐẦY
+    ĐỦ (mọi cột của bảng) -- nếu dòng mẫu không được lọc theo đúng cột của
+    lô, model nhìn thấy các khoá khác trong JSON mẫu và tự ý mô tả thêm
+    cột ngoài lô, đẩy output vượt ngân sách token và bị cắt cụt giữa
+    chừng -- mất luôn cả mô tả bảng lẫn cột hợp lệ đã sinh ra trước đó.
+    """
+    table = Table(
+        name="wide",
+        columns=(Column("a", "int"), Column("b", "int"), Column("secret", "text")),
+    )
+    samples = [{"a": 1, "b": 2, "secret": "KHÔNG ĐƯỢC LỘ RA"}]
+
+    prompt = build_annotation_prompt(table, samples, (table.columns[0], table.columns[1]))
+
+    assert "KHÔNG ĐƯỢC LỘ RA" not in prompt
+    assert '"secret"' not in prompt
+
+
 def test_the_prompt_asks_for_vietnamese():
     assert "tiếng Việt" in build_annotation_prompt(TABLES[0], SAMPLES["orders"])
 
@@ -471,3 +492,76 @@ def test_the_table_description_appears_once_not_duplicated_per_batch(monkeypatch
 
     assert call_count["n"] > 1
     assert ann.tables["wide"].text == "lượt 1"
+
+
+# -- Ten cot khong mang thong tin -> luon low -------------------------------
+#
+# Do tren BIRD financial.district, bang co cot A2..A16: model bia ra
+# "A11 = Ma xa" (that ra la LUONG TRUNG BINH), "A12 = Ty le dan so" (that ra
+# la TY LE THAT NGHIEP 1995), va tu cham "high" cho 7 trong 10 cot. Dung o
+# cho de (A9 = So dan) va sai o cho kho -- nguoc dung chieu voi thu can.
+#
+# Khong phai model kem: voi A11 thi thong tin KHONG TON TAI trong dau vao.
+# Khong o ten, khong o kieu, va gia tri mau la so nen khong phan biet duoc
+# luong voi ma xa. Buoc phai doan, nen confidence cua chinh no vo dung o
+# dung nhung cot can nhat.
+
+
+def test_a_code_like_column_name_is_always_low_confidence():
+    """`A11` -- ca da do duoc, model tu cham high va bia ra y nghia."""
+    reply = (
+        '{"table": {"text": "Quận huyện. ~ district", "confidence": "high"}, '
+        '"columns": {"A11": {"text": "Mã xã. ~ ward code", "confidence": "high"}}}'
+    )
+    tables = (
+        Table(
+            name="district",
+            columns=(Column("A11", "integer"), Column("name", "text")),
+            primary_key=("A11",),
+        ),
+    )
+    ann, _ = annotate_schema(tables, {"district": []}, lambda s, u: reply)  # noqa: ARG005
+
+    assert ann.columns["district"]["A11"].confidence == "low", (
+        "model tu cham high, nhung ten A11 khong the suy ra duoc gi"
+    )
+
+
+def test_a_vowelless_abbreviation_is_low_confidence():
+    """`CPK`, `CRP`, `B365D` -- ma xet nghiem va keo ca cuoc trong BIRD."""
+    from perception.annotate import _name_is_opaque
+
+    for ten in ("CPK", "CRP", "B365D", "BSH", "GBD"):
+        assert _name_is_opaque(ten), f"{ten} phai bi coi la mu mo"
+
+
+def test_a_meaningful_name_keeps_the_model_confidence():
+    """Bo loc phai HEP -- neu khong thi ca 873 muc vao hang doi va vo dung."""
+    from perception.annotate import _name_is_opaque
+
+    for ten in ("customer_id", "invoice", "birth_date", "total", "email", "region"):
+        assert not _name_is_opaque(ten), f"{ten} co nghia, khong duoc ha oan"
+
+
+def test_an_opaque_column_reaches_the_review_queue():
+    """Diem cua ban sua: dua cot do RA TRUOC MAT analyst."""
+    from perception.annotations import pending_review
+
+    reply = (
+        '{"table": {"text": "Quận huyện. ~ district", "confidence": "high"}, '
+        '"columns": {"A11": {"text": "Mã xã. ~ ward code", "confidence": "high"}}}'
+    )
+    tables = (
+        Table(name="district", columns=(Column("A11", "integer"),), primary_key=("A11",)),
+    )
+    ann, _ = annotate_schema(tables, {"district": []}, lambda s, u: reply)  # noqa: ARG005
+
+    assert ("district", "A11") in pending_review(ann)
+
+
+def test_an_opaque_table_name_is_low_too():
+    reply = '{"table": {"text": "Bảng gì đó. ~ table", "confidence": "high"}, "columns": {}}'
+    tables = (Table(name="T1", columns=(Column("x", "integer"),)),)
+    ann, _ = annotate_schema(tables, {"T1": []}, lambda s, u: reply)  # noqa: ARG005
+
+    assert ann.tables["T1"].confidence == "low"

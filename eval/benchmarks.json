@@ -1,0 +1,35 @@
+{
+  "spider": {
+    "url": "https://drive.google.com/file/d/1403EGqzIDoHMdQF4c9Bkyl7dZLZ5Wt6J/view?usp=sharing",
+    "filename": "spider.zip",
+    "fetch_mode": "manual",
+    "sha256": "",
+    "license": "CC BY-SA 4.0",
+    "license_url": "https://yale-lily.github.io/spider",
+    "commercial_use": true,
+    "may_redistribute": false,
+    "notes": "Xác nhận bởi chủ repo. Link tải là Google Drive nên script không lấy tự động được — tải tay rồi đặt vào data/benchmarks/spider/spider.zip. may_redistribute=false là chính sách dự án (dữ liệu eval không đi kèm bản giao khách), không phải hạn chế của license; CC BY-SA cho phép phân phối lại kèm ghi công và share-alike."
+  },
+  "bird": {
+    "url": "https://bird-bench.oss-cn-beijing.aliyuncs.com/dev.zip",
+    "filename": "dev.zip",
+    "fetch_mode": "http",
+    "sha256": "cdd6d19faeb45a23970b98d3ef6c40a87987c95459c2cf12076897a60cf5a630",
+    "license": "CC BY-SA 4.0",
+    "license_url": "https://bird-bench.github.io/",
+    "commercial_use": true,
+    "may_redistribute": false,
+    "notes": "Xác nhận bởi chủ repo. Đổi sang CC BY-SA 4.0 từ 27/04/2024 — cùng license với Spider. Đang trỏ tập dev; tập train ở https://bird-bench.oss-cn-beijing.aliyuncs.com/train.zip nếu cần. may_redistribute=false là chính sách dự án, không phải hạn chế license."
+  },
+  "beaver": {
+    "url": "",
+    "filename": "",
+    "fetch_mode": "manual",
+    "sha256": "",
+    "license": null,
+    "license_url": "https://beaverbench.github.io/",
+    "commercial_use": null,
+    "may_redistribute": null,
+    "notes": "CHỜ XÁC MINH. Chủ repo thấy nguồn ghi mâu thuẫn: có nơi CC BY-NC-ND 4.0, có nơi MIT. Chưa dùng cho tới khi xác định chắc chắn. Nếu là BY-NC-ND thì (a) NC cấm dùng cho mục đích thương mại — bao gồm đo để quyết định về sản phẩm bán ra, và (b) ND cấm tạo bản phái sinh — bước chuyển sang questions.jsonl/schemas.json là bản phái sinh."
+  }
+}

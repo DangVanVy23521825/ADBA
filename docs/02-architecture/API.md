@@ -37,7 +37,7 @@ result: MultiAgentState = run_graph(
 | Trường | Kiểu | Bắt buộc | Nhóm |
 |---|---|---|---|
 | `query` | `str` | bắt buộc | Input |
-| `info_box` | `dict[str, Any]` | bắt buộc | Input |
+| `schema_context` | `SchemaContext` | bắt buộc | Input |
 | `execution_plan` | `list[dict[str, Any]]` | bắt buộc | Supervisor |
 | `dependency_graph` | `NotRequired[dict[str, list[str]]]` | tuỳ chọn | Supervisor |
 | `ready_agents` | `NotRequired[list[str]]` | tuỳ chọn | Supervisor |
@@ -279,10 +279,10 @@ Khi lớp HTTP có thật, thêm vào `scripts/update_docs.py` một khối AUTO
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `0e1f02d` — docs: sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO |
+| Commit nguồn gần nhất | `03ab786` — test(onboard): fixture mật khẩu không còn giống bí mật thật |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-08-19 |
-| Số commit nguồn | 22 |
+| Ngày commit | 2026-08-27 |
+| Số commit nguồn | 97 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

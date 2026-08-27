@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import base64
 import io
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from graph.multi_agent import run_graph
 from graph.state import MultiAgentState
+from graph.tools.sql_tool import TableNotPermittedError
+from perception.connection_profile import permitted_tables
+from perception.profile_store import read_profile
+from perception.retrieval import LexicalRetriever
+from perception.schema_context import resolve_schema_context
 from schemas.insight_schema import InsightOutput
 from schemas.plan_schema import ExecutionPlan
 
@@ -43,6 +49,57 @@ st.set_page_config(
 
 st.title("ADBA — Autonomous Data & BI Agent")
 st.caption("Ask questions about your data. The multi-agent pipeline will plan, query, analyze, and visualize.")
+
+
+# ────────────────────────────────────────────────
+# Profile (read once per session, from disk)
+# ────────────────────────────────────────────────
+# The onboarding pipeline (onboard.py: extract → annotate → build → verify)
+# writes profile/ once, at install time. app.py used to rebuild it — via
+# build_profile() — on every single question: re-introspecting the database,
+# re-hashing, re-deciding schema_mode. That repeated onboarding work on every
+# Enter press, though the spec says schema_mode is decided once at install.
+# Reading from disk instead means the analyst's annotation edits (written to
+# schema.yaml by the "Chú giải schema" review page) only need the profile to
+# be re-read to take effect — see the "Nạp lại profile" button in the
+# sidebar below, which clears these caches deliberately rather than on an
+# automatic staleness check at startup (out of scope for this plan).
+
+PROFILE_DIR = Path(os.environ.get("ADBA_PROFILE_DIR", "profile"))
+
+NO_PROFILE_MSG = (
+    f"Chưa có profile trong `{PROFILE_DIR}`. Đặt biến môi trường `ADBA_DSN` "
+    "(tránh truyền DSN qua dòng lệnh — nó lộ trong `ps aux` và lịch sử "
+    "shell), rồi chạy:\n\n"
+    "```\n"
+    "export ADBA_DSN=postgresql://...\n"
+    f"python onboard.py extract --profile {PROFILE_DIR}\n"
+    f"python onboard.py annotate --profile {PROFILE_DIR}\n"
+    f"python onboard.py build --profile {PROFILE_DIR} --grant local=*\n"
+    "```"
+)
+
+
+@st.cache_resource
+def _load_profile():
+    """Đọc profile một lần cho cả phiên.
+
+    Trước đây khối xử lý câu hỏi dựng lại profile mỗi lần — introspect,
+    hash, dựng index — tức lặp công việc onboarding trên mỗi lần gõ Enter,
+    và quyết lại `schema_mode` mỗi lượt dù spec nói quyết một lần lúc cài
+    đặt. `@st.cache_resource` giữ kết quả cho cả phiên; nút "Nạp lại
+    profile" ở sidebar gọi `.clear()` để nạp lại sau khi chú giải được sửa.
+    """
+    return read_profile(PROFILE_DIR)
+
+
+@st.cache_resource
+def _load_retriever(_profile):
+    """Retriever theo profile hiện tại. `_profile` không được hash (dấu `_`
+    đứng đầu báo Streamlit bỏ qua nó khi tính cache key) — nó chỉ cần đổi
+    khi `_load_profile` được nạp lại, việc mà `.clear()` đã lo.
+    """
+    return LexicalRetriever(_profile.tables)
 
 
 # ────────────────────────────────────────────────
@@ -222,16 +279,20 @@ if prompt := st.chat_input("Ask a question about your data..."):
     with st.chat_message("assistant"):
         with st.spinner("Planning and executing agents..."):
             try:
-                # Load info_box from latest extraction
-                info_box_path = Path(__file__).parent / "info_box_latest.json"
-                if info_box_path.exists():
-                    import json
-                    info_box = json.loads(info_box_path.read_text())
-                else:
-                    info_box = {"schemas": {}}
-                    st.warning("No info_box found. Using empty schema context.")
+                profile = _load_profile()
+            except FileNotFoundError:
+                st.error(NO_PROFILE_MSG)
+                st.stop()
 
-                result = run_graph(query=prompt, info_box=info_box)
+            user = "local"  # TODO(plan-4): thay bằng danh tính từ lớp xác thực
+            try:
+                # Resolve the per-question schema slice (retrieval or full, per profile.schema_mode).
+                ctx = resolve_schema_context(
+                    profile, prompt, permitted_tables(profile, user),
+                    retriever=_load_retriever(profile),
+                )
+
+                result = run_graph(query=prompt, schema_context=ctx, profile=profile, user=user)
                 st.session_state.last_result = result
 
                 # Display results
@@ -244,6 +305,15 @@ if prompt := st.chat_input("Ask a question about your data..."):
                 if plan:
                     summary = f"Plan: {result.get('status', 'done')}. " + summary
                 st.session_state.messages.append({"role": "assistant", "content": summary})
+
+            except TableNotPermittedError as exc:
+                # Read .public, not str(exc) — the exception's full message
+                # (via .forbidden) carries the exact forbidden table names,
+                # which are themselves information the user must not receive.
+                # See graph/tools/sql_tool.py.
+                error_msg = exc.public
+                st.error(error_msg)
+                st.session_state.messages.append({"role": "assistant", "content": error_msg})
 
             except Exception as e:
                 error_msg = f"Error: {str(e)}"
@@ -258,6 +328,19 @@ if prompt := st.chat_input("Ask a question about your data..."):
 with st.sidebar:
     st.header("Session")
     if st.button("Clear Chat", use_container_width=True):
+        st.session_state.messages = []
+        st.session_state.last_result = None
+        st.rerun()
+
+    st.divider()
+    st.caption(
+        "Đã sửa chú giải ở trang 'Chú giải schema'? Profile được cache cho "
+        "cả phiên nên bấm nút dưới để nạp lại — không tự kiểm tra lúc khởi "
+        "động."
+    )
+    if st.button("Nạp lại profile", use_container_width=True):
+        _load_profile.clear()
+        _load_retriever.clear()
         st.session_state.messages = []
         st.session_state.last_result = None
         st.rerun()

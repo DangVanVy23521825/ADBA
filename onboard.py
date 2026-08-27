@@ -1,0 +1,1012 @@
+"""Đường onboarding một khách hàng: extract → annotate → build → verify.
+
+Chạy TẠI CHỖ KHÁCH, offline. Bước `annotate` gọi model local; không có bước
+nào gọi API ngoài — xem `_local_invoke`.
+
+DSN không bao giờ nên xuất hiện trên dòng lệnh: nó lộ trong `ps aux` cho
+mọi user cục bộ và ở lại trong lịch sử shell. Mỗi lệnh con nhận DSN từ cờ
+`--dsn` HOẶC từ biến môi trường `ADBA_DSN`; cờ (nếu có) thắng biến môi
+trường. Không có cả hai là lỗi rõ ràng, không phải một DSN rỗng âm thầm
+trôi xuống tầng introspect.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import urllib.parse
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from pathlib import Path
+from typing import TypeVar
+
+import psycopg2
+
+from model.model_client import ModelClient
+from perception.annotate import annotate_schema
+from perception.annotations import (
+    HUMAN,
+    SchemaAnnotations,
+    load_annotations,
+    merge_annotations,
+    pending_review,
+    save_annotations,
+)
+from perception.connection_profile import DEFAULT_THRESHOLD_TOKENS, ConnectionProfile
+from perception.introspect import introspect_schema, sample_rows
+from perception.profile_store import (
+    SCHEMA_YAML,
+    STRUCTURE_JSON,
+    dsn_host_for_error,
+    read_profile,
+    structure_from_plain,
+    structure_to_plain,
+    write_profile,
+)
+from perception.schema_model import Table
+
+_T = TypeVar("_T")
+
+DSN_ENV_VAR = "ADBA_DSN"
+
+
+class OnboardError(RuntimeError):
+    """Lỗi vận hành mà người dùng sửa được, không phải bug của chương trình.
+
+    `main()` bắt loại này và in nguyên câu thông báo rồi thoát mã 1. Đừng
+    dùng nó cho lỗi lập trình: traceback của những lỗi đó vẫn cần hiện ra
+    đầy đủ.
+
+    Thông báo không được chứa DSN — nó mang mật khẩu, và cả đường onboarding
+    này giữ mật khẩu ra khỏi file lẫn thông báo lỗi.
+    """
+
+# Xem model/model_config.py — đây là biến operator cần kiểm tra khi toàn
+# bộ lượt annotate thất bại, dấu hiệu của một địa chỉ Ollama sai chứ không
+# phải một vấn đề của schema khách.
+OLLAMA_ENV_VAR = "OLLAMA_BASE_URL"
+
+
+def _run_db_call(dsn: str, step: str, call: Callable[[], _T]) -> _T:
+    """Chạy một lệnh gọi DB (`introspect_schema`/`sample_rows`), bọc lỗi kết
+    nối thành `OnboardError` chỉ nêu HOST — không bao giờ DSN hay mật khẩu.
+
+    `main()` chỉ bắt `OnboardError` (xem docstring class đó); không có gì
+    ở đây thì một lỗi kết nối từ `psycopg2` thoát ra thành traceback trần.
+    Với DSN không đúng dạng URI, libpq/psycopg2 echo NGUYÊN VĂN chuỗi DSN
+    vào thông báo lỗi parse (`invalid dsn: missing "=" after "..." in
+    connection info string`) — nếu DSN đó mang mật khẩu, mật khẩu lộ ra
+    console/lịch sử shell/log CI/ticket hỗ trợ. `onboard._resolve_dsn` đã
+    chặn hình dạng đó từ trước khi tới đây (C2), nhưng khối `except` này
+    vẫn tồn tại làm lớp phòng thủ thứ hai cho MỌI lỗi `psycopg2` khác (host
+    không resolve được, sai port, bị từ chối kết nối, ...) — những lỗi đó
+    tự thân thường không mang mật khẩu, nhưng vẫn phải biến thành
+    `OnboardError` để không thoát ra thành traceback trần.
+
+    Dùng `perception.profile_store.dsn_host_for_error` để lấy host — CHUNG
+    kỹ thuật với `_strip_password` (chỉ đọc `.hostname`/`.port` từ
+    `urlsplit`), không phát minh cách bóc credential thứ hai.
+    """
+    try:
+        return call()
+    except psycopg2.Error as e:
+        host = dsn_host_for_error(dsn)
+        raise OnboardError(
+            f"Không kết nối được database lúc {step} (host {host}): "
+            f"{type(e).__name__}. Kiểm tra host/port, mạng, và rằng "
+            "Postgres đang chạy tại đó. Không in DSN ở đây vì nó có thể "
+            "mang mật khẩu."
+        ) from e
+
+
+def cmd_extract(dsn: str, profile_dir: Path | str) -> tuple[Table, ...]:
+    """Đọc cấu trúc DB, ghi `structure.json`. Không đụng tới chú giải."""
+    tables = _run_db_call(dsn, "extract", lambda: introspect_schema(dsn))
+    d = Path(profile_dir)
+    d.mkdir(parents=True, exist_ok=True)
+    (d / STRUCTURE_JSON).write_text(
+        json.dumps(structure_to_plain(tables), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    print(f"{len(tables)} bảng → {d / STRUCTURE_JSON}")
+    return tables
+
+
+def _load_structure(profile_dir: Path) -> tuple[Table, ...]:
+    """Đọc `structure.json`, hoặc báo lỗi nói được phải làm gì tiếp.
+
+    Chạy sai thứ tự lệnh, hoặc trỏ `--profile` nhầm thư mục, là việc đầu
+    tiên người vận hành làm sai. Để `FileNotFoundError` nguyên dạng thoát
+    ra thành traceback thì họ nhận một trang stack Python thay vì câu
+    "chạy extract trước" — trong khi trang Streamlit vốn đã xử lý đúng
+    tình huống này.
+    """
+    path = profile_dir / STRUCTURE_JSON
+    if not path.exists():
+        raise OnboardError(
+            f"Không có {STRUCTURE_JSON} trong {profile_dir}. "
+            f"Chạy `onboard.py extract --profile {profile_dir}` trước."
+        )
+    return structure_from_plain(json.loads(path.read_text(encoding="utf-8")))
+
+
+def _local_invoke(system: str, user: str) -> str:
+    """Gọi model local qua `ModelClient`.
+
+    `agent_type="annotate"` — RIÊNG cho bước chú giải, KHÔNG mượn ngân sách
+    của `"insight"` nữa. Trước đây `annotate` mượn `agent_type="insight"`
+    (`AGENT_MAX_TOKENS["insight"] = 512`), và chính việc mượn đó là nguyên
+    nhân bảng rộng (`Match` 115 cột, `cards` 74, `Laboratory` 44, `frpm`
+    29) bị cắt cụt câu trả lời rồi tính nhầm là thất bại — bất kỳ ai chỉnh
+    ngân sách của `insight` cho tác vụ insight cũng vô tình chỉnh luôn
+    annotate. `model/model_config.py` giờ có mục `"annotate"` độc lập
+    (`AGENT_TIMEOUT_S`, `AGENT_TEMPERATURES`, `AGENT_MAX_TOKENS`); cỡ lô
+    cột của bảng rộng (`perception.annotate._column_batches`) suy ra trực
+    tiếp từ `AGENT_MAX_TOKENS["annotate"]`.
+
+    `enable_openai_fallback=False` được truyền TƯỜNG MINH, không dựa vào
+    mặc định của `ModelClient` (vốn bật fallback qua biến môi trường
+    `ENABLE_OPENAI_FALLBACK`) hay vào việc agent hiện tại có nằm trong tập
+    agent được phép fallback của `ModelClient.invoke` hay không. Prompt
+    annotate mang tên bảng, tên cột, và DÒNG DỮ LIỆU THẬT của khách — nó
+    không được rời khỏi mạng của họ dù tập agent được phép fallback đổi ở
+    nơi khác trong tương lai.
+    """
+    return ModelClient(agent_type="annotate", enable_openai_fallback=False).invoke(
+        system_prompt=system, user_prompt=user
+    )
+
+
+def _with_progress(tables: tuple[Table, ...]) -> Callable[[Table, int, int], None]:
+    """Tạo callback in tiến độ theo BẢNG, để truyền vào
+    `annotate_schema(..., on_table_start=...)`.
+
+    Trước khi có chunking, `annotate_schema` gọi `invoke` đúng một lần cho
+    mỗi bảng nên đếm SỐ LẦN GỌI `invoke` (cách làm cũ của hàm này) trùng
+    khớp với số bảng đã xử lý. Bảng rộng giờ bị chia thành nhiều lô cột
+    (`perception.annotate._column_batches`), mỗi lô một lượt gọi `invoke`
+    riêng — một bảng 115 cột có thể tốn hơn chục lượt gọi. Đếm theo lượt
+    gọi sẽ chạy VƯỢT quá `total` ngay khi gặp bảng rộng đầu tiên, và những
+    bảng sau đó bị in tên sai (chỉ số lệch) hoặc lộ ra "?" khi chỉ số vượt
+    khỏi `tables` — im lặng biến "đang xử lý bảng thứ mấy" thành một con số
+    sai mà operator không có cách nào phát hiện.
+
+    `annotate_schema` gọi `on_table_start(table, index, total)` đúng MỘT
+    LẦN cho mỗi bảng, trước lô đầu tiên của bảng đó — bất kể bảng đó tốn
+    bao nhiêu lượt gọi bên trong. Đếm ở tầng BẢNG thay vì tầng LƯỢT GỌI nên
+    luôn đúng bằng `total`, không phụ thuộc độ rộng của từng bảng.
+    """
+
+    def on_table_start(table: Table, index: int, total: int) -> None:
+        print(f"  [{index}/{total}] {table.name}", flush=True)
+
+    return on_table_start
+
+
+# Ngưỡng "co ngót nhiều" cho `_guarded_merge` (C1/N4). Chốt chặn phải nổ khi
+# một lượt ghép sẽ XOÁ hơn một nửa số mục `human` mà `existing` đang giữ —
+# đó gần như chắc chắn là một lượt `extract` hỏng (ADBA_DSN trỏ nhầm DB
+# rỗng/staging, nhầm schema ngoài `public`, hay chỉ đơn giản introspect trả
+# về một tập cột bị cắt cụt), không phải khách hàng vừa xoá thật hơn một
+# nửa công sức duyệt của họ trong một lượt. 0.5 chọn có chủ đích: một đợt
+# dọn dẹp/loại bỏ bảng deprecated thật sự hiếm khi chạm mốc này trong một
+# lần chạy, còn trỏ nhầm DB thì luôn chạm (thường về gần 0% sống sót).
+#
+# So trên SỐ MỤC `human` THẬT SỰ bị ghép loại (`_preserved_and_dropped`,
+# đo trên kết quả `merge_annotations` — hàm đó THUẦN, không tốn gì để gọi
+# trước khi ghi), KHÔNG PHẢI trên số bảng của `existing`/`fresh` (xem N4:
+# proxy đếm bảng không thấy được một `fresh` giữ đủ tên bảng nhưng cắt cụt
+# tập cột — nó ghép loại chú giải cột `human` mà chốt chặn cũ mù hoàn
+# toàn). Đo trên số mục dropped nghĩa là chốt chặn tự động bắt được CẢ hai
+# hình dạng lỗi (mất bảng lẫn mất cột) bằng đúng một phép đo.
+SHRINK_ABORT_RATIO = 0.5
+
+
+def _human_entries(ann: SchemaAnnotations) -> tuple[frozenset[str], frozenset[tuple[str, str]]]:
+    """Tập (bảng, cột) có `reviewed_by == human` trong `ann`."""
+    tables = frozenset(name for name, a in ann.tables.items() if a.reviewed_by == HUMAN)
+    columns = frozenset(
+        (table, col)
+        for table, cols in ann.columns.items()
+        for col, a in cols.items()
+        if a.reviewed_by == HUMAN
+    )
+    return tables, columns
+
+
+def _preserved_and_dropped(before: SchemaAnnotations, merged: SchemaAnnotations) -> tuple[int, int]:
+    """Đếm mục `human` của `before` còn sống sót (và bị loại) trong `merged`.
+
+    Một mục `human` trong `before` mà tên bảng/cột của nó vẫn còn mặt trong
+    `merged` CHẮC CHẮN vẫn là `human` sau khi ghép — `merge_annotations`
+    luôn giữ nguyên mục `existing` khi nó là `human` (quy tắc ghép, không
+    đổi ở đây) — nên chỉ cần kiểm tra còn mặt hay không, không cần đọc lại
+    `reviewed_by` của `merged`.
+    """
+    before_tables, before_columns = _human_entries(before)
+    merged_table_names = frozenset(merged.tables)
+    merged_columns = frozenset(
+        (table, col) for table, cols in merged.columns.items() for col in cols
+    )
+    preserved = (
+        len(before_tables & merged_table_names) + len(before_columns & merged_columns)
+    )
+    dropped = len(before_tables) + len(before_columns) - preserved
+    return preserved, dropped
+
+
+def _report_dropped(dropped: int) -> None:
+    if dropped > 0:
+        print(
+            f"CẢNH BÁO: {dropped} mục do người duyệt bị loại vì bảng/cột "
+            "tương ứng không còn trong schema."
+        )
+
+
+def _guarded_merge(
+    existing: SchemaAnnotations, fresh: SchemaAnnotations, *, force: bool
+) -> tuple[SchemaAnnotations, int, int]:
+    """Ghép chú giải, CHẶN LẠI trước khi ghi nếu `fresh` trông như một lượt
+    extract hỏng chứ không phải một schema thật sự co lại. Trả
+    `(merged, preserved, dropped)`.
+
+    `merge_annotations` (không đổi ở đây — xem Constraints) đòi hỏi `fresh`
+    phủ toàn bộ schema và TỰ NÓ không kiểm tra điều đó; nó xoá mọi mục
+    (kể cả `human`) vắng mặt trong `fresh`, theo đúng docstring của nó. Một
+    `ADBA_DSN` trỏ nhầm (DB rỗng, staging, sai schema ngoài `public` —
+    `introspect_schema` hardcode `schema="public"`) khiến `extract` ghi
+    `structure.json` rỗng hoặc thiếu, và từ đó `fresh` cũng rỗng/thiếu theo
+    — hàm này là chốt chặn cho đúng chuỗi nhân quả đó, KHÔNG thay quy tắc
+    ghép.
+
+    N4 — chốt chặn dựa trên SỐ MỤC `human` THẬT SỰ bị ghép loại, không phải
+    một proxy suy ra trước khi ghép. `merge_annotations` là hàm THUẦN (trả
+    object mới, không ghi gì), nên gọi nó rồi đo `_preserved_and_dropped`
+    trên kết quả — TRƯỚC khi `save_annotations` chạm tới đĩa — không hề
+    "quá muộn": không có gì được ghi ra cho tới khi hàm này trả về bình
+    thường và caller (`cmd_annotate`) tự gọi `save_annotations` sau đó.
+    (Bản trước sai khi nói ngược lại — dùng số bảng làm proxy vì "biết
+    đúng số mục human bị mất chỉ có được sau khi ghép, quá muộn để chặn
+    trước khi ghi". Hệ quả của việc tin nhầm đó: một `extract` trả về ĐỦ
+    tên bảng nhưng CẮT CỤT tập cột lọt qua chốt chặn hoàn toàn — proxy đếm
+    bảng không thấy chú giải cột `human` nào bị ghép loại, dù thực tế mất
+    y hệt kịch bản chốt chặn này sinh ra để chặn.)
+
+    Chặn khi `force=False` VÀ số mục `human` bị ghép loại VƯỢT QUÁ (strict
+    `>`, không phải `>=`) `SHRINK_ABORT_RATIO` số mục `human` mà `existing`
+    đang có (đủ để coi là "co ngót nhiều", không phải một vài cột/bảng bị
+    loại bỏ hợp lệ theo đúng nhịp sống thường của schema — dropped đúng
+    bằng nửa, ví dụ một bảng biến mất khỏi hai bảng đang có chú giải người,
+    KHÔNG bị coi là "nhiều", giữ đúng biên cũ mà `cmd_refresh` đã dựa vào).
+    `existing` không có mục
+    `human` nào thì không bao giờ chặn — kể cả khi `fresh` rỗng hoàn toàn —
+    vì khi đó không có công sức người duyệt nào để mất; đây cũng đúng
+    trường hợp lần chạy đầu tiên (`existing` rỗng). `force=True` bỏ qua
+    hoàn toàn, cho operator biết chủ đích một đường đi qua — đúng lúc họ
+    THẬT SỰ vừa xoá phần lớn schema hoặc chú giải.
+    """
+    # Chốt chặn RẺ: nếu `existing` không có mục `human` nào, không có gì để
+    # mất — bỏ qua việc ghép/đo mà vẫn đúng câu trả lời (không chặn).
+    # KHÔNG phải chốt chặn RA QUYẾT ĐỊNH chặn — chỉ mỗi trường hợp không
+    # chặn mới được phép quyết định sớm ở đây; mọi trường hợp còn lại phải
+    # đi qua phép đo thật bên dưới.
+    existing_human_tables, existing_human_columns = _human_entries(existing)
+    total_human = len(existing_human_tables) + len(existing_human_columns)
+
+    merged = merge_annotations(existing, fresh)
+    preserved, dropped = _preserved_and_dropped(existing, merged)
+
+    if not force and total_human > 0 and dropped > total_human * SHRINK_ABORT_RATIO:
+        raise OnboardError(
+            f"Từ chối ghép chú giải: lượt ghép này sẽ xoá {dropped}/"
+            f"{total_human} mục do người duyệt (bảng và cột), quá nửa số "
+            "mục schema.yaml đang giữ. Đây gần như chắc chắn là một lượt "
+            "extract hỏng (ADBA_DSN trỏ nhầm DB/schema, hoặc structure.json "
+            "bị cắt cụt bảng/cột), không phải khách hàng vừa xoá thật hơn "
+            f"một nửa công sức duyệt của họ. Kiểm tra biến môi trường "
+            f"{DSN_ENV_VAR}, chạy lại `extract` rồi `annotate`. Nếu đây "
+            "đúng là chủ đích, chạy lại `annotate` với --force."
+        )
+
+    return merged, preserved, dropped
+
+
+def _sample_all_tables(dsn: str, tables: tuple[Table, ...]) -> tuple[dict[str, list[dict]], int]:
+    """Lấy mẫu MỖI bảng độc lập — một bảng lỗi không được phép làm mất mẫu
+    của 149 bảng còn lại, cùng nguyên tắc mà `annotate_schema` đã áp dụng
+    cho lỗi model (xem docstring `cmd_annotate`).
+
+    Trước khi có hàm này, `cmd_annotate` lấy mẫu bằng một dict comprehension
+    chạy XONG HẲN trước khi `annotate_schema` được gọi: `samples = {t.name:
+    sample_rows(dsn, t.name, n=3) for t in tables}`. Một lỗi ở BẤT KỲ bảng
+    nào (role chỉ đọc thiếu quyền SELECT trên một bảng, mất kết nối thoáng
+    qua ở bảng 130/150, ...) ném ra khỏi comprehension và huỷ toàn bộ lượt
+    — dù `annotate_schema` đã cố tình được viết để chịu được đúng loại lỗi
+    đó (mẫu rỗng là input hợp lệ, xem `perception/annotate.py`). Sửa: bọc
+    từng lần gọi `sample_rows` trong try/except riêng; bảng lỗi nhận `[]`
+    thay vì làm hỏng cả dict.
+
+    KHÔNG dùng chung một kết nối cho cả lượt (dù rẻ hơn — 150 kết nối TCP
+    thay vì 1): bộ test hiện có (`tests/unit/test_onboard_cli.py`) mock
+    nguyên hàm `onboard.sample_rows`, không mock `psycopg2.connect`, nên
+    một kết nối mở ở TẦNG NÀY sẽ không đi qua test double đó và cố kết nối
+    thật; và dùng chung kết nối còn đòi hỏi tự quản lý trạng thái
+    transaction khi một câu SELECT lỗi (không bật `autocommit`, lỗi ở bảng
+    N để transaction "aborted", lây sang bảng N+1 — xem docstring
+    `perception.introspect.sample_rows`). Cả hai lý do khiến việc gộp kết
+    nối là một refactor rộng hơn phạm vi sửa lỗi I3a này (đổi cả quy ước
+    test double lẫn thêm quản lý transaction) — giữ nguyên một kết nối
+    riêng mỗi bảng như trước, chỉ thêm try/except.
+
+    Trả `(samples, failures)`: bảng lấy mẫu lỗi nhận `[]` (mẫu rỗng, input
+    hợp lệ cho `annotate_schema`) thay vì làm hỏng dict; `failures` đếm số
+    bảng đó để `cmd_annotate` báo cáo, cùng tinh thần với `failures` của
+    `annotate_schema`. Bắt `psycopg2.Error` — lỗi hạ tầng DB (thiếu quyền,
+    mất kết nối, timeout); một `ValueError` từ guard định danh của
+    `sample_rows` KHÔNG bị nuốt ở đây, vì đó là dấu hiệu `introspect_schema`
+    trả về một tên bảng không hợp lệ — lỗi lập trình/môi trường thật, không
+    phải một trục trặc hạ tầng thoáng qua nên bỏ qua được.
+    """
+    samples: dict[str, list[dict]] = {}
+    failures = 0
+    for t in tables:
+        try:
+            samples[t.name] = sample_rows(dsn, t.name, n=3)
+        except psycopg2.Error:
+            samples[t.name] = []
+            failures += 1
+    return samples, failures
+
+
+def cmd_annotate(
+    profile_dir: Path | str,
+    dsn: str,
+    invoke: Callable[[str, str], str] = _local_invoke,
+    *,
+    force: bool = False,
+) -> SchemaAnnotations:
+    """Sinh chú giải và ghép vào bản đang có, giữ nguyên mục người sửa.
+
+    Một model 7B local mất vài giây mỗi bảng, nên 150 bảng là 8-25 phút im
+    lặng nếu không có gì được in ra — operator không phân biệt được "đang
+    chạy" với "đã treo". Vì `annotate_schema` cố ý nuốt lỗi hạ tầng (một
+    bảng lỗi không được phép giết cả lượt chạy 150 bảng), hàm này phải tự
+    báo cáo tiến độ VÀ số lượng thất bại; im lặng ở đây có thể biến một địa
+    chỉ Ollama gõ sai thành 150 chú giải rỗng được báo là thành công. Cùng
+    nguyên tắc áp dụng cho bước lấy mẫu — xem `_sample_all_tables`: một
+    bảng lấy mẫu lỗi không được giết lượt chạy 150 bảng.
+
+    `force`: bỏ qua chốt chặn "fresh co ngót nhiều" của `_guarded_merge`
+    (C1) — xem docstring hàm đó. Mặc định `False`: an toàn hơn là tiện lợi,
+    vì hậu quả của việc đoán sai (ghi đè hàng tuần công sức duyệt) không
+    đảo ngược được, còn hậu quả của việc chặn nhầm chỉ là chạy lại với
+    `--force`.
+
+    I5 — số đầu dòng phải là `review_progress(merged, tables)`, KHÔNG phải
+    `len(pending_review(merged))`. `pending_review` tự ghi rõ TRONG DOCSTRING
+    của nó (viết hoa) rằng đó là một hàng đợi ưu tiên, KHÔNG PHẢI thước đo
+    độ phủ duyệt — nó chỉ đếm mục `confidence == "low"` chưa ai duyệt, bỏ
+    sót MỌI chú giải LLM tự tin (đúng hay sai) và mọi cột LLM bỏ qua hẳn
+    (không hề có entry). `cmd_build` (bên dưới) đã dùng đúng
+    `review_progress(ann, tables)` cho MIN_REVIEWED gate — nếu `annotate`
+    in một con số khác cho "cùng một khái niệm", operator thấy "3 mục cần
+    người duyệt" sau `annotate` rồi vấp đúng cổng đó báo hàng trăm mục còn
+    thiếu ở `build`, hai lệnh trong CÙNG một pipeline mâu thuẫn nhau về
+    cùng một đại lượng. Vẫn giữ `pending_review` — nó thật sự hữu ích như
+    một danh sách "xem cái này trước" — nhưng in RÕ là một dòng khác, tách
+    biệt khỏi con số đo tiến độ.
+    """
+    from perception.review_state import review_progress
+
+    d = Path(profile_dir)
+    tables = _load_structure(d)
+    total = len(tables)
+    samples, sample_failures = _sample_all_tables(dsn, tables)
+
+    on_table_start = _with_progress(tables)
+    fresh, failures = annotate_schema(tables, samples, invoke, on_table_start=on_table_start)
+    existing = load_annotations(d / SCHEMA_YAML)
+    merged, _preserved, dropped = _guarded_merge(existing, fresh, force=force)
+    save_annotations(merged, d / SCHEMA_YAML)
+
+    done, review_total = review_progress(merged, tables)
+    print(f"Chú giải xong {total} bảng. Đã duyệt {done}/{review_total} mục.")
+    pending = pending_review(merged)
+    print(f"{len(pending)} mục ưu tiên xem trước (model tự nhận không chắc, chưa ai duyệt).")
+    print(f"Thất bại: {failures}/{total} bảng.")
+    if sample_failures:
+        print(
+            f"Lấy mẫu thất bại: {sample_failures}/{total} bảng — dùng mẫu "
+            "rỗng cho các bảng đó (model vẫn chú giải được, chỉ mất gợi ý "
+            "từ dữ liệu thật). Thường do thiếu quyền SELECT hoặc mất kết "
+            "nối thoáng qua."
+        )
+    if total > 0 and sample_failures == total:
+        # Đối xứng với cảnh báo "toàn bộ bảng chú giải thất bại" bên dưới:
+        # nếu MỌI bảng lấy mẫu đều lỗi, đó không còn là chuyện thiếu quyền
+        # SELECT trên từng bảng (152 bảng cùng thiếu đúng một quyền là
+        # trùng hợp khó tin) — nhiều khả năng cả DSN sai (host/port/tên DB
+        # gõ sai) hoặc mất kết nối tới DB hoàn toàn. `annotate` độc lập
+        # không mở kết nối nào khác để bắt lỗi này; nếu không báo ở đây,
+        # dòng "Lấy mẫu thất bại: 4/4 bảng" phía trên trôi qua với lời giải
+        # thích sai (per-bảng) và lượt chạy vẫn coi là thành công.
+        print(
+            "CẢNH BÁO: toàn bộ bảng lấy mẫu thất bại — đây là dấu hiệu DSN "
+            "sai hoặc mất kết nối tới database, không phải thiếu quyền "
+            "SELECT trên từng bảng. Kiểm tra DSN (host, port, tên database, "
+            "mật khẩu) và rằng database đang chạy và nhận kết nối."
+        )
+    _report_dropped(dropped)
+    if total > 0 and failures == total:
+        print(
+            "CẢNH BÁO: toàn bộ bảng chú giải thất bại — đây là dấu hiệu "
+            f"model local không kết nối được (sai địa chỉ, chưa chạy Ollama), "
+            "không phải vấn đề của schema. Kiểm tra biến môi trường "
+            f"{OLLAMA_ENV_VAR} (và rằng Ollama đang chạy tại chỗ khách)."
+        )
+    return merged
+
+
+class UnreviewedAnnotationsError(RuntimeError):
+    """Quá ít chú giải được người duyệt để dựng profile dùng được."""
+
+
+def cmd_build(
+    profile_dir: Path | str,
+    dsn: str,
+    grants: Mapping[str, frozenset[str]],
+    min_reviewed: float = 0.0,
+    threshold_tokens: int = DEFAULT_THRESHOLD_TOKENS,
+) -> ConnectionProfile:
+    """Ghép cấu trúc + chú giải thành `profile/` đọc được lúc chạy.
+
+    `min_reviewed` là cổng chặn bàn giao sớm. Một profile gần như không có
+    chú giải do người duyệt sẽ cho recall thấp, và người vận hành sẽ đổ lỗi
+    cho model thay vì cho chú giải — mặc định 0.0 để không cản lúc phát
+    triển, nhưng bản giao khách phải đặt ngưỡng thật.
+
+    Mẫu số của cổng dùng dạng hai-đối-số của `review_progress` — cùng tập
+    `tables` vừa đọc ở trên — chứ không phải dạng một-đối-số vốn chỉ đếm
+    trong những mục ĐÃ có chú giải. Một cột LLM bỏ qua vì không đoán nổi
+    thì không có mục trong `ann` để đếm; đó chính xác là cột cần người
+    nhất, và dạng một-đối-số sẽ để nó lọt khỏi mẫu số, cho một khách hàng
+    thấy "100% đã duyệt" trong khi hàng chục cột vẫn trống.
+    """
+    from perception.review_state import review_progress
+
+    d = Path(profile_dir)
+    tables = _load_structure(d)
+    ann = load_annotations(d / SCHEMA_YAML)
+
+    done, total = review_progress(ann, tables)
+    ratio = (done / total) if total else 0.0
+    if ratio < min_reviewed:
+        raise UnreviewedAnnotationsError(
+            f"Mới {done}/{total} mục ({ratio:.0%}) được người duyệt, "
+            f"ngưỡng là {min_reviewed:.0%}. Mở trang 'Chú giải schema' để duyệt tiếp."
+        )
+
+    if not grants:
+        print(
+            "CẢNH BÁO: không có --grant nào — profile này mặc định đóng, "
+            "không ai xem được bảng nào. Thêm --grant user=* (hoặc "
+            "--grant user=bang1,bang2) để cấp quyền, hoặc cấp sau bằng một "
+            "lượt `build` khác."
+        )
+
+    write_profile(
+        d,
+        dsn=dsn,
+        tables=tables,
+        annotations=ann,
+        grants=grants,
+        threshold_tokens=threshold_tokens,
+    )
+    profile = read_profile(d)
+    print(f"profile → {d}  ({len(profile.tables)} bảng, chế độ {profile.schema_mode})")
+    return profile
+
+
+HANDOVER_RECALL = 0.95  # spec 6.5 — ngưỡng chặn bàn giao.
+
+
+@dataclass
+class VerifyReport:
+    total: int
+    recall: float
+    avg_context_tables: float
+    passed: bool
+    misses: list[tuple[str, frozenset[str]]]
+
+
+def _read_golden(golden_path: Path) -> tuple[list[dict], int]:
+    """Đọc golden set JSONL, trả `(bản ghi, số dòng đọc được)`.
+
+    File này do khách viết tay. Một dòng thiếu `question` hoặc `sql`, hay
+    không phải JSON hợp lệ, phải báo lỗi nêu ĐÚNG số dòng — không phải một
+    `KeyError`/`JSONDecodeError` trần trụi mà người vận hành phải tự mò
+    ngược lại xem dòng nào trong file.
+    """
+    if not golden_path.is_file():
+        # `.is_file()` (không phải `.exists()`) cố ý: `--golden` trỏ nhầm vào
+        # một thư mục vẫn "exists", nhưng `.read_text()` trên nó ném
+        # `IsADirectoryError` trần trụi — cùng loại traceback mà nhánh này
+        # tồn tại để tránh.
+        raise OnboardError(
+            f"Không có golden set tại {golden_path}. Cần một file JSONL, mỗi "
+            'dòng {"question": ..., "sql": ...}.'
+        )
+
+    rows: list[dict] = []
+    lines_read = 0
+    for lineno, raw in enumerate(golden_path.read_text(encoding="utf-8").splitlines(), start=1):
+        line = raw.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError as e:
+            raise OnboardError(
+                f"{golden_path}: dòng {lineno} không phải JSON hợp lệ ({e}). "
+                "File golden là JSONL viết tay — sửa dòng đó rồi chạy lại."
+            ) from e
+        lines_read += 1
+        # `row` có thể là JSON hợp lệ nhưng không phải object (`42`, `[1,2]`,
+        # `"chuỗi"`) — `isinstance` phải đứng trước `in`, nếu không toán tử
+        # `in` trên một int ném `TypeError` trần trụi thay vì `OnboardError`
+        # nêu đúng số dòng.
+        if not isinstance(row, dict) or "question" not in row or "sql" not in row:
+            raise OnboardError(
+                f"{golden_path}: dòng {lineno} thiếu trường 'question' hoặc "
+                "'sql'. File golden là JSONL viết tay — sửa dòng đó rồi chạy lại."
+            )
+        rows.append(row)
+    return rows, lines_read
+
+
+def cmd_verify(
+    profile_dir: Path | str,
+    golden_path: Path | str,
+    user: str,
+    k: int = 8,
+) -> VerifyReport:
+    """Chấm recall chọn bảng trên golden set của khách, ghi `report.md`.
+
+    Dùng lại đúng định nghĩa recall của eval tầng 1: một câu tính là đạt khi
+    context chứa ĐỦ tập bảng đúng. Thiếu một bảng JOIN là SQL sai chắc chắn,
+    nên không có điểm từng phần.
+
+    `measure_recall` (eval.tier1_recall) CỐ Ý bỏ qua những bản ghi mà SQL
+    mẫu không parse ra bảng nào — coi đó là lỗi dữ liệu golden, không phải
+    lỗi retriever. Hệ quả là `report.total` là số câu CHẤM ĐƯỢC, không phải
+    số dòng trong file golden. Nếu hai số đó khác nhau, report.md phải nói
+    rõ cả hai và lý do — im lặng ở đây sẽ khiến người vận hành tưởng golden
+    set nhỏ hơn nó thật sự là, và cổng bàn giao lặng lẽ bỏ qua đúng nửa khó
+    của bộ câu hỏi khách viết.
+
+    Không cần DSN: hàm này chỉ đọc `profile/` đã dựng sẵn (qua `read_profile`,
+    không bao giờ mở kết nối DB thật — xem `perception/profile_store.py`),
+    không chạm database của khách.
+    """
+    from eval.tier1_recall import measure_recall
+    from eval.datasets import EvalRecord
+    from perception.connection_profile import permitted_tables
+    from perception.retrieval import LexicalRetriever
+    from perception.schema_context import resolve_schema_context
+
+    d = Path(profile_dir)
+    try:
+        profile = read_profile(d)
+    except FileNotFoundError as e:
+        # Mirror `_load_structure`: verify chạy sai thứ tự (trước `build`,
+        # hoặc `--profile` trỏ nhầm thư mục) là lỗi vận hành đầu tiên người
+        # ta gặp ở BƯỚC CUỐI của pipeline — để `FileNotFoundError` nguyên
+        # dạng thoát ra sẽ cho một trang traceback thay vì câu "chạy build
+        # trước". `str(e)` an toàn để lộ ra: nó tới từ `read_profile`, chỉ
+        # nêu tên file thiếu và đường dẫn thư mục, không bao giờ mang DSN.
+        raise OnboardError(
+            f"Không đọc được profile trong {d} ({e}). "
+            f"Chạy `onboard.py build --profile {d}` trước khi verify."
+        ) from e
+    permitted = permitted_tables(profile, user)
+    retriever = LexicalRetriever(profile.tables)
+
+    rows, lines_read = _read_golden(Path(golden_path))
+    records = [
+        EvalRecord(question=row["question"], gold_sql=row["sql"],
+                   db_id="khach", tables=profile.tables)
+        for row in rows
+    ]
+
+    def resolve(rec: EvalRecord) -> frozenset[str]:
+        ctx = resolve_schema_context(
+            profile, rec.question, permitted, retriever=retriever, k=k
+        )
+        return frozenset(ctx.retrieved_tables)
+
+    r = measure_recall(records, resolve)
+    report = VerifyReport(
+        total=r.total,
+        recall=r.recall,
+        avg_context_tables=r.avg_context_tables,
+        passed=r.recall >= HANDOVER_RECALL,
+        misses=r.misses,
+    )
+
+    lines = ["# Báo cáo kiểm profile", ""]
+    if lines_read != report.total:
+        skipped = lines_read - report.total
+        lines += [
+            f"- Dòng golden đọc được: **{lines_read}**",
+            f"- Câu chấm được: **{report.total}** — bỏ qua {skipped} câu vì "
+            "SQL mẫu không parse ra bảng nào (lỗi dữ liệu golden set, "
+            "KHÔNG tính là trượt). Recall dưới đây chỉ tính trên số câu "
+            "chấm được, không phải trên toàn bộ file golden.",
+        ]
+    else:
+        lines += [f"- Câu chấm được: **{report.total}**"]
+    lines += [
+        f"- Recall: **{report.recall:.3f}**  (ngưỡng bàn giao: {HANDOVER_RECALL:.0%})",
+        f"- Bảng/context trung bình: {report.avg_context_tables:.1f}",
+        f"- Kết luận: **{'ĐẠT' if report.passed else 'CHƯA ĐẠT'}**",
+        "",
+    ]
+    # Phân biệt "trượt vì quyền" với "trượt vì chú giải" — hai nguyên nhân
+    # đòi hỏi hai cách sửa khác hẳn nhau, và gộp chúng vào một lời khuyên
+    # chung sẽ đưa operator đi sửa nhầm thứ. `permitted` đã tính sẵn ở trên:
+    # một bảng có thật trong schema (`profile.table_names()`) nhưng KHÔNG
+    # nằm trong `permitted` sẽ không bao giờ được retriever chọn dù chú
+    # giải có hoàn hảo tới đâu — sửa chú giải cho bảng đó là công vô ích.
+    existing_names = profile.table_names()
+    all_missing = frozenset(t for _, missing in report.misses for t in missing)
+    grant_blocked = frozenset(
+        t for t in all_missing if t in existing_names and t not in permitted
+    )
+    # "Lệch chữ hoa/thường, không phải do chú giải": tables_in_sql() gấp một
+    # tên KHÔNG quote về chữ thường (đúng quy tắc Postgres — spec mục 2),
+    # nên trên một schema camelCase (`lapTimes`, kiểu Entity Framework/
+    # Hibernate/Prisma/Rails tạo ra), SQL mẫu viết không quote (`FROM
+    # lapTimes`) cho ra `laptimes`, không khớp `existing_names` — dù bảng
+    # THẬT (`lapTimes`) có mặt, được cấp quyền, và chú giải đầy đủ. Nhận ra
+    # bằng cách so không phân biệt hoa/thường: `t` không có mặt trong
+    # `existing_names` (so chính xác) nhưng CÓ một bảng trong đó trùng tên
+    # khi hạ hết về chữ thường. Điều kiện `t not in existing_names` giữ hai
+    # tập này rời nhau — một bảng đã lọt vào `grant_blocked` (so chính xác)
+    # không bao giờ lọt thêm vào đây.
+    existing_by_lower = {n.lower(): n for n in existing_names}
+    case_mismatched = frozenset(
+        t for t in all_missing if t not in existing_names and t.lower() in existing_by_lower
+    )
+    # "Chắc chắn không phải do chú giải": hoặc user không có bảng nào được
+    # cấp (không cần xét từng bảng để biết lý do), hoặc MỌI bảng thiếu trên
+    # MỌI câu trượt đều được giải thích bởi quyền hoặc lệch chữ hoa/thường —
+    # không còn khoảng trống nào để đổ cho chú giải.
+    accounted_for = grant_blocked | case_mismatched
+    fully_grants_caused = bool(report.misses) and (not permitted or accounted_for == all_missing)
+
+    if not permitted:
+        lines += [
+            f"CẢNH BÁO: user `{user}` không được cấp quyền trên bảng nào. "
+            "Mọi câu hỏi trượt vì lý do này — KHÔNG PHẢI do chú giải.",
+            f"Thêm quyền bằng `--grant {user}=bang1,bang2` (hoặc "
+            f"`--grant {user}=*`), chạy lại `build`, rồi `verify` lại.",
+            "",
+        ]
+
+    if report.misses:
+        lines += ["## Câu chưa đạt", ""]
+        shown = report.misses[:20]
+        lines += [f"- {q} — thiếu `{sorted(m)}`" for q, m in shown]
+        omitted = len(report.misses) - len(shown)
+        if omitted > 0:
+            lines += [f"- … và {omitted} câu khác không hiện ở đây."]
+        if permitted and grant_blocked:
+            lines += [
+                "",
+                f"{len(grant_blocked)} bảng trong các câu trượt trên là do quyền, "
+                f"không phải do chú giải: `{sorted(grant_blocked)}` không nằm "
+                f"trong quyền của user `{user}`. Xem lại `--grant` nếu đây không "
+                "phải chủ đích, rồi chạy lại.",
+            ]
+        if case_mismatched:
+            matches = sorted(existing_by_lower[t] for t in case_mismatched)
+            lines += [
+                "",
+                f"{len(case_mismatched)} bảng trong các câu trượt trên lệch CHỮ "
+                f"HOA/THƯỜNG, không phải do chú giải: `{sorted(case_mismatched)}` "
+                f"khớp đúng bảng có thật `{matches}` trong profile khi so không "
+                "phân biệt hoa/thường — SQL mẫu (hoặc câu hỏi) viết tên bảng "
+                "không quote nên bị Postgres hạ về chữ thường, trong khi bảng "
+                "thật giữ nguyên chữ hoa/thường. Quote đúng tên bảng trong SQL "
+                f"(vd. `\"{matches[0]}\"`), KHÔNG sửa chú giải cho các bảng này.",
+            ]
+        if not fully_grants_caused:
+            lines += [
+                "",
+                "Recall thấp hầu như luôn là do chú giải, không phải do model.",
+                "Mở trang 'Chú giải schema', bổ sung mô tả cho các bảng bị thiếu, rồi chạy lại.",
+            ]
+    (d / "report.md").write_text("\n".join(lines), encoding="utf-8")
+
+    print(f"recall {report.recall:.3f} — {'ĐẠT' if report.passed else 'CHƯA ĐẠT'}")
+    return report
+
+
+def cmd_refresh(
+    profile_dir: Path | str,
+    dsn: str,
+    invoke: Callable[[str, str], str] = _local_invoke,
+    *,
+    force: bool = False,
+) -> tuple[int, int]:
+    """Đọc lại cấu trúc, chú giải lại, ghép vào bản cũ.
+
+    Trả `(số bảng đã chú giải, số mục người sửa được giữ nguyên)`. Con số thứ
+    hai được in ra có chủ ý: nó là bằng chứng cho khách rằng công sức duyệt
+    của họ không mất, và đó là thứ quyết định họ có duyệt lần thứ hai không —
+    nên nó không được phóng đại.
+
+    Vì lẽ đó, `preserved` được đếm từ KẾT QUẢ SAU KHI GHÉP (`merged`), không
+    phải từ `before` (chú giải trước khi ghép) — xem `_preserved_and_dropped`
+    (shared với `cmd_annotate`, C1). `merge_annotations` loại bỏ những mục mà
+    bảng/cột của chúng không còn trong schema mới, kể cả mục `human` — đếm
+    từ `before` sẽ báo "giữ nguyên" cho những mục vừa bị xoá, đúng lúc thông
+    báo này tồn tại để làm bằng chứng KHÔNG bị mất.
+
+    Dòng cảnh báo "N mục bị loại" KHÔNG được in ở đây nữa — nó đã in bên
+    trong `cmd_annotate` (được gọi ngay dưới), qua `_report_dropped`, dùng
+    CHÍNH giá trị `existing`/`merged` này. In lại ở đây sẽ trùng lặp dòng
+    đó trong output của một lượt `refresh`.
+
+    `force` được CHUYỂN THẲNG xuống `cmd_annotate`: `refresh` tự nó cũng có
+    thể trúng đúng lỗi C1 (nếu ADBA_DSN trỏ nhầm ngay lúc refresh, `extract`
+    bên trong ghi `structure.json` rỗng/thiếu) — không có lý do để `refresh`
+    miễn nhiễm với chốt chặn mà `annotate` đứng riêng phải tuân theo.
+
+    Đọc `before` PHẢI xảy ra trước `cmd_extract`: `cmd_extract` ghi đè
+    `structure.json`, và sau đó không còn cách nào so sánh với schema cũ.
+    `merge_annotations` đòi hỏi `fresh` phủ toàn bộ schema — `cmd_annotate`
+    (được gọi qua `annotate_schema`) ghi một mục cho mọi bảng vô điều kiện,
+    kể cả khi annotate thất bại (mục đó có `text` rỗng), nên truyền thẳng
+    kết quả của nó là đúng; không được lọc/rút gọn `fresh` trước khi ghép.
+    """
+
+    d = Path(profile_dir)
+    before = load_annotations(d / SCHEMA_YAML)
+
+    cmd_extract(dsn, d)
+    merged = cmd_annotate(d, dsn, invoke=invoke, force=force)
+
+    preserved, _dropped = _preserved_and_dropped(before, merged)
+    print(f"Giữ nguyên {preserved} mục do người duyệt.")
+    return len(merged.tables), preserved
+
+
+# Scheme mà libpq thật sự nhận diện là một connection URI (không phải cú
+# pháp `key=value` cổ). Xem https://www.postgresql.org/docs/current/
+# libpq-connect.html#LIBPQ-CONNSTRING-URIS — CHỈ hai giá trị này. Bất cứ
+# scheme nào khác (`postgresq://` gõ thiếu chữ, `HTTP://` dán nhầm,
+# `postgresql+psycopg2://` — cú pháp SQLAlchemy, không phải libpq) trông
+# ĐỦ giống URI để qua được một kiểm tra "có scheme, có host" hời hợt,
+# nhưng vẫn rơi xuống cú pháp `key=value` cổ ở tầng psycopg2/libpq — đúng
+# đường lộ mật khẩu mà `_resolve_dsn` tồn tại để chặn (xem N5).
+_LIBPQ_URI_SCHEMES = frozenset({"postgresql", "postgres"})
+
+
+def _resolve_dsn(cli_dsn: str | None) -> str:
+    """Lấy DSN từ `--dsn` hoặc `ADBA_DSN`, và xác nhận nó ĐÚNG DẠNG URI mà
+    libpq thật sự phân tích được như một URI.
+
+    Kiểm tra hình dạng ở ĐÂY, TRƯỚC khi bất kỳ lệnh con nào đưa DSN xuống
+    `psycopg2.connect` (C2). Một DSN không đúng dạng URI (thiếu `scheme://`
+    — vd. lỗi gõ `postgres//...` thay vì `postgresql://...`, một khoảng
+    trắng thừa, một artefact copy-paste) khiến libpq/psycopg2 dùng cú pháp
+    `key=value` cổ để parse, và khi cú pháp đó cũng không khớp, nó echo
+    NGUYÊN VĂN chuỗi DSN vào thông báo lỗi (`invalid dsn: missing "=" after
+    "..." in connection info string`) — nếu DSN mang mật khẩu, mật khẩu đó
+    lộ ra console, lịch sử shell, log CI, và bất cứ đâu operator paste
+    thông báo lỗi đó vào (vd. một ticket hỗ trợ). Một DSN URI-shaped với
+    port/query sai KHÔNG lộ theo cách này (xem test); nên chỉ hình dạng
+    không phải URI mới cần chặn ở đây.
+
+    N5 — "có scheme, có host" (kiểm tra cũ) không đủ: `urlsplit` vui vẻ
+    trả về MỘT scheme cho bất kỳ chuỗi nào có dạng `xxx://...`, dù `xxx`
+    không nằm trong tập libpq thật sự nhận diện là URI
+    (`_LIBPQ_URI_SCHEMES`). `postgresq://` (thiếu một chữ `l`), `HTTP://`
+    (dán nhầm domain), `postgresql+psycopg2://` (cú pháp driver
+    SQLAlchemy, libpq không hiểu dấu `+`) đều có `.scheme` và `.hostname`
+    hợp lệ theo `urlsplit`, qua được kiểm tra cũ, rồi rơi xuống cú pháp
+    `key=value` cổ ở psycopg2/libpq — CHÍNH con đường lộ mật khẩu mà hàm
+    này tồn tại để chặn.
+
+    Khớp scheme PHÂN BIỆT hoa/thường, KHÔNG lower() trước khi so — đo bằng
+    thực nghiệm (`psycopg2.connect` với `POSTGRESQL://...`, `Postgresql://
+    ...`): libpq CHỈ nhận diện đúng chữ thường `postgresql://`/`postgres:
+    //` là URI; bất kỳ biến thể hoa/thường nào khác cũng rơi xuống cú pháp
+    `key=value` cổ và echo nguyên DSN y hệt một scheme sai hẳn. Một
+    `.lower()` ở đây sẽ khiến hàm này TỰ TIN cho qua đúng những DSN mà
+    libpq/psycopg2 phía sau vẫn từ chối theo cách lộ mật khẩu — sai hoàn
+    toàn mục đích của N5.
+
+    N5 — khoảng trắng đầu/cuối cũng bị chặn riêng, với thông báo GỌI TÊN
+    đúng vấn đề: một dấu cách thừa ở đầu/cuối là artefact copy-paste phổ
+    biến (từ một ô bảng tính, một biến môi trường export sai), và nó VÔ
+    HÌNH trên terminal — operator nhìn vào DSN in ra (nếu có) hay đọc lại
+    lệnh mình vừa gõ sẽ không thấy gì khác thường, nên thông báo lỗi phải
+    tự nói ra điều mắt thường không thấy được, thay vì để nó lẫn vào lỗi
+    "thiếu scheme/host" chung chung.
+
+    Thông báo lỗi không lặp lại DSN (đang cầm sẵn nó mới gọi lệnh, không
+    cần nhắc lại) và không đoán mật khẩu là gì — chỉ nói ĐÚNG biến môi
+    trường cần kiểm tra và hình dạng đúng phải có.
+    """
+    dsn = cli_dsn or os.environ.get(DSN_ENV_VAR)
+    if not dsn:
+        print(
+            f"Thiếu DSN: truyền --dsn hoặc đặt biến môi trường {DSN_ENV_VAR}. "
+            "Không truyền DSN qua dòng lệnh trên máy khách nếu tránh được — "
+            "nó lộ ra trong `ps aux` và lịch sử shell.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if dsn != dsn.strip():
+        raise OnboardError(
+            f"DSN có khoảng trắng thừa ở đầu hoặc cuối — vô hình trên "
+            "terminal nhưng khiến libpq đọc sai. Kiểm tra biến môi trường "
+            f"{DSN_ENV_VAR} (hoặc cờ --dsn nếu dùng nó), thường do dán từ "
+            "một ô bảng tính hoặc một biến môi trường export sai. Không in "
+            "lại DSN ở đây vì nó có thể mang mật khẩu."
+        )
+
+    # `urlsplit(...).scheme` LUÔN lowercase — Python tự chuẩn hoá nó, nên
+    # đọc scheme từ ĐÓ sẽ khiến 'POSTGRESQL://...' trông giống hệt
+    # 'postgresql://...' và lọt qua. Phải đọc phần trước '://' NGUYÊN VĂN
+    # từ chuỗi gốc và so sánh PHÂN BIỆT hoa/thường — xem docstring ở trên.
+    scheme_end = dsn.find("://")
+    raw_scheme = dsn[:scheme_end] if scheme_end != -1 else ""
+    parts = urllib.parse.urlsplit(dsn)
+    if raw_scheme not in _LIBPQ_URI_SCHEMES or not parts.hostname:
+        raise OnboardError(
+            f"DSN không đúng dạng URI mà libpq nhận diện (scheme phải là "
+            f"{sorted(_LIBPQ_URI_SCHEMES)!r}, phải có host). Kiểm tra biến "
+            f"môi trường {DSN_ENV_VAR} (hoặc cờ --dsn nếu dùng nó): DSN "
+            "phải có dạng 'postgresql://user:password@host:port/dbname'. "
+            "Không in lại DSN ở đây vì nó có thể mang mật khẩu — lỗi gõ "
+            "thường gặp nhất là thiếu dấu ':' trong 'postgresql://' "
+            "(vd. gõ nhầm 'postgres//...') hoặc sai scheme (vd. thiếu một "
+            "ký tự trong 'postgresql://', hay dán nhầm URL từ nơi khác)."
+        )
+    return dsn
+
+
+def _add_dsn_profile_args(p: argparse.ArgumentParser) -> None:
+    """Cờ dùng chung cho mọi lệnh con: DSN tuỳ chọn + thư mục profile.
+
+    Tách riêng để các lệnh con sau này (build, verify, refresh — task 9,
+    10, 11) thêm vào bằng một lời gọi nữa, không phải chép lại hai dòng
+    `add_argument` này.
+    """
+    p.add_argument(
+        "--dsn",
+        default=None,
+        help=f"DSN kết nối database; nếu bỏ trống, lấy từ biến môi trường {DSN_ENV_VAR}",
+    )
+    p.add_argument("--profile", type=Path, default=Path("profile"))
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="Đường onboarding một khách hàng")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    p_extract = sub.add_parser("extract", help="đọc cấu trúc database")
+    _add_dsn_profile_args(p_extract)
+
+    p_annotate = sub.add_parser("annotate", help="sinh chú giải bằng model local")
+    _add_dsn_profile_args(p_annotate)
+    p_annotate.add_argument(
+        "--force",
+        action="store_true",
+        help=(
+            "bỏ qua chốt chặn khi structure.json rỗng hoặc co ngót nhiều so "
+            "với schema.yaml đang có (xem OnboardError khi không có cờ này) — "
+            "chỉ dùng khi bảng thật sự đã bị xoá phần lớn, có chủ đích"
+        ),
+    )
+
+    p_build = sub.add_parser("build", help="dựng profile từ cấu trúc + chú giải")
+    _add_dsn_profile_args(p_build)
+    p_build.add_argument(
+        "--grant",
+        action="append",
+        default=[],
+        help="user=bang1,bang2 hoặc user=* (lặp lại được)",
+    )
+    p_build.add_argument("--min-reviewed", type=float, default=0.0)
+    p_build.add_argument(
+        "--threshold-tokens",
+        type=int,
+        default=DEFAULT_THRESHOLD_TOKENS,
+        help=(
+            "ngưỡng token quyết định chế độ `full` hay `retrieval`, chốt MỘT LẦN "
+            f"tại đây (mặc định {DEFAULT_THRESHOLD_TOKENS}). Hạ xuống để ép "
+            "`retrieval` trên schema nhỏ — dùng khi muốn ĐO retriever, hoặc khi "
+            "muốn tiết kiệm token trên schema cỡ vừa."
+        ),
+    )
+
+    # `verify` không nhận `--dsn`: nó chỉ đọc `profile/` đã dựng sẵn qua
+    # `read_profile` (không bao giờ mở kết nối DB thật), nên không có gì để
+    # đòi DSN — bắt operator set ADBA_DSN chỉ để chạy verify là phiền vô ích.
+    p_verify = sub.add_parser("verify", help="chấm recall trên golden set của khách")
+    p_verify.add_argument("--profile", type=Path, default=Path("profile"))
+    p_verify.add_argument("--golden", type=Path, required=True)
+    p_verify.add_argument("--user", required=True)
+    p_verify.add_argument("--k", type=int, default=8)
+
+    p_refresh = sub.add_parser("refresh", help="đọc lại schema và chú giải phần mới")
+    _add_dsn_profile_args(p_refresh)
+    p_refresh.add_argument(
+        "--force",
+        action="store_true",
+        help="như --force của `annotate` — refresh gọi cmd_annotate bên trong, cùng chốt chặn",
+    )
+
+    args = ap.parse_args()
+    try:
+        _dispatch(args)
+    except OnboardError as e:
+        # Lỗi người vận hành sửa được: in câu thông báo, không in traceback.
+        print(str(e), file=sys.stderr)
+        sys.exit(1)
+
+
+def _dispatch(args) -> None:
+    # `verify` không có cờ `--dsn` (xem p_verify ở main()) và không cần kết
+    # nối DB thật, nên không gọi `_resolve_dsn` cho nó — nhánh else của
+    # ternary này không được evaluate khi cmd == "verify", nên `args.dsn`
+    # (vốn không tồn tại trên namespace của verify) không bao giờ bị chạm.
+    dsn = None if args.cmd == "verify" else _resolve_dsn(args.dsn)
+
+    if args.cmd == "extract":
+        cmd_extract(dsn, args.profile)
+    elif args.cmd == "annotate":
+        cmd_annotate(args.profile, dsn, force=args.force)
+    elif args.cmd == "build":
+        grants = {}
+        for spec in args.grant:
+            if "=" not in spec:
+                # `--grant admin` (no '=') would otherwise silently become
+                # `{"admin": frozenset()}` — a phantom user granted nothing,
+                # AND a non-empty `grants` mapping that suppresses the
+                # separate "no --grant at all" warning below. Both failures
+                # look identical from the operator's chair (empty context on
+                # the first question), so refuse outright instead of
+                # guessing the operator meant an empty grant.
+                print(
+                    f"Cờ --grant sai cú pháp: {spec!r} thiếu dấu '='. "
+                    "Cú pháp đúng: user=bang1,bang2 hoặc user=* "
+                    "(hoặc user= để cấp rỗng có chủ đích).",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            user, _, tables_csv = spec.partition("=")
+            grants[user] = frozenset(t.strip() for t in tables_csv.split(",") if t.strip())
+        cmd_build(
+            args.profile,
+            dsn,
+            grants,
+            min_reviewed=args.min_reviewed,
+            threshold_tokens=args.threshold_tokens,
+        )
+    elif args.cmd == "verify":
+        report = cmd_verify(args.profile, args.golden, args.user, k=args.k)
+        raise SystemExit(0 if report.passed else 1)
+    elif args.cmd == "refresh":
+        cmd_refresh(args.profile, dsn, force=args.force)
+
+
+if __name__ == "__main__":
+    main()

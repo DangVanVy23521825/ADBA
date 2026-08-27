@@ -76,8 +76,8 @@ Cả năm file prompt theo cùng một khung, và thứ tự các mục là có 
 |---|---|---|---|
 | `prompts/data_analysis.txt` | 108 | 3.3 KB | `{columns}`, `{sample}`, `{task}` |
 | `prompts/insight_generation.txt` | 143 | 5.4 KB | `{anomalies}`, `{chart_description}`, `{query}`, `{sql}`, `{stats}` |
-| `prompts/supervisor_routing.txt` | 150 | 5.2 KB | `{info_box}`, `{query}` |
-| `prompts/text_to_sql.txt` | 72 | 2.3 KB | `{info_box}`, `{task}` |
+| `prompts/supervisor_routing.txt` | 150 | 5.2 KB | `{query}`, `{schema}` |
+| `prompts/text_to_sql.txt` | 31 | 1.1 KB | `{few_shots}`, `{schema}`, `{task}` |
 | `prompts/viz_generation.txt` | 82 | 2.7 KB | `{columns}`, `{sample}`, `{task}` |
 
 <!-- AUTO:end id=prompts -->
@@ -268,16 +268,39 @@ Ba điều đáng đọc kỹ:
 
 | File | Số test |
 |---|---|
+| `tests/fixtures/mini_schema.py` | 0 |
 | `tests/integration/test_complex_queries.py` | 10 |
+| `tests/integration/test_onboard_flow.py` | 3 |
+| `tests/integration/test_schema_context_wiring.py` | 6 |
 | `tests/integration/test_simple_queries.py` | 10 |
+| `tests/unit/test_annotate.py` | 38 |
+| `tests/unit/test_annotations.py` | 26 |
+| `tests/unit/test_connection_profile.py` | 16 |
+| `tests/unit/test_describe_dataset.py` | 6 |
 | `tests/unit/test_egress_boundary.py` | 13 |
+| `tests/unit/test_fetch_dataset.py` | 25 |
 | `tests/unit/test_insight_agent.py` | 7 |
+| `tests/unit/test_introspect.py` | 16 |
+| `tests/unit/test_load_sqlite_to_postgres.py` | 46 |
+| `tests/unit/test_onboard_cli.py` | 45 |
+| `tests/unit/test_onboard_refresh.py` | 5 |
+| `tests/unit/test_onboard_verify.py` | 20 |
+| `tests/unit/test_profile_store.py` | 24 |
+| `tests/unit/test_prompts_are_schema_agnostic.py` | 6 |
 | `tests/unit/test_python_agent.py` | 14 |
 | `tests/unit/test_reflector.py` | 3 |
-| `tests/unit/test_sql_agent.py` | 9 |
-| `tests/unit/test_supervisor.py` | 15 |
+| `tests/unit/test_render_schema.py` | 29 |
+| `tests/unit/test_retrieval.py` | 20 |
+| `tests/unit/test_review_state.py` | 18 |
+| `tests/unit/test_schema_context.py` | 12 |
+| `tests/unit/test_schema_model.py` | 7 |
+| `tests/unit/test_sql_agent.py` | 11 |
+| `tests/unit/test_sql_tables.py` | 21 |
+| `tests/unit/test_sql_tool_guard.py` | 19 |
+| `tests/unit/test_supervisor.py` | 16 |
+| `tests/unit/test_tier1_recall.py` | 9 |
 | `tests/unit/test_viz_agent.py` | 11 |
-| **Tổng** | **92** |
+| **Tổng** | **512** |
 
 <!-- AUTO:end id=tests -->
 
@@ -302,10 +325,10 @@ Ba điều đáng đọc kỹ:
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `0e1f02d` — docs: sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO |
+| Commit nguồn gần nhất | `03ab786` — test(onboard): fixture mật khẩu không còn giống bí mật thật |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-08-19 |
-| Số commit nguồn | 22 |
+| Ngày commit | 2026-08-27 |
+| Số commit nguồn | 97 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

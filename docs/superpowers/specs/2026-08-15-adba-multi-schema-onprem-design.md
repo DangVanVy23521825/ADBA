@@ -132,7 +132,9 @@ Chi phí runtime: index dựng một lần lúc onboarding; lúc chạy chỉ l�
 
 `build_profile.py` đo kích thước schema đã render. Dưới ngưỡng thì ghi `schema_mode: full` và bỏ qua retrieval hoàn toàn; trên ngưỡng thì `schema_mode: retrieval`.
 
-**Ngưỡng đề xuất: 6.000 token schema đã render** — ở mức ~140 token/bảng (mục 3.4) thì tương đương **khoảng 40 bảng**.
+**Ngưỡng đề xuất: 6.000 token schema đã render.** Ngưỡng này KHÔNG đổi theo bản sửa dưới đây — nó cố ý đặt bằng đơn vị token vì token tự điều chỉnh khi bảng "béo" lên (nhiều cột, mô tả dài); một ngưỡng đặt bằng *số bảng* thì không.
+
+> **Sửa (rà soát cuối nhánh này):** bản trước quy đổi ngưỡng trên thành "khoảng 40 bảng" ở giả định 140 token/bảng — con số đó **chưa từng đo**, chỉ ước lượng tay. Đo thật trên schema 9 bảng của chính ADBA (`perception/info_box_all.json`, không bảng nào có `description`) ra **~67 token/bảng** (mục 3.4), tức 6.000 token ≈ **khoảng 90 bảng**, gấp hơn hai lần con số cũ. Nhưng đây KHÔNG phải một hằng số thay thế 140 để dùng lại: 9 bảng đó chưa chú giải và trung bình chỉ ~9,4 cột/bảng. Đo với mô tả tiếng Việt thực tế thêm vào thì ra ~81 token/bảng (339 B/bảng, +26% so với 268 B/bảng chưa chú giải) — ngưỡng khi đó còn ~74 bảng. Bảng ERP thật có 30–60 cột, cộng chú giải do việc onboarding (kế hoạch riêng, ngoài phạm vi nhánh này) thêm vào, có thể đẩy lên ~200–350 token/bảng — ngưỡng khi đó tụt về ~17–30 bảng. Nói cách khác, "bao nhiêu bảng thì chạm ngưỡng" dao động cả chục lần tuỳ mức chú giải; **không có một con số bảng nào đáng tin để thay cho ngưỡng token**. Đừng quy đổi lại — đọc thẳng ngưỡng 6.000 token, để nó tự điều chỉnh theo mật độ chú giải thật của từng khách.
 
 Đây **không** phải fallback động. Một nhánh code, một công tắc, quyết một lần lúc onboarding. Khách nhỏ được sự đơn giản của chế độ full; khách lớn được sự co giãn của retrieval. Không phải test tổ hợp hai đường chạy trên cùng một cài đặt.
 
@@ -158,9 +160,9 @@ CREATE TABLE orders (
 );
 ```
 
-≈ **500 B cho 12 cột ≈ 140 token**, nhỏ hơn JSON 2–3 lần. Và dễ hơn cho model: Qwen2.5-**Coder** đã đọc hàng triệu file SQL lúc pretrain; JSON mô tả schema thì không.
+Nhỏ hơn JSON 2–3 lần. Và dễ hơn cho model: Qwen2.5-**Coder** đã đọc hàng triệu file SQL lúc pretrain; JSON mô tả schema thì không.
 
-Con số 140 token/bảng là cơ sở cho mọi ước tính ngân sách trong spec này (mục 3.3, mục 5.1). Nó phải được đo lại trên schema thật ở pha 1 chứ không giữ nguyên như giả định.
+> **Sửa (rà soát cuối nhánh này) — con số 140 token/bảng ở trên chưa từng đo, chỉ ước lượng tay từ một ví dụ 12 cột.** Đo thật bằng `render_schema()` + `estimate_tokens()` (commit `6486ddc`) trên schema 9 bảng thật của ADBA, `perception/info_box_all.json` — schema này **không bảng nào có `description`** — ra **268 B/bảng, ~67 token/bảng** (603 token / 9 bảng), tức khoảng một nửa giả định cũ. Đo lại với mô tả tiếng Việt thực tế thêm vào từng bảng (task 3 review) ra **339 B/bảng, ~81 token/bảng** (+26% so với bản chưa chú giải) — vẫn thấp hơn 140 đáng kể, vì DDL của những bảng nhỏ (9–15 cột) rẻ hơn ví dụ 12-cột-với-comment-dài dùng để ước lượng ban đầu. Cả hai con số đều là **sàn dưới**: bảng ERP thật nhiều cột hơn (30–60) và mô tả dài hơn có thể đẩy lên 200–350 token/bảng (xem mục 3.3). Không có ước tính đơn nào đáng tin cho mọi schema — số thật phụ thuộc số cột và độ dài chú giải của schema cụ thể, đo bằng `render_schema()` trên schema đó chứ đừng giữ một hằng số cố định.
 
 ### 3.4.1 Hai tập bảng, khác bản chất — không được gộp
 
@@ -231,7 +233,7 @@ Kế thừa toàn bộ bốn lớp phòng thủ SQL và cô lập sandbox từ s
 
 | Lớp | Cơ chế | Là ranh giới bảo mật? | Ship kèm? |
 |---|---|---|---|
-| 1 | `permitted_tables(user)` giới hạn phạm vi retriever → model **không nhìn thấy** bảng ngoài quyền | Có | Có |
+| 1 | `permitted_tables(user)` **giao vào kết quả retrieval** → model không nhìn thấy bảng ngoài quyền | Có | Có |
 | 2 | `execute_sql` thực thi `permitted_tables` do chính nó dẫn ra → model bịa tên bảng thì từ chối | **Có — lớp quyết định** | Có |
 | 3 | Grant cấp cột/dòng trong Postgres | Có | Không — khách tự cấu hình |
 | — | `retrieved_tables(question)` thu hẹp prompt theo câu hỏi | **Không.** Chỉ là nội dung prompt. | Có |
@@ -240,10 +242,39 @@ Kế thừa toàn bộ bốn lớp phòng thủ SQL và cô lập sandbox từ s
 
 Dòng cuối bảng có mặt để nói rõ điều dễ nhầm nhất: retrieval **không** phải cơ chế phân quyền, dù nó trông giống.
 
+### 4.1 Lớp 1 lọc SAU khi tìm, không phải TRƯỚC — và hệ quả
+
+Bản duyệt đầu của spec này mô tả lớp 1 là *"giới hạn phạm vi retriever"*. Hiện thực không làm vậy, và mô tả trên đã được sửa cho khớp thực tế. Thứ tự thật trong `resolve_schema_context`:
+
+```
+hits   = retriever.search(question, k)          # xếp hạng trên TOÀN BỘ schema
+chosen = expand_by_foreign_keys(hits, tables)   # mở rộng 1 bước theo FK
+chosen &= permitted                              # giao với quyền — ở BƯỚC CUỐI
+```
+
+**Về bảo mật không có khác biệt.** Phép giao là thao tác tập hợp cuối cùng trên mọi nhánh, kể cả `must_include`, nên không bảng nào ngoài quyền lọt vào `SchemaContext`. Điều này đã được kiểm độc lập.
+
+**Về chất lượng thì có, và nó lệch theo hướng đáng lo.** Retriever xếp hạng trên toàn bộ schema rồi mới cắt theo quyền, nên một bảng hợp lệ của người dùng có thể bị đẩy khỏi top-K bởi những bảng mà chính người đó **không được xem**. Với schema 150 bảng và một người dùng được cấp 5 bảng, `k=8` có thể cho ra `chosen` rỗng — model không nhận được schema nào và không trả lời được câu hỏi mà người dùng hoàn toàn có quyền hỏi.
+
+Nghịch lý: **quyền càng hẹp thì hệ thống càng dễ vô dụng**, vì lý do nằm ở những bảng người dùng không hề thấy. Người dùng toàn quyền không bao giờ gặp.
+
+Điều này không biểu hiện trong bản triển khai hiện tại vì `app.py` cấp `ALL_TABLES` cho đúng một người dùng. Nó sẽ biểu hiện ngay ở khách hàng đầu tiên có phân quyền thật — tức đúng phân khúc spec này nhắm tới.
+
+**Quyết định: hoãn sang giai đoạn tích hợp embedding**, không sửa ở pha 1. Lý do là đây là quyết định về **giao thức `Retriever`**, không phải sửa lỗi cục bộ, và hai lối đi có hệ quả khác nhau:
+
+| Lối | Cách làm | Hệ quả |
+|---|---|---|
+| Dựng retriever trên lát đã lọc quyền | `LexicalRetriever(permitted_slice)` | Đơn giản. Chấp nhận được với lexical (chỉ là tập token), **không** chấp nhận được với embedding — phải tính lại toàn bộ vector mỗi khi đổi người dùng |
+| Thêm tham số ứng viên vào giao thức | `search(question, k, candidates=permitted)` | Index dựng một lần, lọc lúc tìm. Là hình dạng duy nhất còn dùng được khi bản embedding vào |
+
+Chọn sai bây giờ nghĩa là phải sửa lại giao thức sau, đúng lúc đã có hai hiện thực cùng phụ thuộc vào nó. Nên quyết định này thuộc về giai đoạn embedding và phải quyết **cùng lúc** với việc chọn model — không sớm hơn.
+
+Cho tới lúc đó, ràng buộc phải giữ: phép giao với `permitted` vẫn là thao tác tập hợp cuối cùng, bất kể phạm vi tìm kiếm được thu hẹp ở đâu.
+
 `app.py` hiện không có xác thực (chỉ `st.session_state` phạm vi phiên trình duyệt). Bản on-prem cần tối thiểu: định danh người dùng, và ánh xạ người dùng → `permitted_tables`. Thiết kế chi tiết của lớp xác thực nằm ngoài spec này; spec này định nghĩa **hai điểm cắm**:
 
 - `permitted_tables(profile, user)` — nguồn sự thật về quyền, được cả retriever và `execute_sql` gọi độc lập
-- `resolve_schema_context(profile, question, permitted)` — nhận phạm vi đã bị giới hạn, không tự quyết định quyền
+- `resolve_schema_context(profile, question, permitted)` — nhận tập quyền làm **cận trên** cho kết quả, không tự quyết định quyền. Hiện áp cận đó ở bước cuối; xem mục 4.1 về việc chuyển nó lên trước bước tìm kiếm.
 
 ---
 
@@ -251,14 +282,16 @@ Dòng cuối bảng có mặt để nói rõ điều dễ nhầm nhất: retriev
 
 ### 5.1 Ngân sách — thiết kế này gần như không đụng vào
 
-Đếm token thực tế:
+> **Sửa (rà soát cuối nhánh này) — bảng dưới đây trong bản gốc dùng giả định 140 token/bảng, chưa từng đo (xem mục 3.4).** Đo thật trên schema 9 bảng ADBA ra ~67 token/bảng chưa chú giải, ~81 token/bảng có chú giải tiếng Việt thực tế — tính lại bằng mức chú giải thực tế (~81 token/bảng) bên dưới. Đây vẫn không phải trần: bảng ERP nhiều cột + mô tả dài có thể đẩy DDL/bảng cao hơn nhiều (xem mục 3.3), nên coi đây là ví dụ minh hoạ ở mật độ chú giải "vừa phải", không phải cam kết cho mọi schema khách.
+
+Đếm token thực tế (DDL tính ở ~81 token/bảng, mức đo được với chú giải thực tế — mục 3.4):
 
 | Chế độ | Thành phần | Tổng | ctx cần |
 |---|---|---|---|
-| `retrieval`, 12 bảng | rules ~700 (cố định) + DDL ~1.700 + few-shot ~400 + task ~100 | **~2.900** | 8k |
-| `full`, 40 bảng (sát ngưỡng) | rules ~700 + DDL ~5.600 + few-shot ~400 + task ~100 | **~6.800** | 16k |
+| `retrieval`, 12 bảng | rules ~700 (cố định) + DDL ~970 (12×81) + few-shot ~400 + task ~100 | **~2.200** | 8k |
+| `full`, 74 bảng (sát ngưỡng 6.000-token ở mức ~81 token/bảng — KHÔNG còn là 40 bảng như bản gốc, xem mục 3.3) | rules ~700 + DDL ~6.000 (74×81) + few-shot ~400 + task ~100 | **~7.200** | 16k |
 
-Chế độ `full` cần ctx 16k chứ không phải 8k: cộng thêm `AGENT_MAX_TOKENS["sql"] = 1024` cho phần sinh, 8k không còn biên an toàn.
+Cả hai tổng đều thấp hơn bản gốc (2.900 / 6.800) vì tỉ lệ đo được thấp hơn giả định cũ — nhưng hàng `full` vẫn cần ctx 16k chứ không phải 8k: cộng thêm `AGENT_MAX_TOKENS["sql"] = 1024` cho phần sinh, tổng ~8.224 đã vượt cửa sổ 8k (8.192), không còn biên an toàn.
 
 Ở `full`, toàn bộ prompt cố định giữa mọi query → sau query đầu prefill gần bằng 0 nhờ prefix caching.
 Ở `retrieval`, phần biến thiên ~2.300 token ≈ 0,6s prefill trên một card tầm 4090.
@@ -315,7 +348,37 @@ Tập bảng đúng **parse được từ SQL mẫu** bằng `sqlparse` (đã c�
 
 Cả ba đều kèm SQL mẫu nên **cả ba đo được tầng 1 ngay**. Bật tầng 1 trên cả ba từ đầu; tầng 2 chỉ trên BEAVER như spec `2026-08-12` đã chốt.
 
-> **Cần xác minh khi dựng harness:** số database, số bảng trung bình mỗi DB, và license của từng bộ. Các con số này không được chốt từ trí nhớ; **hạng mục đầu tiên của pha 0** là tải bộ dữ liệu và ghi lại cấu hình thực tế vào `eval/README_multischema.md`.
+> **Cần xác minh khi dựng harness:** số database và số bảng trung bình mỗi DB. Các con số này không được chốt từ trí nhớ; **hạng mục đầu tiên của pha 0** là tải bộ dữ liệu và ghi lại cấu hình thực tế vào `eval/README_multischema.md`.
+
+### 6.2.1 Điều kiện pháp lý khi sử dụng ba bộ
+
+Đây là **quyết định của chủ repo**, ghi lại để tra cứu — không phải tư vấn pháp lý. Nguồn sự thật khi chạy là `eval/benchmarks.json`; mục này giải thích *vì sao* các trường trong đó được đặt như vậy.
+
+| Bộ | License | Dùng cho mục đích thương mại | Đóng gói kèm bản giao khách |
+|---|---|---|---|
+| Spider | CC BY-SA 4.0 | **Được** | Không |
+| BIRD | CC BY-SA 4.0 | **Được** | Không |
+| BEAVER | **Chưa xác định** | **Không, cho tới khi xác định** | Không |
+
+**Hai trục, không phải một.** "Được dùng cho mục đích thương mại" và "được đóng gói kèm sản phẩm" là hai câu hỏi khác nhau, và một giấy phép có thể cho phép cái này mà cấm cái kia. Điều khoản NonCommercial chạm vào trục thứ nhất — nó hạn chế **cách dùng**, kể cả khi không hề phân phối lại gì. Vì thế `eval/benchmarks.json` có hai trường riêng, `commercial_use` và `may_redistribute`, và `eval/fetch_dataset.py` từ chối bất kỳ mục nào chưa quyết cả hai.
+
+**Vì sao cả ba đều `may_redistribute: false`.** Đây là **chính sách dự án, không phải hạn chế của giấy phép**. CC BY-SA 4.0 cho phép phân phối lại kèm ghi công và share-alike. Nhưng dữ liệu benchmark là công cụ đo lúc phát triển, không phải thành phần của sản phẩm — không có lý do gì để nó nằm trong bản giao khách, và điều khoản share-alike khi đi kèm một bản phân phối thương mại là thứ tốt nhất nên tránh hẳn.
+
+**Vì sao BEAVER bị treo.** Các nguồn công khai ghi mâu thuẫn: có nơi nêu CC BY-NC-ND 4.0, có nơi nêu MIT. Cho tới khi xác định được, BEAVER không được dùng. Nếu hóa ra là BY-NC-ND thì có **hai** hệ quả, không phải một:
+
+- **NC** cấm dùng cho mục đích thương mại — mà "đo để quyết định fine-tune có chuyển giao được sang schema khách hay không" chính là mục đích thương mại.
+- **ND** cấm tạo bản phái sinh — mà bước chuyển bộ dữ liệu sang `questions.jsonl` + `schemas.json` là một bản phái sinh, kể cả khi chỉ dùng nội bộ.
+
+Hệ quả thứ hai đáng chú ý vì nó chặn cả đường dùng nội bộ, thứ mà trực giác hay cho là an toàn.
+
+**Hệ quả lên `beaver_exec_accuracy`.** Mục 6.5 và mục 9 đặt chỉ số này làm số quyết định fine-tune có chuyển giao được hay không. Chừng nào license BEAVER chưa xác định, **chỉ số đó không có nguồn dữ liệu hợp lệ.** Hai lối đi khi tới lúc cần:
+
+1. BEAVER được xác nhận cho phép thương mại → giữ nguyên vai trò như spec mô tả.
+2. Không được → thay bằng BIRD làm nguồn đo chuyển giao. BIRD không có quy mô doanh nghiệp như BEAVER, nên phép đo yếu hơn và spec phải hạ kỳ vọng tương ứng, chứ không được giả vờ như vẫn đo được điều cũ.
+
+Quyết định này thuộc pha 2, cùng lúc chạy eval sau khi train lại.
+
+**Thi hành bằng code, không bằng tài liệu.** `require_commercial()` trong `eval/fetch_dataset.py` là cổng cho những chỗ số đo dẫn tới quyết định về sản phẩm. Một bộ chỉ cho phép nghiên cứu vẫn tải được để tham khảo, nhưng gọi qua cổng đó sẽ bị từ chối. Lý do tách như vậy: một dòng trong spec thì không ai đọc lúc chạy script, còn một trường trong manifest thì script đọc được và từ chối được.
 
 ### 6.3 Hệ quả lên dữ liệu train
 
@@ -382,8 +445,8 @@ Phần phụ thuộc LLM chỉ còn chất lượng chú giải và chất lư�
 | **0** | Harness eval tầng 1: parse SQL mẫu → tập bảng đúng; tải Spider/BIRD/BEAVER, ghi cấu hình thực tế | Đo được recall của một retriever giả (random / full) làm mốc |
 | **1** | `render_schema()` DDL; tách `prompts/*.txt` ba đường; chuyển `{info_box}` xuống cuối; `SchemaContext` + `resolve_schema_context()`; `ConnectionProfile` mở rộng; **tách `permitted_tables` / `retrieved_tables` (3.4.1)** | Golden set ADBA hiện tại **không hồi quy**; recall tầng 1 đo được trên cả ba benchmark |
 | **2** | Train lại LoRA đa schema: chế độ mới của `generate_data.py`, dịch phương ngữ SQLite→Postgres, train, eval | Golden set ADBA không hồi quy **và** `beaver_exec_accuracy` cải thiện so với base |
-| **3** | Đường onboarding: `extract_schema` → `annotate_schema` → merge YAML → `build_profile` → `verify_profile`; `refresh_profile` | Chạy trọn trên một schema thứ hai (không phải ADBA) và ra `report.md` |
-| **4** | Đóng gói on-prem: `docker-compose.onprem.yml`, tắt egress, model ship kèm, điểm cắm xác thực, lọc quyền trong retriever | Cài được trên một máy sạch không có internet |
+| **3** | Đường onboarding: `extract_schema` → `annotate_schema` → merge YAML → `build_profile` → `verify_profile`; `refresh_profile`. **Kèm tích hợp retriever embedding, và cùng lúc đó chốt lại giao thức `Retriever` để lọc quyền TRƯỚC bước tìm (mục 4.1)** | Chạy trọn trên một schema thứ hai (không phải ADBA) và ra `report.md`; retriever embedding **vượt mốc lexical** trên eval tầng 1; người dùng có quyền hẹp không còn nhận context rỗng |
+| **4** | Đóng gói on-prem: `docker-compose.onprem.yml`, tắt egress, model ship kèm, điểm cắm xác thực | Cài được trên một máy sạch không có internet |
 
 Pha 0 và 1 độc lập với việc train lại, và pha 1 có giá trị ngay cả nếu dừng ở đó (giảm token, bỏ hardcode, guard chặt hơn).
 

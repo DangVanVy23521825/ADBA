@@ -78,12 +78,84 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 **Tính năng mới**
 
+- Chinook làm schema demo phát hành lại được — `ff31b35` (2026-08-23, Đặng Văn Vỹ)
+- --threshold-tokens chốt chế độ schema tại build — `42ece63` (2026-08-23, Đặng Văn Vỹ)
+- bridge BIRD SQLite databases into Postgres for onboarding evals — `3116622` (2026-08-22, Đặng Văn Vỹ)
 - chế độ triển khai chặn egress, mặc định on-prem — `0e4c5bc` (2026-08-19, Đặng Văn Vỹ)
+- đọc profile từ đĩa thay vì dựng lại mỗi câu hỏi — `b898758` (2026-08-18, Đặng Văn Vỹ)
+- lệnh refresh, báo số mục người duyệt được giữ — `50e8b64` (2026-08-18, Đặng Văn Vỹ)
+- lệnh verify, ngưỡng bàn giao recall 95% — `11c9593` (2026-08-18, Đặng Văn Vỹ)
+- lỗi vận hành in thành câu, không thành traceback — `31d7a7d` (2026-08-18, Đặng Văn Vỹ)
+- lệnh build, có cổng chặn bàn giao khi chú giải chưa duyệt — `354e219` (2026-08-18, Đặng Văn Vỹ)
+- trang duyệt chú giải cho analyst nghiệp vụ — `573da16` (2026-08-18, Đặng Văn Vỹ)
+- lệnh extract và annotate — `be7253b` (2026-08-18, Đặng Văn Vỹ)
+- đọc/ghi thư mục profile, tách cấu trúc khỏi chú giải — `809ea5c` (2026-08-18, Đặng Văn Vỹ)
+- sinh chú giải bằng model local, có cờ độ tự tin — `6b3994c` (2026-08-18, Đặng Văn Vỹ)
+- kho chú giải + merge giữ nguyên mục người sửa — `f252c26` (2026-08-18, Đặng Văn Vỹ)
+- Column mang mô tả, render thành comment cuối dòng — `3c837a8` (2026-08-17, Đặng Văn Vỹ)
+- introspect_schema đọc Postgres thẳng ra Table — `f5b7207` (2026-08-17, Đặng Văn Vỹ)
+- tách hai trục quyền; xác nhận license Spider + BIRD — `99aa7b3` (2026-08-16, Đặng Văn Vỹ)
+- khoá dữ liệu benchmark + script tải có cổng license — `ddbb436` (2026-08-16, Đặng Văn Vỹ)
+- thêm load_normalized + describe_dataset cho bộ dữ liệu ngoài — `b81fb16` (2026-08-16, Đặng Văn Vỹ)
+- nối SchemaContext vào state, supervisor, sql_agent và app — `e638fe7` (2026-08-16, Đặng Văn Vỹ)
+- execute_sql thực thi permitted_tables, bỏ whitelist 9 bảng hardcode — `3ea38e4` (2026-08-16, Đặng Văn Vỹ)
+- harness recall tầng 1 + mốc lexical vs full trên golden ADBA — `b3ffc11` (2026-08-16, Đặng Văn Vỹ)
+- resolve_schema_context với công tắc full/retrieval — `77f718b` (2026-08-16, Đặng Văn Vỹ)
+- Retriever + FullRetriever/LexicalRetriever + expand_by_foreign_keys — `cea9a92` (2026-08-15, Đặng Văn Vỹ)
+- ConnectionProfile + permitted_tables là ranh giới bảo mật — `ed142ea` (2026-08-15, Đặng Văn Vỹ)
+- render_schema() DDL thay cho json.dumps info_box — `6486ddc` (2026-08-15, Đặng Văn Vỹ)
+- kiểu Table/Column bất biến + adapter từ info_box — `f502f54` (2026-08-15, Đặng Văn Vỹ)
+- parse ground-truth table set from gold SQL — `3b9ac1d` (2026-08-15, Đặng Văn Vỹ)
+
+**Sửa lỗi**
+
+- tên cột không mang nghĩa thì luôn low, bất kể model chấm gì — `4601a03` (2026-08-27, Đặng Văn Vỹ)
+- chia lô cột cho bảng rộng, annotate có ngân sách riêng — `da433e3` (2026-08-26, Đặng Văn Vỹ)
+- resolve four BIRD loader bugs found against real Postgres — `749bdd7` (2026-08-23, Đặng Văn Vỹ)
+- chú giải lẫn chữ Hán bị hạ xuống low, vào hàng đợi duyệt — `1df5dd6` (2026-08-23, Đặng Văn Vỹ)
+- gấp định danh SQL đúng quy tắc Postgres, không hạ hết về chữ thường — `5337fd2` (2026-08-22, Đặng Văn Vỹ)
+- khoá ngoại lùi về NOT VALID khi dữ liệu nguồn vi phạm — `7cd8480` (2026-08-22, Đặng Văn Vỹ)
+- sáu lỗi round 3 — N1-N6 từ review lại — `2dfb752` (2026-08-19, Đặng Văn Vỹ)
+- sáu lỗi Important/Minor từ review toàn nhánh — `4709459` (2026-08-19, Đặng Văn Vỹ)
+- ba lỗi ở khớp nối giữa các bước onboarding — `1d22aa1` (2026-08-19, Đặng Văn Vỹ)
+- verify — no bare tracebacks, grants vs annotation in the report — `3d31291` (2026-08-18, Đặng Văn Vỹ)
+- reject --grant values missing '=' instead of building a phantom empty grant — `5d6ddd3` (2026-08-18, Đặng Văn Vỹ)
+- lọc quyền trước khi tìm, không phải sau (spec 4.1) — `f476d90` (2026-08-18, Đặng Văn Vỹ)
+- profile_store — ValueError no longer echoes the password — `45f1134` (2026-08-18, Đặng Văn Vỹ)
+- profile_store — cleartext-password leak via unencoded reserved chars — `cfe8912` (2026-08-18, Đặng Văn Vỹ)
+- _parse chỉ thử dấu ngoặc mở ra object thật, có trần — `c21441f` (2026-08-18, Đặng Văn Vỹ)
+- thứ tự ghép chú giải không phụ thuộc PYTHONHASHSEED — `65f402d` (2026-08-18, Đặng Văn Vỹ)
+- _parse quét mọi dấu { ứng viên; đếm lỗi theo văn bản rỗng — `62d303d` (2026-08-18, Đặng Văn Vỹ)
+- giữ chú giải cột do người viết khi model không nhắc tới cột — `b6ad4bc` (2026-08-18, Đặng Văn Vỹ)
+- fix comma placement in column descriptions and collapse whitespace — `a0a6054` (2026-08-17, Đặng Văn Vỹ)
+- row_count -1 (chưa ANALYZE) chuẩn hoá về None — `1bbe725` (2026-08-17, Đặng Văn Vỹ)
+- schema-qualify row_count, sql.Identifier quoting, DB-free identifier tests — `323c9e6` (2026-08-17, Đặng Văn Vỹ)
+- sample_rows dùng fullmatch để chặn định danh có \n cuối — `68d338c` (2026-08-17, Đặng Văn Vỹ)
+- schema_fingerprint hashes Column.is_generated — `4613001` (2026-08-16, Đặng Văn Vỹ)
+- close cross-statement CTE permission bypass; structure error — `622f540` (2026-08-16, Đặng Văn Vỹ)
+- wiring test actually calls run_graph; close {task}/{query} gap — `30f912f` (2026-08-16, Đặng Văn Vỹ)
+- guard explain_query_plan, block writes, prove guard wiring by test — `57b9002` (2026-08-16, Đặng Văn Vỹ)
+- FROM inside EXTRACT/TRIM/SUBSTRING/OVERLAY is not a table source — `19d69a1` (2026-08-16, Đặng Văn Vỹ)
+- Handle Vietnamese đ/Đ (D with stroke) in tokenizer — `2f97d86` (2026-08-16, Đặng Văn Vỹ)
+- Handle Vietnamese diacritics in LexicalRetriever tokenizer — `0025534` (2026-08-16, Đặng Văn Vỹ)
+- deep-freeze ConnectionProfile.grants against widening — `6adfc35` (2026-08-15, Đặng Văn Vỹ)
+- enforce foreign_keys immutability at construction — `b61384d` (2026-08-15, Đặng Văn Vỹ)
+
+**Tái cấu trúc**
+
+- mẫu số tiến độ dẫn xuất từ review_rows — `c17c93b` (2026-08-18, Đặng Văn Vỹ)
+- tách kỹ năng chung khỏi đặc thù schema; schema xuống cuối prompt — `93bcf9f` (2026-08-16, Đặng Văn Vỹ)
 
 **Tài liệu**
 
 - sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO — `0e1f02d` (2026-08-19, Đặng Văn Vỹ)
+- Plan A — đường onboarding, 12 task — `4fd4557` (2026-08-16, Đặng Văn Vỹ)
+- lộ trình tới bản đóng gói giao khách — `f8fa0cb` (2026-08-16, Đặng Văn Vỹ)
+- mục 6.2.1 — điều kiện pháp lý khi dùng ba benchmark — `49da143` (2026-08-16, Đặng Văn Vỹ)
+- mục 4 nói đúng thứ code làm; dời thiết kế lại Retriever sang pha 3 — `0dfe041` (2026-08-16, Đặng Văn Vỹ)
 - bộ tài liệu dự án + đường ống tự cập nhật theo commit — `53dec53` (2026-08-16, Đặng Văn Vỹ)
+- correct the unmeasured 140 token/bảng assumption — `cc8f2b7` (2026-08-16, Đặng Văn Vỹ)
+- disclose lexical baseline's bimodal context-size distribution — `c4a259e` (2026-08-16, Đặng Văn Vỹ)
 - plan triển khai — đường ống schema context (pha 0+1) — `642bc51` (2026-08-15, Đặng Văn Vỹ)
 - spec — tách permitted_tables khỏi retrieved_tables; ghi kết quả spike — `9bfeb37` (2026-08-15, Đặng Văn Vỹ)
 - spec — agent chạy nội bộ trên schema của khách hàng — `4c90f63` (2026-08-15, Đặng Văn Vỹ)
@@ -91,12 +163,24 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 - spec hardening production + tách tool qua MCP — `f2c4a08` (2026-08-12, Đặng Văn Vỹ)
 - README theo Best-README-Template; bỏ AGENTS.md khỏi remote — `d18f115` (2026-05-19, Đặng Văn Vỹ)
 
+**Kiểm thử**
+
+- fixture mật khẩu không còn giống bí mật thật — `03ab786` (2026-08-27, Đặng Văn Vỹ)
+- cover _resolver's full/lexical paths on mini_dataset — `6a49d76` (2026-08-16, Đặng Văn Vỹ)
+- assert rendered system prompt has no surviving placeholder — `bddc095` (2026-08-16, Đặng Văn Vỹ)
+- make schema-identifier exclusions per file, not global — `80360bc` (2026-08-16, Đặng Văn Vỹ)
+- derive schema-identifier denylist from real schema fixture — `0094c48` (2026-08-16, Đặng Văn Vỹ)
+- tighten regression guards and add realistic case — `875635a` (2026-08-15, Đặng Văn Vỹ)
+
 **Hạ tầng & công cụ**
 
+- ignore profile-noann (mốc đo, không phải nguồn) — `5433c78` (2026-08-23, Đặng Văn Vỹ)
+- ghim sha256 của BIRD dev.zip — `7cfa6ee` (2026-08-22, Đặng Văn Vỹ)
 - ignore .claude/worktrees/ (worktree cô lập) — `3d2b768` (2026-08-15, Đặng Văn Vỹ)
 
 **Khác**
 
+- gom import HUMAN lên khối import đầu file — `2176559` (2026-08-18, Đặng Văn Vỹ)
 - Update README for clarity and language consistency — `910c784` (2026-06-15, Đặng Văn Vỹ)
 - readme change — `0fded65` (2026-05-19, Đặng Văn Vỹ)
 - add readme — `6415751` (2026-05-19, Đặng Văn Vỹ)
@@ -144,10 +228,10 @@ Cập nhật `PRIMARY_MODEL` trong `.env`, `ollama pull <model>`, rồi chạy l
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `0e1f02d` — docs: sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO |
+| Commit nguồn gần nhất | `03ab786` — test(onboard): fixture mật khẩu không còn giống bí mật thật |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-08-19 |
-| Số commit nguồn | 22 |
+| Ngày commit | 2026-08-27 |
+| Số commit nguồn | 97 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

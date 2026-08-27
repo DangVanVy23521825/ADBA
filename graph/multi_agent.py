@@ -20,6 +20,8 @@ from graph.agents.insight_agent import insight_agent_node
 from graph.agents.reflector_agent import reflector_agent_node
 from graph.state import MultiAgentState, make_initial_state
 from graph.utils import append_trace
+from perception.connection_profile import ConnectionProfile
+from perception.schema_context import SchemaContext
 
 logger = logging.getLogger(__name__)
 
@@ -91,24 +93,60 @@ def build_multi_agent_graph() -> CompiledStateGraph:
     return builder.compile()
 
 
-def run_graph(query: str, info_box: dict) -> MultiAgentState:
-    """Convenience: build the graph and invoke it in one shot."""
+def run_graph(
+    query: str,
+    schema_context: SchemaContext,
+    profile: ConnectionProfile,
+    user: str,
+) -> MultiAgentState:
+    """Convenience: build the graph and invoke it in one shot.
+
+    profile/user travel through shared_metadata so the sql node can pass
+    them down to execute_sql — see graph/agents/sql_agent.py.
+    """
     graph = build_multi_agent_graph()
-    initial = make_initial_state(query, info_box)
+    initial = make_initial_state(query, schema_context)
+    initial["shared_metadata"] = {"profile": profile, "user": user}
     return graph.invoke(initial)
 
 
 # ── Quick smoke test — run when this file is executed directly ──
 if __name__ == "__main__":
+    from perception.connection_profile import ALL_TABLES, build_profile
+    from perception.schema_context import resolve_schema_context
+    from perception.schema_model import Column, Table
+
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-    test_box = {
-        "schemas": {
-            "orders": {"columns": ["id", "region", "amount", "order_date"]},
-        }
-    }
+    demo_tables = (
+        Table(
+            name="orders",
+            columns=(
+                Column("id", "integer"),
+                Column("region", "character varying"),
+                Column("amount", "numeric"),
+                Column("order_date", "date"),
+            ),
+            primary_key=("id",),
+        ),
+    )
+    demo_profile = build_profile(
+        dsn="postgresql://demo:demo@localhost:5432/demo",
+        tables=demo_tables,
+        grants={"demo": frozenset({ALL_TABLES})},
+    )
+    demo_ctx = resolve_schema_context(
+        demo_profile, "So sánh doanh thu theo region năm 2024",
+        permitted=frozenset({"orders"}),
+    )
+
     print("=== Running graph skeleton smoke test ===")
-    result = run_graph("So sánh doanh thu theo region năm 2024", test_box)
+    result = run_graph(
+        "So sánh doanh thu theo region năm 2024",
+        demo_ctx,
+        demo_profile,
+        "demo",
+    )
     print(f"Status: {result['status']}")
     print(f"Completed agents: {result['completed_agents']}")
     print(f"Trace entries: {len(result['action_trace'])}")

@@ -23,8 +23,9 @@ from graph.agents.insight_agent import insight_agent_node
 from graph.state import make_initial_state
 from graph.tools.insight_tools import compare_periods, detect_anomaly
 from graph.utils import df_to_state
+from perception.schema_context import SchemaContext
 
-INFO_BOX = {"schemas": {}}
+SCHEMA_CONTEXT = SchemaContext()
 
 VALID_INSIGHT = {
     "finding": "Miền Bắc tăng trưởng +88% YoY trong Q4 2024, gấp 3.8 lần trung bình cả nước.",
@@ -59,7 +60,7 @@ ANALYSIS_DF = pd.DataFrame({
 
 
 def _state(plan=None):
-    s = make_initial_state("Test query", INFO_BOX)
+    s = make_initial_state("Test query", SCHEMA_CONTEXT)
     s["execution_plan"] = plan or []
     s["agent_outputs"] = {
         "sql": {"status": "ok", "sql": "SELECT * FROM orders WHERE year=2024"},

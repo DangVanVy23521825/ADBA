@@ -27,8 +27,9 @@ from graph.agents.python_agent import _extract_code, python_agent_node
 from graph.state import make_initial_state
 from graph.tools.python_tool import PYTHON_SAFE_NAMESPACE, run_pandas_safe
 from graph.utils import df_to_state
+from perception.schema_context import SchemaContext
 
-INFO_BOX = {"schemas": {}}
+SCHEMA_CONTEXT = SchemaContext()
 
 PLAN_WITH_PYTHON = [
     {"step": 1, "agent": "sql",
@@ -55,7 +56,7 @@ INPUT_DF = pd.DataFrame({
 
 
 def _state(plan=None, has_df=True):
-    s = make_initial_state("test", INFO_BOX)
+    s = make_initial_state("test", SCHEMA_CONTEXT)
     s["execution_plan"] = plan or []
     if has_df:
         s["shared_dataframe"] = df_to_state(INPUT_DF)

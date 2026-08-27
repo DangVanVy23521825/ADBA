@@ -61,3 +61,14 @@ testing.py
 
 # Worktree cô lập do Claude Code quản lý
 .claude/worktrees/
+
+# Dữ liệu benchmark tải về — không bao giờ commit.
+# Xem eval/benchmarks.json (manifest) và eval/fetch_dataset.py (cổng license).
+data/benchmarks/
+
+# Manifest benchmark LÀ mã nguồn, không phải kết quả — gỡ khỏi quy tắc eval/*.json ở trên.
+!eval/benchmarks.json
+
+# Profile sinh ra khi chạy thử demo Chinook — không phải nguồn.
+data/demo/chinook/profile/
+data/demo/chinook/profile-noann/

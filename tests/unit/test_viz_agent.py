@@ -22,8 +22,9 @@ from graph.agents.viz_agent import viz_agent_node, _extract_code
 from graph.state import make_initial_state
 from graph.tools.viz_tool import generate_chart, _auto_chart_type, _draw_bar
 from graph.utils import df_to_state
+from perception.schema_context import SchemaContext
 
-INFO_BOX = {"schemas": {}}
+SCHEMA_CONTEXT = SchemaContext()
 
 PLAN_WITH_VIZ = [
     {"step": 1, "agent": "sql",
@@ -53,7 +54,7 @@ ANOMALY_DF = pd.DataFrame({
 
 
 def _state(plan=None, has_df=True):
-    s = make_initial_state("test", INFO_BOX)
+    s = make_initial_state("test", SCHEMA_CONTEXT)
     s["execution_plan"] = plan or []
     if has_df:
         s["shared_dataframe"] = df_to_state(ANOMALY_DF)

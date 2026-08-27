@@ -1,0 +1,21 @@
+{
+  "db_a": {
+    "tables": [
+      {"table_name": "t1", "primary_key": ["id"], "row_count": 10,
+       "columns": [{"name": "id", "data_type": "integer", "is_generated": false}],
+       "foreign_keys": []},
+      {"table_name": "t2", "primary_key": ["id"], "row_count": 20,
+       "columns": [{"name": "id", "data_type": "integer", "is_generated": false}],
+       "foreign_keys": []}
+    ],
+    "cross_domain_hints": []
+  },
+  "db_b": {
+    "tables": [
+      {"table_name": "u1", "primary_key": ["id"], "row_count": 5,
+       "columns": [{"name": "id", "data_type": "integer", "is_generated": false}],
+       "foreign_keys": []}
+    ],
+    "cross_domain_hints": []
+  }
+}

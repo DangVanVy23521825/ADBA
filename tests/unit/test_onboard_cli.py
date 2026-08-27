@@ -869,7 +869,13 @@ def test_guarded_merge_does_not_block_a_small_legitimate_table_drop():
 # scrollback, log CI, rồi ticket hỗ trợ — đúng kênh mà profile_store đã bịt,
 # chỉ khác một tầng.
 
-_SECRET = "hunter2SECRET"
+# Giá trị này chỉ để KHẲNG ĐỊNH nó KHÔNG xuất hiện trong thông báo lỗi, nên
+# nó phải đủ đặc biệt để một lần khớp là có ý nghĩa. Cố ý viết thành một câu
+# tiếng Việt thay vì một chuỗi trông giống mật khẩu thật: máy quét bí mật
+# (GitGuardian chạy trên mọi PR của repo này) đánh dấu những chuỗi kiểu
+# "hunter2..." là rò rỉ, và một test làm CI đỏ vì lý do giả là test tồi —
+# nó dạy người ta bỏ qua cảnh báo bảo mật.
+_SECRET = "khong-phai-mat-khau-that-chi-dung-de-test"
 
 
 @pytest.mark.parametrize(

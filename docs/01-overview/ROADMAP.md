@@ -211,12 +211,12 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 | `4c90f63` | 2026-08-15 | Đặng Văn Vỹ | docs: spec — agent chạy nội bộ trên schema của khách hàng |
 | `20249d8` | 2026-08-12 | Đặng Văn Vỹ | docs: spec — chuẩn bị đường nối cho đa khách hàng |
 | `f2c4a08` | 2026-08-12 | Đặng Văn Vỹ | docs: spec hardening production + tách tool qua MCP |
+| `910c784` | 2026-06-15 | Đặng Văn Vỹ | Update README for clarity and language consistency |
 | `0fded65` | 2026-05-19 | Đặng Văn Vỹ | readme change |
 | `d18f115` | 2026-05-19 | Đặng Văn Vỹ | docs: README theo Best-README-Template; bỏ AGENTS.md khỏi remote |
 | `6415751` | 2026-05-19 | Đặng Văn Vỹ | add readme |
 | `8b38bfd` | 2026-05-19 | Đặng Văn Vỹ | Stop tracking training/checkpoint-50 LoRA weights (large binaries). |
 | `49f5159` | 2026-05-19 | Đặng Văn Vỹ | eval finetune Qlora |
-| `1ba1cce` | 2026-05-14 | Đặng Văn Vỹ | set up agents |
 
 <!-- AUTO:end id=commit-history -->
 
@@ -227,7 +227,7 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 | Commit nguồn gần nhất | `0e1f02d` — docs: sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-08-19 |
-| Số commit nguồn | 21 |
+| Số commit nguồn | 22 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

@@ -210,7 +210,7 @@ PYTHONPATH=. pytest tests/unit/ -v       # không cần DB và Ollama
 | Commit nguồn gần nhất | `0e1f02d` — docs: sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-08-19 |
-| Số commit nguồn | 21 |
+| Số commit nguồn | 22 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

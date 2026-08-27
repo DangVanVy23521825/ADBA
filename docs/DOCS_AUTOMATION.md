@@ -176,10 +176,10 @@ Marker có `id` không có generator sẽ được **giữ nguyên** kèm cảnh
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `4601a03` — fix(perception): tên cột không mang nghĩa thì luôn low, bất kể model chấm gì |
+| Commit nguồn gần nhất | `03ab786` — test(onboard): fixture mật khẩu không còn giống bí mật thật |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-08-27 |
-| Số commit nguồn | 96 |
+| Số commit nguồn | 97 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

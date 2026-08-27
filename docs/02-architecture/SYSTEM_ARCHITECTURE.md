@@ -259,7 +259,7 @@ riêng qua MCP, và egress bị chặn ở tầng mạng. Chi tiết:
 | `requirements.txt` | 1 | 0 | 18 | — |
 | `schemas` | 3 | 3 | 735 | Pydantic contract: ExecutionPlan (Supervisor) và InsightOutput (Insight) |
 | `scripts` | 7 | 3 | 1.644 | Tiện ích vận hành: áp schema, kiểm tra kết nối, sinh tài liệu |
-| `tests` | 37 | 34 | 8.103 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
+| `tests` | 37 | 34 | 8.109 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
 | `training` | 13 | 5 | 3.795 | Sinh dữ liệu, LoRA/QLoRA notebook, checkpoint và kết quả |
 | `.cursorrules` | 1 | 0 | 0 | — |
 | `.github` | 1 | 0 | 29 | CI/CD — unit test, build & push image lên GHCR |
@@ -324,10 +324,10 @@ kèm giá trị thật; `env.example` là bản mẫu.
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `4601a03` — fix(perception): tên cột không mang nghĩa thì luôn low, bất kể model chấm gì |
+| Commit nguồn gần nhất | `03ab786` — test(onboard): fixture mật khẩu không còn giống bí mật thật |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-08-27 |
-| Số commit nguồn | 96 |
+| Số commit nguồn | 97 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

@@ -25,6 +25,38 @@ AGENT_TIMEOUT_S = {
 
 MODEL_MAX_RETRIES = int(os.getenv("MODEL_MAX_RETRIES", "3"))
 
+# ── Ranh giới egress ────────────────────────────────────────────────────────
+
+DEPLOYMENT_ENV_VAR = "ADBA_DEPLOYMENT"
+ONPREM = "onprem"
+HYBRID = "hybrid"
+_DEPLOYMENT_MODES = {ONPREM, HYBRID}
+
+
+def deployment_mode() -> str:
+    """Chế độ triển khai, đọc lại mỗi lần gọi (không cache lúc import).
+
+    Mặc định `onprem`: KHÔNG có gì rời khỏi mạng khách. Đây là mặc định vì
+    lời hứa on-prem là thứ khách chọn sản phẩm này để mua, và một mặc định
+    an toàn nghĩa là quên cấu hình thì hỏng về phía giữ dữ liệu lại, không
+    phải phía gửi nó đi.
+
+    `hybrid` cho phép fallback ra model ngoài. Đó là một quyết định thương
+    mại, ghi trong hợp đồng với khách, nên nó phải được BẬT TƯỜNG MINH —
+    không bao giờ là thứ mà một biến môi trường bị quên lại vô tình bật.
+
+    Giá trị lạ → `onprem`. Cùng nguyên tắc với `read_profile` xử lý một
+    `schema_mode` hỏng: chuỗi không đọc được phải rơi về phía an toàn, chứ
+    không phải phía im lặng gửi dữ liệu đi.
+    """
+    raw = os.getenv(DEPLOYMENT_ENV_VAR, ONPREM).strip().lower()
+    return raw if raw in _DEPLOYMENT_MODES else ONPREM
+
+
+def egress_allowed() -> bool:
+    """Tiến trình này có được phép gọi model bên ngoài mạng khách không?"""
+    return deployment_mode() == HYBRID
+
 AGENT_TEMPERATURES = {
     "supervisor": 0.1,
     "sql": 0.0,

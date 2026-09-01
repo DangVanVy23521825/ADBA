@@ -141,26 +141,22 @@ class TestRouteNextAgent:
         s = _state(plan=[], completed=[])
         assert route_next_agent(s) == END
 
-    # 11. New failure wave after reflector → reflector again (not stuck skip)
-    def test_sql_second_failure_wave_routes_back_to_reflector(self):
-        # reflect_passes_per_agent must stay strictly below
-        # MAX_REFLECTOR_PASSES_PER_AGENT (now 1, was 8) for this case to be
-        # "still under budget" rather than "cap reached" — see task 6.
-        s = _state(
-            PLAN_SIMPLE,
-            agent_outputs={
-                "reflector": {"status": "ok"},
-                "sql": {"status": "error", "error": "boom"},
-            },
-            error_counts={"sql": 2},
-            shared_metadata={
-                "reflect_error_snapshot": {"sql": 1},
-                "reflect_passes_per_agent": {"sql": 0},
-            },
-        )
-        assert route_next_agent(s) == "reflector"
-
-    # 12. Fresh failure wave but reflector budget exhausted → END (stuck specialist)
+    # 11. Fresh failure wave but reflector budget exhausted → END (stuck specialist)
+    #
+    # Note: under MAX_REFLECTOR_PASSES_PER_AGENT = 1 (task 6), "a second failure
+    # wave arrives while still under the reflector budget" is no longer a
+    # reachable state — reflector_agent.py writes agent_outputs["reflector"]
+    # and increments reflect_passes_per_agent[agent] atomically in the same
+    # state update (graph/agents/reflector_agent.py:102-113), so the moment
+    # agent_outputs["reflector"] exists, passes >= 1 == the cap. A prior
+    # version of this test tried to model "second wave, still under budget"
+    # with a hand-picked fixture (passes=0 while agent_outputs["reflector"]
+    # was already populated) — that fixture doesn't correspond to any state
+    # real execution can produce, and it also failed to exercise the cap
+    # boundary at all (it would pass unchanged for any cap >= 1). Removed;
+    # the two reachable cases are covered by test_error_limit_triggers_reflector
+    # (no reflector pass yet, under budget → reflector) and this test (one
+    # reflector pass already spent, cap reached → blocked/finalize).
     def test_reflector_cap_exceeded_ends_when_sql_stuck(self):
         from graph.agents.supervisor import MAX_REFLECTOR_PASSES_PER_AGENT
 

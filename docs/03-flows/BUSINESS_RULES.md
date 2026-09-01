@@ -208,7 +208,7 @@ vì thành phần sửa lỗi.
 | `tests/unit/test_review_state.py` | 21 |
 | `tests/unit/test_schema_context.py` | 12 |
 | `tests/unit/test_schema_model.py` | 7 |
-| `tests/unit/test_sql_agent.py` | 11 |
+| `tests/unit/test_sql_agent.py` | 15 |
 | `tests/unit/test_sql_identifiers.py` | 12 |
 | `tests/unit/test_sql_tables.py` | 21 |
 | `tests/unit/test_sql_tool_guard.py` | 19 |
@@ -217,7 +217,7 @@ vì thành phần sửa lỗi.
 | `tests/unit/test_tier1_recall.py` | 9 |
 | `tests/unit/test_tier2_execution.py` | 37 |
 | `tests/unit/test_viz_agent.py` | 11 |
-| **Tổng** | **598** |
+| **Tổng** | **602** |
 
 <!-- AUTO:end id=tests -->
 
@@ -234,10 +234,10 @@ PYTHONPATH=. pytest tests/unit/ -v       # không cần DB và Ollama
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `c43ce64` — fix(eval): lưu chi tiết từng câu không đạt, kèm SQL đã chạy |
+| Commit nguồn gần nhất | `ee0c38a` — fix(sql): bộ bóc SQL cắt nhầm từ chữ 'with' trong văn xuôi |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 102 |
+| Số commit nguồn | 103 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

@@ -202,6 +202,7 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Commit | Ngày | Tác giả | Nội dung |
 |---|---|---|---|
+| `ee0c38a` | 2026-09-01 | Đặng Văn Vỹ | fix(sql): bộ bóc SQL cắt nhầm từ chữ 'with' trong văn xuôi |
 | `c43ce64` | 2026-09-01 | Đặng Văn Vỹ | fix(eval): lưu chi tiết từng câu không đạt, kèm SQL đã chạy |
 | `a48fbff` | 2026-09-01 | Đặng Văn Vỹ | fix(sql): bọc nháy định danh mà Postgres sẽ gấp sai, ở đường chạy thật |
 | `eb65083` | 2026-09-01 | Đặng Văn Vỹ | feat(eval): dịch SQL vàng SQLite sang Postgres, mở BIRD cho tầng 2 |
@@ -216,7 +217,6 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 | `ff31b35` | 2026-08-23 | Đặng Văn Vỹ | feat(demo): Chinook làm schema demo phát hành lại được |
 | `42ece63` | 2026-08-23 | Đặng Văn Vỹ | feat(onboard): --threshold-tokens chốt chế độ schema tại build |
 | `5337fd2` | 2026-08-22 | Đặng Văn Vỹ | fix(perception): gấp định danh SQL đúng quy tắc Postgres, không hạ hết về chữ thường |
-| `7cd8480` | 2026-08-22 | Đặng Văn Vỹ | fix(eval): khoá ngoại lùi về NOT VALID khi dữ liệu nguồn vi phạm |
 
 <!-- AUTO:end id=commit-history -->
 
@@ -224,10 +224,10 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `c43ce64` — fix(eval): lưu chi tiết từng câu không đạt, kèm SQL đã chạy |
+| Commit nguồn gần nhất | `ee0c38a` — fix(sql): bộ bóc SQL cắt nhầm từ chữ 'with' trong văn xuôi |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 102 |
+| Số commit nguồn | 103 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

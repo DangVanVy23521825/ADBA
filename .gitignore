@@ -68,3 +68,7 @@ data/benchmarks/
 
 # Manifest benchmark LÀ mã nguồn, không phải kết quả — gỡ khỏi quy tắc eval/*.json ở trên.
 !eval/benchmarks.json
+
+# Profile sinh ra khi chạy thử demo Chinook — không phải nguồn.
+data/demo/chinook/profile/
+data/demo/chinook/profile-noann/

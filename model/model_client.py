@@ -8,6 +8,7 @@ import json
 import os
 import re
 import time
+import warnings
 from typing import Any
 
 import ollama
@@ -16,10 +17,15 @@ from model.model_config import (
     AGENT_MAX_TOKENS,
     AGENT_TEMPERATURES,
     AGENT_TIMEOUT_S,
+    DEPLOYMENT_ENV_VAR,
+    HYBRID,
     MODEL_MAX_RETRIES,
     OLLAMA_BASE_URL,
     OLLAMA_NUM_CTX,
+    ONPREM,
     PRIMARY_MODEL,
+    deployment_mode,
+    egress_allowed,
 )
 
 
@@ -81,12 +87,51 @@ class ModelClient:
 
         self.ollama_client = ollama.Client(host=OLLAMA_BASE_URL)
 
-        # Default: only fallback for supervisor + sql in hybrid mode.
+        # Fallback ra OpenAI được quyết bởi HAI lớp, và lớp ngoài thắng.
+        #
+        # Lớp ngoài là chế độ triển khai. Ở `onprem` — mặc định — không có
+        # gì rời khỏi mạng khách, bất kể tham số hay biến môi trường nói gì.
+        # Prompt của agent `sql` mang schema khách, mô tả nghiệp vụ do nhân
+        # viên họ viết, và câu hỏi thật; ở khách ngân hàng hay y tế thì đó
+        # không phải chuyện cấu hình mà là chuyện hợp đồng.
+        #
+        # Lớp trong là `ENABLE_OPENAI_FALLBACK` (hoặc tham số truyền vào),
+        # chỉ có tác dụng khi đã ở `hybrid`.
+        #
+        # Một tham số `False` TƯỜNG MINH luôn thắng ở cả hai chế độ: nơi gọi
+        # nào đã tự tắt thì không được bật lại bởi chế độ triển khai. Đó là
+        # phòng thủ nhiều lớp, và `onboard._local_invoke` dựa vào nó.
+        raw_env = os.getenv("ENABLE_OPENAI_FALLBACK")
         if enable_openai_fallback is None:
-            env_flag = os.getenv("ENABLE_OPENAI_FALLBACK", "1").strip().lower()
-            self.enable_openai_fallback = env_flag not in {"0", "false", "no"}
+            requested = (raw_env or "1").strip().lower() not in {"0", "false", "no"}
+            # Chỉ tính là "người ta CHỦ ĐỘNG xin" khi biến được đặt thật.
+            # Mặc định "1" là di sản của thiết kế hybrid-first, không phải
+            # một yêu cầu ai đó phát ra.
+            explicitly_requested = raw_env is not None and requested
         else:
-            self.enable_openai_fallback = enable_openai_fallback
+            requested = enable_openai_fallback
+            explicitly_requested = enable_openai_fallback
+
+        self.deployment_mode = deployment_mode()
+        self.enable_openai_fallback = requested and egress_allowed()
+
+        # Cấu hình mâu thuẫn phải nhìn thấy được. Người vận hành đặt
+        # ENABLE_OPENAI_FALLBACK=1 rồi thấy nó không chạy sẽ đi tìm lỗi ở
+        # OpenAI key, ở mạng, ở mọi nơi trừ chỗ thật sự chặn nó.
+        #
+        # Nhưng CHỈ cảnh báo khi có mâu thuẫn thật. Một bản cài on-prem bình
+        # thường không đặt gì cả; kêu ở đó sẽ dạy người vận hành bỏ qua
+        # cảnh báo, và cảnh báo bị bỏ qua thì vô dụng đúng lúc cần nhất.
+        if explicitly_requested and not self.enable_openai_fallback:
+            warnings.warn(
+                f"ENABLE_OPENAI_FALLBACK được bật nhưng {DEPLOYMENT_ENV_VAR}"
+                f"={self.deployment_mode!r} nên fallback bị CHẶN: không có "
+                "prompt nào rời khỏi mạng này. Đặt "
+                f"{DEPLOYMENT_ENV_VAR}={HYBRID} nếu khách hàng đã đồng ý cho "
+                "gọi model ngoài.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
 
         self.openai_model = openai_model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
         self.fallback_agents = {"supervisor", "sql"}
@@ -171,9 +216,23 @@ class ModelClient:
                 self.enable_openai_fallback and self.agent_type in self.fallback_agents
             )
             if not can_fallback:
+                # Nói rõ VÌ SAO không có fallback. "fallback is disabled"
+                # trần trụi khiến người vận hành đi tìm một cái công tắc,
+                # trong khi ở chế độ onprem thì không có fallback là hành vi
+                # ĐÚNG và cố ý — thứ cần sửa là Ollama, không phải cấu hình
+                # egress.
+                if self.deployment_mode == ONPREM and self.agent_type in self.fallback_agents:
+                    reason = (
+                        f"chế độ triển khai {DEPLOYMENT_ENV_VAR}={ONPREM!r} chặn "
+                        "mọi lời gọi model ngoài (đúng thiết kế: prompt mang "
+                        "schema và câu hỏi của khách). Hãy sửa Ollama, đừng "
+                        "mở egress"
+                    )
+                else:
+                    reason = "fallback đang tắt cho agent này"
                 raise RuntimeError(
-                    f"Ollama failed for agent '{self.agent_type}' and fallback is disabled. "
-                    f"Error: {ollama_error}"
+                    f"Ollama hỏng với agent '{self.agent_type}' và {reason}. "
+                    f"Lỗi: {ollama_error}"
                 ) from ollama_error
 
             try:

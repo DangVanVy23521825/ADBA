@@ -64,8 +64,14 @@ def resolve_schema_context(
                 "schema_mode='retrieval' cần một retriever. "
                 "Dùng FullRetriever nếu muốn hành vi của chế độ full."
             )
-        hits = retriever.search(question, k=k)
+        hits = retriever.search(question, k=k, candidates=permitted)
         chosen = expand_by_foreign_keys(hits, profile.tables) | set(must_include)
+        # Ranh giới quyền THẬT SỰ vẫn nằm ở đây, không phải ở `candidates`
+        # phía trên. FK expansion và must_include có thể kéo vào bảng ngoài
+        # `permitted` sau khi retriever đã chọn xong — nếu bỏ dòng này, dữ
+        # liệu ngoài quyền sẽ lọt vào rendered_text. `candidates` chỉ tối ưu
+        # độ liên quan (tránh top-K bị lấp đầy bởi bảng người dùng không
+        # thấy), nó không thay thế được phép giao cuối cùng này.
         chosen &= permitted
 
     by_name = profile.by_name()

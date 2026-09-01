@@ -114,3 +114,171 @@ def test_empty_input_gives_empty_string():
 
 def test_estimate_tokens_is_quarter_of_length():
     assert estimate_tokens("a" * 400) == 100
+
+
+def test_column_description_renders_as_a_trailing_comment():
+    t = Table(
+        name="orders",
+        columns=(
+            Column("id", "integer"),
+            Column("flg_tt", "boolean", description="Cờ đã thanh toán"),
+        ),
+    )
+    out = render_schema([t])
+    assert "flg_tt BOOL  -- Cờ đã thanh toán" in out
+
+
+def test_column_without_a_description_gets_no_comment():
+    # This fixture also has no row_count, so no );  -- N rows tail appears either.
+    # The assertion depends on both conditions.
+    t = Table(name="x", columns=(Column("a", "integer"),))
+    assert "--" not in render_schema([t])
+
+
+def test_column_description_does_not_break_the_700_byte_ceiling():
+    """Chú giải làm bảng to lên; trần vẫn phải giữ."""
+    from tests.fixtures.mini_schema import MINI_TABLES
+
+    fat = tuple(
+        replace(
+            t,
+            columns=tuple(
+                replace(c, description="Mô tả nghiệp vụ dài vừa phải cho cột này")
+                for c in t.columns
+            ),
+        )
+        for t in MINI_TABLES
+    )
+    out = render_schema(fat)
+    assert len(out.encode()) / len(fat) <= 700
+
+
+def test_column_description_on_non_last_column_has_comma_before_comment():
+    """Description on a non-last column must have comma before the --, not inside it."""
+    t = Table(
+        name="customers",
+        columns=(
+            Column("id", "integer", description="ID khách hàng"),
+            Column("name", "character varying"),
+        ),
+    )
+    out = render_schema([t])
+    # Must have comma before the comment, and line must end with description
+    assert "id INT,  -- ID khách hàng\n" in out
+    assert "name VARCHAR" in out
+
+
+def test_column_description_with_whitespace_is_collapsed():
+    """Description with newlines and tabs must be collapsed to single space on one line."""
+    t = Table(
+        name="data",
+        columns=(
+            Column("id", "integer"),
+            Column("notes", "text", description="Ghi chú chi tiết\n\tvề dữ liệu"),
+            Column("status", "character varying"),
+        ),
+    )
+    out = render_schema([t])
+    # Output must have exactly one line per column, comment on same line
+    lines = out.split("\n")
+    assert any("notes TEXT,  -- Ghi chú chi tiết về dữ liệu" in line for line in lines)
+    # Ensure the malformed multi-line version does NOT appear
+    assert "Ghi chú chi tiết\n" not in out
+
+
+def test_table_description_with_whitespace_is_collapsed():
+    """M4: same bug class as columns, half-fixed before this test. A hand
+    edited schema.yaml (documented escape hatch) can carry a YAML block
+    scalar with an embedded newline for a TABLE description -- that
+    newline must not survive into the rendered DDL, or line 2 becomes
+    uncommented text sitting immediately before `CREATE TABLE`, corrupting
+    the DDL fed to the SQL model."""
+    t = Table(
+        name="orders",
+        columns=(Column("id", "integer"),),
+        description="Đơn hàng bán cho khách\n\thàng doanh nghiệp",
+    )
+    out = render_schema([t])
+    lines = out.split("\n")
+    assert any(
+        line == "-- Đơn hàng bán cho khách hàng doanh nghiệp" for line in lines
+    )
+    # The line immediately after the comment must be CREATE TABLE, not a
+    # leftover uncommented fragment of the description.
+    comment_idx = lines.index("-- Đơn hàng bán cho khách hàng doanh nghiệp")
+    assert lines[comment_idx + 1] == "CREATE TABLE orders ("
+
+
+# --- Emit names the model can actually use (identifier-case bug) ----------
+#
+# If the rendered DDL says `CREATE TABLE lapTimes (...)`, a model copying
+# that literally will write `FROM lapTimes`, which Postgres folds to
+# `laptimes` and fails to find. The schema shown to the model must be the
+# schema it can actually query — quote any identifier that would not
+# survive being typed back unquoted.
+
+
+def test_plain_lowercase_table_name_stays_unquoted():
+    t = Table(name="orders", columns=(Column("id", "integer"),))
+    assert 'CREATE TABLE orders (' in render_schema([t])
+    assert '"orders"' not in render_schema([t])
+
+
+def test_camel_case_table_name_is_quoted():
+    t = Table(name="lapTimes", columns=(Column("raceId", "integer"),))
+    out = render_schema([t])
+    assert 'CREATE TABLE "lapTimes" (' in out
+
+
+def test_reserved_word_table_name_is_quoted():
+    t = Table(name="order", columns=(Column("id", "integer"),))
+    out = render_schema([t])
+    assert 'CREATE TABLE "order" (' in out
+
+
+def test_camel_case_column_name_is_quoted():
+    t = Table(name="laps", columns=(Column("raceId", "integer"),))
+    out = render_schema([t])
+    assert '"raceId" INT' in out
+
+
+def test_plain_lowercase_column_name_stays_unquoted():
+    t = Table(name="laps", columns=(Column("race_id", "integer"),))
+    out = render_schema([t])
+    assert 'race_id INT' in out
+    assert '"race_id"' not in out
+
+
+def test_reserved_word_column_name_is_quoted():
+    t = Table(name="events", columns=(Column("order", "integer"),))
+    out = render_schema([t])
+    assert '"order" INT' in out
+
+
+def test_column_name_starting_with_a_digit_is_quoted():
+    t = Table(name="metrics", columns=(Column("2fa_codes", "integer"),))
+    out = render_schema([t])
+    assert '"2fa_codes" INT' in out
+
+
+def test_foreign_key_reference_quotes_camel_case_table_and_column():
+    t = Table(
+        name="lapTimes",
+        columns=(Column("raceId", "integer"),),
+        foreign_keys={"raceId": "Races(raceId)"},
+    )
+    out = render_schema([t])
+    assert 'REFERENCES "Races"("raceId")' in out
+
+
+def test_foreign_key_reference_stays_unquoted_for_plain_lowercase_names():
+    orders = next(t for t in MINI_TABLES if t.name == "orders")
+    out = render_schema([orders])
+    assert "REFERENCES customers(id)" in out
+    assert '"customers"' not in out
+
+
+def test_doubled_quote_is_escaped_when_quoting_an_identifier_with_a_literal_quote():
+    t = Table(name='weird"name', columns=(Column("id", "integer"),))
+    out = render_schema([t])
+    assert 'CREATE TABLE "weird""name" (' in out

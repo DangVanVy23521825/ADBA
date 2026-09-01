@@ -98,6 +98,29 @@ def test_tokenizer_handles_orders_description_with_d_stroke():
     assert result == {"don", "hang", "ban", "cho", "khach"}
 
 
+def test_lexical_search_only_returns_candidates_when_given():
+    r = LexicalRetriever(MINI_TABLES)
+    hits = r.search("bảng lương nhân viên", k=4, candidates=frozenset({"orders"}))
+    assert set(hits) <= {"orders"}
+
+
+def test_lexical_search_without_candidates_searches_everything():
+    r = LexicalRetriever(MINI_TABLES)
+    assert "payroll" in r.search("bảng lương nhân viên", k=4)
+
+
+def test_candidates_are_applied_before_top_k_not_after():
+    """Bảng hợp lệ không được bị đẩy khỏi top-K bởi bảng người dùng không thấy."""
+    r = LexicalRetriever(MINI_TABLES)
+    hits = r.search("id", k=1, candidates=frozenset({"payroll"}))
+    assert hits == ["payroll"]
+
+
+def test_full_retriever_honours_candidates():
+    r = FullRetriever(MINI_TABLES)
+    assert set(r.search("gì đó", k=9, candidates=frozenset({"orders"}))) == {"orders"}
+
+
 def test_lexical_payroll_scores_higher_than_customers_on_payroll_query():
     """Payroll description should score strictly higher than customers on
     payroll-related queries. This test catches when false positives occur

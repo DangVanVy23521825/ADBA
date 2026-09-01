@@ -45,8 +45,15 @@ def _tokens(text: str) -> set[str]:
 
 
 class Retriever(Protocol):
-    def search(self, question: str, k: int) -> list[str]:
-        """Trả tối đa k tên bảng, xếp theo độ liên quan giảm dần."""
+    def search(
+        self, question: str, k: int, candidates: frozenset[str] | None = None
+    ) -> list[str]:
+        """Trả tối đa k tên bảng, xếp theo độ liên quan giảm dần.
+
+        `candidates` giới hạn nguồn ứng viên TRƯỚC khi xếp hạng. Lọc sau khi
+        xếp hạng sẽ để bảng người dùng không được xem đẩy bảng hợp lệ của họ
+        ra khỏi top-K — xem spec mục 4.1.
+        """
         ...
 
 
@@ -56,8 +63,10 @@ class FullRetriever:
     def __init__(self, tables: Sequence[Table]) -> None:
         self._names = [t.name for t in tables]
 
-    def search(self, question: str, k: int) -> list[str]:  # noqa: ARG002
-        return list(self._names)
+    def search(self, question: str, k: int, candidates=None) -> list[str]:  # noqa: ARG002
+        if candidates is None:
+            return list(self._names)
+        return [n for n in self._names if n in candidates]
 
 
 class LexicalRetriever:
@@ -78,13 +87,17 @@ class LexicalRetriever:
             for t in tables
         ]
 
-    def search(self, question: str, k: int) -> list[str]:
+    def search(
+        self, question: str, k: int, candidates: frozenset[str] | None = None
+    ) -> list[str]:
         q = _tokens(question)
         if not q:
             return []
 
         scored: list[tuple[float, int, str]] = []
         for rank, (name, n_tok, d_tok, c_tok) in enumerate(self._index):
+            if candidates is not None and name not in candidates:
+                continue
             score = (
                 self._W_NAME * len(q & n_tok)
                 + self._W_DESC * len(q & d_tok)

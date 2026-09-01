@@ -19,6 +19,7 @@ class Column:
     name: str
     data_type: str
     is_generated: bool = False
+    description: str = ""
 
 
 @dataclass(frozen=True)

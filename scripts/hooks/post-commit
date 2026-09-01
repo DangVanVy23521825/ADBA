@@ -1,0 +1,46 @@
+#!/bin/sh
+# ADBA — hook post-commit: đồng bộ docs/ sau mỗi commit.
+#
+# Chạy scripts/update_docs.py; nếu các khối AUTO đổi nội dung thì tạo một commit
+# phụ chỉ chứa docs/ với tiêu đề "docs(auto): ...".
+#
+# Cài: bash scripts/install_docs_hooks.sh
+# Bỏ qua một lần: ADBA_DOCS_HOOK=1 git commit -m "..."
+
+set -e
+
+# 1. Chống đệ quy — commit do chính hook tạo ra không được kích hoạt hook lần nữa.
+[ -n "$ADBA_DOCS_HOOK" ] && exit 0
+
+# 2. Bỏ qua khi đang rebase / merge / cherry-pick: tạo commit lúc này sẽ làm hỏng thao tác.
+GIT_DIR_PATH=$(git rev-parse --git-dir)
+for marker in rebase-merge rebase-apply MERGE_HEAD CHERRY_PICK_HEAD BISECT_LOG; do
+    if [ -e "$GIT_DIR_PATH/$marker" ]; then
+        exit 0
+    fi
+done
+
+ROOT=$(git rev-parse --show-toplevel)
+cd "$ROOT" || exit 0
+
+PYTHON=$(command -v python3 || command -v python) || exit 0
+
+# 3. Sinh lại tài liệu. Lỗi của script không được làm hỏng commit vừa tạo.
+if ! "$PYTHON" scripts/update_docs.py >/dev/null 2>&1; then
+    echo "[ADBA] update_docs.py lỗi — bỏ qua đồng bộ tài liệu lần này." >&2
+    exit 0
+fi
+
+# 4. Không có gì đổi thì thôi.
+if git diff --quiet -- docs/; then
+    exit 0
+fi
+
+SHA=$(git rev-parse --short HEAD)
+
+# `-- docs/` commit đúng các path đó, không đụng tới phần đang staged của người dùng.
+ADBA_DOCS_HOOK=1 git commit --no-verify -q \
+    -m "docs(auto): đồng bộ tài liệu theo commit $SHA" \
+    -- docs/ || exit 0
+
+echo "[ADBA] Đã cập nhật docs/ theo commit $SHA."

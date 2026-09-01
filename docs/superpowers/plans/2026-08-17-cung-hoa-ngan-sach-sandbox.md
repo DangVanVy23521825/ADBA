@@ -15,9 +15,10 @@
 
 ## Global Constraints
 
-- **Baseline đo được, không lấy theo trí nhớ: 227 pass + 8 skip** (unit 201+8, integration 26), chạy hết ~7 giây tổng. Không test nào đang pass được phép fail. 8 test skip là `tests/unit/test_introspect.py`, cần `DATABASE_URL` — chúng vẫn skip là đúng.
+- **Baseline đo được, không lấy theo trí nhớ: 547 pass + 12 skip** (unit 521+9, integration 26+3), chạy hết ~5 giây tổng. Không test nào đang pass được phép fail. 12 test skip đều cần `DATABASE_URL` trỏ Postgres thật (`test_introspect.py`, `test_load_sqlite_to_postgres.py`, `test_onboard_flow.py`) — chúng vẫn skip là đúng. **Con số này được đo lại ngày 2026-09-01 sau khi Plan A (đường onboarding) merge vào `main`** — baseline cũ 227+8 ghi lúc viết plan lần đầu đã lỗi thời, giữ lại ở lịch sử git commit `70dba92` nếu cần đối chiếu.
 - **Chạy test:** `"/Users/dangvanvy/Documents/ADBA — Autonomous Data & Business Intelligence Agent/.venv/bin/python" -m pytest <dir> -q`, chạy **ở foreground**, hai lệnh riêng cho `tests/unit` và `tests/integration`. Không đẩy vào nền.
-- **Số test trong mục "Expected" là phép cộng dồn, dùng như checksum chứ không phải hợp đồng.** Chúng tính từ 227 pass + 8 skip cộng số test mỗi task thêm vào. Lệch một hai con số vì bạn tách hay gộp một test là bình thường — điều thực sự phải đúng là **không có fail**, và delta khớp với số test task đó thêm. Từ Task 3 trở đi, số skip là 15 (8 introspect + 7 readonly) trong lần chạy không đặt `ADBA_READONLY_URL`.
+- **Số test trong mục "Expected" là phép cộng dồn, dùng như checksum chứ không phải hợp đồng.** Chúng tính từ 547 pass + 12 skip cộng số test mỗi task thêm vào. Lệch một hai con số vì bạn tách hay gộp một test là bình thường — điều thực sự phải đúng là **không có fail**, và delta khớp với số test task đó thêm. Từ Task 3 trở đi, số skip là 19 (12 nền, cần `DATABASE_URL` + 7 readonly, cần `ADBA_READONLY_URL`) trong lần chạy không đặt biến môi trường nào trong hai biến đó.
+- **Trước khi bắt đầu Task 1: merge `origin/main` vào nhánh này.** Đã làm một lần ngày 2026-09-01 (commit merge `d1011a9`) — Plan A đã vào `main` (PR #1, #2, #3), mang theo thay đổi ở `model/model_client.py`, `model/model_config.py`, `app.py` và `tests/unit/test_sql_tool_guard.py`. Task 7 và Task 12 dưới đây đã được viết lại theo state hậu-merge; nếu `main` trôi tiếp trước khi thực thi, merge lại và đối chiếu file thật trước khi chạy Step 3 của hai task đó — patch viết sẵn giả định đúng cấu trúc file tại commit `d1011a9`.
 - **Tuyệt đối không có lời gọi model thật trong test.** Bộ test hiện tại mock sạch `ModelClient`; logic deadline test bằng **clock tiêm vào**, không bằng `time.sleep`. Nếu một suite vượt ~60 giây thì có lời gọi model thật hoặc một `sleep` lọt vào — dừng và báo.
 - **Không chạy `docker compose` trong worktree này.** Container `adba-postgres` ở `localhost:5432` là tài nguyên **dùng chung với worktree Plan A đang chạy**. Chỉ được `psql` vào nó bằng lệnh cộng thêm và idempotent. Cấm: `REVOKE` bất cứ quyền nào của `adba_user`, `DROP` bất cứ thứ gì, `docker compose down`, cờ `-v`.
 - **Không chạm `perception/`, `onboard.py`, `pages/`** — đó là lãnh thổ Plan A, đang được sửa song song ở worktree khác. Đụng vào là tạo merge conflict không cần thiết. Plan B sở hữu `graph/`, `model/`, `scripts/`, `docker-compose.yml`.
@@ -27,6 +28,7 @@
 - **`permitted_tables` là ranh giới bảo mật, dẫn ra bên trong bộ thực thi.** Không biến nó thành tham số của hàm nào (spec 3.4.1).
 - Bốn assertion `route_next_agent(...) == END` ở `tests/unit/test_supervisor.py` dòng 127, 132, 142, 176 **sẽ được sửa có chủ ý** thành `== "finalize"` ở Task 9. Đó là thay đổi hợp đồng định trước, không phải hồi quy.
 - 19 cảnh báo `multiprocessing` DeprecationWarning (9 ở unit, 10 ở integration) là do `fork()`. Task 1 sẽ xoá hết. **Số cảnh báo về 0 là tiêu chí nghiệm thu của Task 1**, không phải hiệu ứng phụ.
+- **`ModelClient.__init__` giờ có thêm logic chế độ triển khai** (`deployment_mode()`/`egress_allowed()` từ `model/model_config.py`, nhánh Plan A merge vào sau khi Task 7 được thiết kế lần đầu — spec liên quan: `ADBA_DEPLOYMENT=onprem|hybrid`, mặc định `onprem` chặn mọi fallback OpenAI). Đây là một cơ chế **độc lập** với ngân sách thời gian: `deployment_mode` quyết fallback có được phép về mặt hợp đồng khách hàng; `deadline_ts` (Task 7) quyết có còn thời gian để thử không. Task 7 chèn `deadline_ts`/`clock` sau `openai_model` trong chữ ký `__init__` và gán `self.deadline_ts`/`self.clock` ở cuối thân hàm — vị trí đó vẫn đúng sau khi thân `__init__` dài thêm ~45 dòng vì đoạn deployment-mode, vì hai đoạn không đụng nhau. `_assert_budget()` được gọi trước `_invoke_ollama` trong `invoke()`, nên `BudgetExceededError` luôn thắng trước khi luồng chạm tới logic fallback theo `deployment_mode` — đúng ý đồ ban đầu (hết ngân sách không được đi vòng qua OpenAI, bất kể `hybrid` hay `onprem`).
 
 ---
 
@@ -466,10 +468,10 @@ Expected: PASS, 6 passed
 - [ ] **Step 6: Chạy cả hai thư mục — cảnh báo `fork` phải về 0**
 
 Run: `"/Users/dangvanvy/Documents/ADBA — Autonomous Data & Business Intelligence Agent/.venv/bin/python" -m pytest tests/unit -q`
-Expected: PASS, 207 passed, 8 skipped. **Không còn dòng `DeprecationWarning` nào nhắc `os.fork()`.**
+Expected: PASS, 527 passed, 9 skipped. **Không còn dòng `DeprecationWarning` nào nhắc `os.fork()`.**
 
 Run: `"/Users/dangvanvy/Documents/ADBA — Autonomous Data & Business Intelligence Agent/.venv/bin/python" -m pytest tests/integration -q`
-Expected: PASS, 26 passed, **0 warnings**.
+Expected: PASS, 26 passed, 3 skipped, **0 warnings**.
 
 `spawn` khởi động interpreter mới mỗi lần nên chậm hơn `fork` rõ rệt: mỗi lần vào sandbox tốn thêm khoảng 0,5–1,5 giây cho việc nạp lại pandas (và matplotlib với preset chart). `tests/unit/test_viz_agent.py` **không mock sandbox** — nó chạy code biểu đồ thật — nên suite unit sẽ tăng từ ~3,6s lên khoảng 15–25 giây. **Đó là mức chấp nhận được.** Nếu vượt 60 giây thì có gì đó khác đang sai, dừng và báo.
 
@@ -734,7 +736,7 @@ Trong `graph/agents/sql_agent.py`, cho người dùng biết khi kết quả b�
 - [ ] **Step 7: Chạy test và commit**
 
 Run: `"/Users/dangvanvy/Documents/ADBA — Autonomous Data & Business Intelligence Agent/.venv/bin/python" -m pytest tests/unit tests/integration -q`
-Expected: PASS, 241 passed, 8 skipped
+Expected: PASS, 561 passed, 12 skipped
 
 ```bash
 git add graph/agents/sql_agent.py graph/tools/sql_tool.py tests/unit/test_sql_agent.py tests/unit/test_sql_tool_guard.py
@@ -926,7 +928,7 @@ Thêm vào cuối `docker-compose.yml`, sau khối `volumes:`:
 - [ ] **Step 7: Chạy cả bộ test và commit**
 
 Run: `"/Users/dangvanvy/Documents/ADBA — Autonomous Data & Business Intelligence Agent/.venv/bin/python" -m pytest tests/unit tests/integration -q`
-Expected: PASS, 241 passed, 15 skipped (8 introspect + 7 readonly, vì không có `ADBA_READONLY_URL` trong lần chạy trần)
+Expected: PASS, 561 passed, 19 skipped (12 nền, cần `DATABASE_URL` + 7 readonly, cần `ADBA_READONLY_URL`, vì không đặt biến nào trong lần chạy trần)
 
 ```bash
 git add scripts/create_readonly_role.sql tests/integration/test_readonly_role.py docker-compose.yml
@@ -1252,7 +1254,7 @@ Expected: PASS, 19 passed
 - [ ] **Step 6: Chạy cả bộ và commit**
 
 Run: `"/Users/dangvanvy/Documents/ADBA — Autonomous Data & Business Intelligence Agent/.venv/bin/python" -m pytest tests/unit tests/integration -q`
-Expected: PASS, 260 passed, 15 skipped
+Expected: PASS, 580 passed, 19 skipped
 
 ```bash
 git add graph/budget.py graph/state.py tests/unit/test_budget.py
@@ -1532,7 +1534,7 @@ Run: `"/Users/dangvanvy/Documents/ADBA — Autonomous Data & Business Intelligen
 Expected: PASS, 8 passed
 
 Run: `"/Users/dangvanvy/Documents/ADBA — Autonomous Data & Business Intelligence Agent/.venv/bin/python" -m pytest tests/unit tests/integration -q`
-Expected: 264 passed, **4 failed**, 15 skipped. Bốn fail nằm đúng ở `tests/unit/test_supervisor.py` dòng 127/132/142/176 — `assert 'finalize' == END`. **Đây là kỳ vọng, không phải hồi quy**; Task 9 sửa chúng khi node `finalize` tồn tại. Fail ở bất kỳ dòng nào khác thì dừng lại.
+Expected: 584 passed, **4 failed**, 19 skipped. Bốn fail nằm đúng ở `tests/unit/test_supervisor.py` dòng 127/132/142/176 — `assert 'finalize' == END`. **Đây là kỳ vọng, không phải hồi quy**; Task 9 sửa chúng khi node `finalize` tồn tại. Fail ở bất kỳ dòng nào khác thì dừng lại.
 
 - [ ] **Step 7: Commit**
 
@@ -1657,7 +1659,7 @@ Run: `"/Users/dangvanvy/Documents/ADBA — Autonomous Data & Business Intelligen
 Expected: PASS, 23 passed
 
 Run: `"/Users/dangvanvy/Documents/ADBA — Autonomous Data & Business Intelligence Agent/.venv/bin/python" -m pytest tests/unit tests/integration -q`
-Expected: 268 passed, 4 failed, 15 skipped — vẫn đúng 4 fail đã biết ở `test_supervisor.py` (Task 9 sửa). Không fail mới.
+Expected: 588 passed, 4 failed, 19 skipped — vẫn đúng 4 fail đã biết ở `test_supervisor.py` (Task 9 sửa). Không fail mới.
 
 ```bash
 git add graph/agents/supervisor.py graph/agents/sql_agent.py tests/unit/test_budget.py
@@ -1862,7 +1864,7 @@ Run: `"/Users/dangvanvy/Documents/ADBA — Autonomous Data & Business Intelligen
 Expected: PASS, 7 passed
 
 Run: `"/Users/dangvanvy/Documents/ADBA — Autonomous Data & Business Intelligence Agent/.venv/bin/python" -m pytest tests/unit tests/integration -q`
-Expected: 275 passed, 4 failed, 15 skipped — vẫn đúng 4 fail đã biết ở `test_supervisor.py`. Không fail mới.
+Expected: 595 passed, 4 failed, 19 skipped — vẫn đúng 4 fail đã biết ở `test_supervisor.py`. Không fail mới.
 
 ```bash
 git add model/model_client.py tests/unit/test_model_client_deadline.py
@@ -2324,7 +2326,7 @@ def run_graph(
 - [ ] **Step 6: Chạy test và commit**
 
 Run: `"/Users/dangvanvy/Documents/ADBA — Autonomous Data & Business Intelligence Agent/.venv/bin/python" -m pytest tests/unit tests/integration -q`
-Expected: PASS, 293 passed, 15 skipped. **Không còn fail nào** — bốn fail dự kiến từ Task 5 đã đóng.
+Expected: PASS, 613 passed, 19 skipped. **Không còn fail nào** — bốn fail dự kiến từ Task 5 đã đóng.
 
 ```bash
 git add graph/multi_agent.py graph/agents/supervisor.py tests/unit/test_supervisor.py tests/integration/test_budget_end_to_end.py
@@ -2550,7 +2552,7 @@ Run: `"/Users/dangvanvy/Documents/ADBA — Autonomous Data & Business Intelligen
 Expected: PASS, 10 passed
 
 Run: `"/Users/dangvanvy/Documents/ADBA — Autonomous Data & Business Intelligence Agent/.venv/bin/python" -m pytest tests/unit tests/integration -q`
-Expected: PASS, 303 passed, 15 skipped
+Expected: PASS, 623 passed, 19 skipped
 
 ```bash
 git add graph/budget.py graph/agents/sql_agent.py graph/agents/python_agent.py graph/agents/viz_agent.py graph/agents/insight_agent.py graph/agents/reflector_agent.py tests/unit/test_budget_gating.py
@@ -2779,7 +2781,7 @@ Nếu chưa, thêm dòng `logs/` vào `.gitignore`.
 - [ ] **Step 7: Chạy test và commit**
 
 Run: `"/Users/dangvanvy/Documents/ADBA — Autonomous Data & Business Intelligence Agent/.venv/bin/python" -m pytest tests/unit tests/integration -q`
-Expected: PASS, 313 passed, 15 skipped
+Expected: PASS, 633 passed, 19 skipped
 
 ```bash
 git add graph/errors.py graph/utils.py graph/agents/supervisor.py graph/agents/insight_agent.py tests/unit/test_trace_jsonl.py .gitignore
@@ -2790,25 +2792,25 @@ git commit -m "feat(trace): query_id + ngân sách trong trace, ghi JSONL; nhãn
 
 ## Task 12: `app.py` hiển thị kết quả một phần
 
-**Task cuối cùng, làm sau khi Plan A đã merge.** `app.py` là file chung duy nhất giữa hai plan; để nó ở cuối biến một merge conflict có thể xảy ra thành một conflict nhỏ trong một vùng đã biết.
+**Task cuối cùng.** `app.py` là file chung duy nhất giữa hai plan. **Plan A đã merge vào `main` ngày 2026-09-01** (PR #1 `a2682cf`, cộng PR #2/#3 sau đó) — gate ở Step 1 của bản plan gốc đã qua, không còn là điều kiện chặn. Nhưng việc merge đó viết lại `app.py` khá nhiều: hàm hiển thị kết quả đổi tên từ `_render_results` thành `_display_result`, và phần đọc `ConnectionProfile` giờ đi qua `_load_profile()` (đọc từ đĩa, cache theo `@st.cache_resource`) thay vì dựng lại từ `info_box_all.json` mỗi câu hỏi. Các dòng/anchor dưới đây đã cập nhật theo state thật tại commit `d1011a9` (merge `origin/main` vào nhánh này) — đối chiếu lại nếu `main` trôi tiếp trước khi thực thi task này.
 
 **Files:**
-- Modify: `app.py:155-156` (đầu `_render_results`) và `app.py:298`
+- Modify: `app.py:204-206` (đầu `_display_result`) và `app.py:348-354` (khối "Last Run" trong sidebar)
 
 **Interfaces:**
-- Consumes: `state["status"] ∈ {"success","partial","failed"}`, `state["degradation_reason"]: list[str]`
+- Consumes: `state["status"] ∈ {"success","partial","failed"}`, `state["degradation_reason"]: list[str]`, `state["llm_calls_used"]: int`
 
-- [ ] **Step 1: Kiểm tra Plan A đã merge chưa**
+- [ ] **Step 1: Thêm dải trạng thái vào đầu `_display_result`**
 
-```bash
-git log --oneline origin/main -5
+Hàm hiện tại (`app.py:204-206`):
+
+```python
+def _display_result(result: MultiAgentState) -> None:
+    """Display all result sections from a completed run."""
+    st.divider()
 ```
 
-Nếu Plan A chưa vào `main`, dừng ở đây và báo. Task này không chặn cổng ra nào của Plan B; mười một task trên đã đủ đóng L1 và L3.
-
-- [ ] **Step 2: Thêm dải trạng thái vào đầu `_render_results`**
-
-Chèn ngay sau `st.divider()` ở dòng 156:
+Chèn ngay sau `st.divider()`:
 
 ```python
     # ── Trạng thái và lý do bị cắt ──
@@ -2825,18 +2827,30 @@ Chèn ngay sau `st.divider()` ở dòng 156:
 
 Không nuốt lý do vào log: nếu người dùng không thấy hệ thống đã cắt gì, họ sẽ đọc một bảng thiếu như thể nó đầy đủ.
 
-- [ ] **Step 3: Thêm số lời gọi model vào thanh metric**
+- [ ] **Step 2: Thêm số lời gọi model vào thanh metric trong sidebar**
 
-Ở dòng 298, sau `st.metric("Status", ...)`, thêm:
+Khối "Last Run" hiện tại (`app.py:348-354`), trong `with st.sidebar:`:
+
+```python
+    if st.session_state.last_result:
+        st.divider()
+        st.header("Last Run")
+        result = st.session_state.last_result
+        st.metric("Status", result.get("status", "unknown"))
+        st.metric("Agents Completed", len(result.get("completed_agents", [])))
+        st.metric("Errors", result.get("error_count", 0))
+```
+
+Thêm một dòng ngay sau `st.metric("Errors", ...)`:
 
 ```python
         st.metric("Lời gọi model", result.get("llm_calls_used", 0))
 ```
 
-- [ ] **Step 4: Chạy test và commit**
+- [ ] **Step 3: Chạy test và commit**
 
 Run: `"/Users/dangvanvy/Documents/ADBA — Autonomous Data & Business Intelligence Agent/.venv/bin/python" -m pytest tests/unit tests/integration -q`
-Expected: PASS, 313 passed, 15 skipped
+Expected: PASS, 633 passed, 19 skipped
 
 ```bash
 git add app.py

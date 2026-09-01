@@ -314,8 +314,11 @@ def measure_execution(
             report.failures.append((rec.question, f"pred_error: {e}"[:80]))
             continue
         except Exception as e:  # noqa: BLE001 — model/mạng hỏng, không giết cả lượt chạy
+            # Kèm THÔNG ĐIỆP, không chỉ tên kiểu: một lượt chạy hàng giờ mà
+            # báo "8 câu ValueError" thì phải chạy lại mới chẩn được, và
+            # chạy lại là thứ đắt nhất ở tầng này.
             report.pred_error += 1
-            report.failures.append((rec.question, f"generate: {type(e).__name__}"))
+            report.failures.append((rec.question, f"generate: {type(e).__name__}: {e}"[:120]))
             continue
 
         if gold_res.truncated or pred_res.truncated:
@@ -391,37 +394,111 @@ def make_executor(conn, *, timeout_s: int = 30, max_rows: int = 10_000):
     return execute
 
 
+def _load_records(
+    golden: Path, *, profile_dir: Path | None, info_box: Path | None
+) -> tuple[list[EvalRecord], object]:
+    """Đọc golden set cùng schema của nó. Trả `(records, profile)`.
+
+    Hai nguồn schema, vì hai bộ dữ liệu có hình dạng khác nhau:
+
+    - `--profile-dir`: thư mục do `onboard.py` sinh ra. Đây là đường CHÍNH,
+      vì nó đúng thứ khách hàng thật sự có, và `read_profile` trả về bảng
+      ĐÃ GẮN CHÚ GIẢI — tức là đo đúng cái sản phẩm bán. BIRD chỉ có đường
+      này: nó không có info_box.
+    - `--info-box`: đường cũ của golden set ADBA.
+    """
+    import json
+
+    from perception.connection_profile import ALL_TABLES, build_profile
+    from perception.profile_store import read_profile
+
+    if profile_dir:
+        profile = read_profile(profile_dir)
+    else:
+        from perception.schema_model import tables_from_info_box
+
+        tables = tables_from_info_box(json.loads(Path(info_box).read_text(encoding="utf-8")))
+        profile = build_profile(
+            dsn="", tables=tables, grants={"eval": frozenset({ALL_TABLES})}
+        )
+
+    records: list[EvalRecord] = []
+    for line in Path(golden).read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        row = json.loads(line)
+        records.append(
+            EvalRecord(
+                question=row["question"],
+                gold_sql=row["sql"],
+                db_id=row.get("db_id", "default"),
+                tables=profile.tables,
+            )
+        )
+    return records, profile
+
+
+def _translate_gold(records: Sequence[EvalRecord], tables) -> list[EvalRecord]:
+    """Dịch SQL vàng SQLite -> Postgres. Xem eval/sqlite_dialect.py.
+
+    Bắt buộc cho BIRD/Spider: SQL vàng của chúng viết cho SQLite, và để
+    nguyên thì chỉ 34,6% chạy được trên Postgres — 65% còn lại sẽ vào
+    bucket `gold_error` và lượt đo thành vô nghĩa.
+    """
+    import dataclasses
+
+    from eval.sqlite_dialect import SchemaNames, translate
+
+    names = SchemaNames(tables)
+    return [dataclasses.replace(r, gold_sql=translate(r.gold_sql, names)) for r in records]
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         description="Đo execution accuracy (eval tầng 2). Cần database sống."
     )
     ap.add_argument("--golden", type=Path, required=True, help="JSONL {question, sql}")
-    ap.add_argument("--info-box", type=Path, default=Path("perception/info_box_all.json"))
+    ap.add_argument("--profile-dir", type=Path,
+                    help="thư mục profile do onboard.py sinh (chú giải đã gắn sẵn)")
+    ap.add_argument("--info-box", type=Path,
+                    help="đường cũ cho golden set ADBA")
+    ap.add_argument("--translate-gold", action="store_true",
+                    help="dịch SQL vàng SQLite -> Postgres (bắt buộc cho BIRD/Spider)")
     ap.add_argument("--dsn", help="DSN Postgres; mặc định lấy POSTGRES_URL/DATABASE_URL")
-    ap.add_argument("--limit", type=int, help="chỉ chấm N câu đầu (lượt chạy đầy đủ tốn vài giờ)")
+    ap.add_argument("--limit", type=int,
+                    help="chỉ chấm N câu đầu (lượt chạy đầy đủ tốn vài giờ)")
     ap.add_argument("--timeout-s", type=int, default=30)
     ap.add_argument("--max-rows", type=int, default=10_000)
     ap.add_argument("--json", type=Path, help="ghi báo cáo dạng JSON ra đây")
     args = ap.parse_args()
 
+    if bool(args.profile_dir) == bool(args.info_box):
+        ap.error("phải cung cấp đúng một trong hai cờ: --profile-dir hoặc --info-box")
+
     import os
 
     import psycopg2
-
-    from eval.datasets import load_adba_golden
 
     dsn = args.dsn or os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
     if not dsn:
         ap.error("cần --dsn, hoặc đặt DATABASE_URL / POSTGRES_URL")
 
-    records = load_adba_golden(args.golden, args.info_box)
+    records, profile = _load_records(
+        args.golden, profile_dir=args.profile_dir, info_box=args.info_box
+    )
+    if args.translate_gold:
+        records = _translate_gold(records, profile.tables)
     if args.limit:
         records = records[: args.limit]
+
+    print(f"{len(records)} câu, {len(profile.tables)} bảng, "
+          f"schema_mode={profile.schema_mode}", flush=True)
 
     conn = psycopg2.connect(dsn)
     try:
         execute = make_executor(conn, timeout_s=args.timeout_s, max_rows=args.max_rows)
-        report = measure_execution(records, _generator(), execute)
+        report = measure_execution(records, _generator(profile), execute)
     finally:
         conn.close()
 
@@ -450,7 +527,7 @@ def main() -> None:
         )
 
 
-def _generator() -> Callable[[EvalRecord], str]:
+def _generator(profile) -> Callable[[EvalRecord], str]:
     """Sinh SQL qua đúng đường mà production dùng.
 
     Nhập bên trong hàm chứ không ở đầu file: `measure_execution` và toàn bộ
@@ -459,7 +536,7 @@ def _generator() -> Callable[[EvalRecord], str]:
     """
     from graph.agents.sql_agent import _extract_sql, build_system_prompt
     from model.model_client import ModelClient
-    from perception.connection_profile import ALL_TABLES, build_profile
+    from perception.retrieval import LexicalRetriever
     from perception.schema_context import resolve_schema_context
 
     # `enable_openai_fallback=False` cố ý, giống `onboard.py`: một lượt chấm
@@ -467,13 +544,16 @@ def _generator() -> Callable[[EvalRecord], str]:
     # thì lặng lẽ đẩy sang OpenAI là vừa phá lời hứa on-prem vừa làm số đo
     # trộn hai model khác nhau — không còn nghĩa gì.
     client = ModelClient(agent_type="sql", enable_openai_fallback=False)
+    permitted = profile.table_names()
+
+    # Dựng ĐÚNG như app.py: `resolve_schema_context` cố ý ném khi
+    # schema_mode='retrieval' mà không có retriever, không tự lùi về chế độ
+    # full — im lặng lùi sẽ đo một hệ thống khác hệ thống đang bán. Ở chế
+    # độ full thì `FullRetriever` là đường production tương ứng.
+    retriever = LexicalRetriever(profile.tables)
 
     def generate(rec: EvalRecord) -> str:
-        permitted = frozenset(t.name for t in rec.tables)
-        profile = build_profile(
-            dsn="", tables=rec.tables, grants={"eval": frozenset({ALL_TABLES})}
-        )
-        ctx = resolve_schema_context(profile, rec.question, permitted)
+        ctx = resolve_schema_context(profile, rec.question, permitted, retriever=retriever)
         raw = client.invoke(build_system_prompt(ctx), f"Task: {rec.question}")
         # Đi qua đúng bộ bóc mà production dùng: model hay bọc SQL trong hàng
         # rào ```sql, và chấm chuỗi thô sẽ tính là lỗi cú pháp những câu vốn

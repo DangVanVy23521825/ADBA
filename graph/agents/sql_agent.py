@@ -27,7 +27,15 @@ _SQL_KEYWORDS = ("SELECT", "WITH", "select", "with")
 
 
 def _extract_sql(text: str) -> str:
-    """Strip markdown fences and extract the SQL query from model output."""
+    """Strip markdown fences and extract the SQL query from model output.
+
+    Fail closed: khi không tìm thấy SELECT/WITH, RAISE thay vì trả nguyên
+    văn output của model. Bản trước trả nguyên văn, và chuỗi đó đi thẳng
+    tới `execute_sql`. Guard sqlparse ở tầng tool vẫn chặn được nó, nhưng
+    lỗi hiện ra khi đó là "không parse được tên bảng" — sai lớp. Reflector
+    chẩn đoán theo nhãn lỗi, nên nhãn sai dẫn tới `corrected_context` sai,
+    và lần thử lại hỏng đúng như lần đầu.
+    """
     text = re.sub(r"```(?:sql)?\s*|\s*```", "", text).strip()
     # Scan for the earliest SQL keyword (WITH may start before SELECT inside a CTE)
     earliest = len(text)
@@ -37,7 +45,7 @@ def _extract_sql(text: str) -> str:
             earliest = idx
     if earliest < len(text):
         return text[earliest:].strip()
-    return text
+    raise ValueError(f"Không trích được SQL từ output của model: {text[:200]!r}")
 
 
 def build_system_prompt(schema_context: SchemaContext) -> str:
@@ -137,7 +145,15 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
             logger.warning("SQL Agent attempt %d: %s", attempt, error_context)
             continue
 
-        sql = _extract_sql(raw)
+        try:
+            sql = _extract_sql(raw)
+        except ValueError as exc:
+            error_context = str(exc)
+            logger.warning("SQL Agent attempt %d: %s", attempt, error_context)
+            trace = append_trace(state, "sql", "generate_sql",
+                                 f"Attempt {attempt}: {error_context}", "error")
+            continue
+
         logger.info("SQL Agent attempt %d:\n%s", attempt, sql)
 
         # ── Execution ────────────────────────────────────────────
@@ -163,8 +179,9 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
             plan = {}
             cost = "?"
 
+        truncated_note = " (BỊ CẮT ở trần dòng)" if df.attrs.get("truncated") else ""
         trace = append_trace(state, "sql", "execute_sql",
-                             f"OK — {len(df)} rows, cost ~{cost}", "ok")
+                             f"OK — {len(df)} rows{truncated_note}, cost ~{cost}", "ok")
         logger.info("SQL Agent: %d rows returned", len(df))
 
         return {

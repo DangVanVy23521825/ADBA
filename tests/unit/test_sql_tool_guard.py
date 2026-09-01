@@ -196,3 +196,58 @@ def test_quoted_camel_case_table_is_still_refused_when_genuinely_not_granted():
     p = _profile({"sales": frozenset({"orders"})}, tables=_CAMEL_TABLES)
     with pytest.raises(sql_tool.TableNotPermittedError, match="lapTimes"):
         sql_tool.assert_tables_permitted('SELECT * FROM "lapTimes"', p, "sales")
+
+
+class TestRowCap:
+    """Trần dòng (spec 4.1 lớp 4). Không chạm DB thật — psycopg2 bị mock."""
+
+    @staticmethod
+    def _profile():
+        from perception.connection_profile import ALL_TABLES, build_profile
+        from tests.fixtures.mini_schema import MINI_TABLES
+
+        return build_profile(
+            dsn="postgresql://u:p@h:5432/d",
+            tables=MINI_TABLES,
+            grants={"u": frozenset({ALL_TABLES})},
+        )
+
+    @staticmethod
+    def _patch_connect(rows):
+        """Mock psycopg2.connect sao cho fetchmany(n) tôn trọng n."""
+        from unittest.mock import MagicMock, patch
+
+        cur = MagicMock()
+        cur.description = [("id",)]
+        cur.fetchmany.side_effect = lambda n: rows[:n]
+        cur.__enter__ = MagicMock(return_value=cur)
+        cur.__exit__ = MagicMock(return_value=False)
+        conn = MagicMock()
+        conn.cursor.return_value = cur
+        return patch("graph.tools.sql_tool.psycopg2.connect", return_value=conn)
+
+    def test_all_rows_come_back_when_under_the_cap(self):
+        from graph.tools.sql_tool import execute_sql
+
+        rows = [{"id": i} for i in range(5)]
+        with self._patch_connect(rows):
+            df = execute_sql("SELECT id FROM orders", self._profile(), "u", max_rows=10)
+        assert len(df) == 5
+        assert df.attrs["truncated"] is False
+
+    def test_rows_are_capped_and_the_flag_is_set(self):
+        from graph.tools.sql_tool import execute_sql
+
+        rows = [{"id": i} for i in range(50)]
+        with self._patch_connect(rows):
+            df = execute_sql("SELECT id FROM orders", self._profile(), "u", max_rows=10)
+        assert len(df) == 10
+        assert df.attrs["truncated"] is True
+
+    def test_the_cap_defaults_to_fifty_thousand(self):
+        import importlib
+
+        import graph.tools.sql_tool as sql_tool
+
+        importlib.reload(sql_tool)
+        assert sql_tool.SQL_MAX_ROWS == 50000

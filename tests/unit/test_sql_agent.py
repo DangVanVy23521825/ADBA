@@ -73,8 +73,12 @@ class TestExtractSql:
         raw = "```sql\nWITH cte AS (SELECT * FROM orders) SELECT * FROM cte\n```"
         assert _extract_sql(raw) == "WITH cte AS (SELECT * FROM orders) SELECT * FROM cte"
 
-    def test_no_sql_keyword_returns_original(self):
-        assert _extract_sql("Just some text") == "Just some text"
+    def test_no_sql_keyword_raises_fail_closed(self):
+        """Superseded by fail-closed extraction — see TestExtractSqlFailsClosed.
+        Kept here (renamed) so the class's coverage of `_extract_sql`'s normal
+        cases stays next to its one abnormal case."""
+        with pytest.raises(ValueError, match="Không trích được SQL"):
+            _extract_sql("Just some text")
 
 
 class TestSqlAgentNode:
@@ -224,6 +228,42 @@ class TestBuildSystemPromptHasNoSurvivingPlaceholders:
         )
         rendered = build_system_prompt(ctx)
         assert re.search(r"\{[a-z_]+\}", rendered) is None, rendered
+
+
+class TestExtractSqlFailsClosed:
+    def test_prose_without_sql_raises(self):
+        from graph.agents.sql_agent import _extract_sql
+
+        with pytest.raises(ValueError, match="Không trích được SQL"):
+            _extract_sql("Xin lỗi, tôi không đủ thông tin để viết câu truy vấn này.")
+
+    def test_empty_output_raises(self):
+        from graph.agents.sql_agent import _extract_sql
+
+        with pytest.raises(ValueError, match="Không trích được SQL"):
+            _extract_sql("   ")
+
+    def test_a_real_select_still_comes_through(self):
+        from graph.agents.sql_agent import _extract_sql
+
+        assert _extract_sql("```sql\nSELECT 1\n```") == "SELECT 1"
+
+    def test_a_with_cte_still_comes_through(self):
+        from graph.agents.sql_agent import _extract_sql
+
+        out = _extract_sql("Đây là câu trả lời:\nWITH t AS (SELECT 1) SELECT * FROM t")
+        assert out.startswith("WITH")
+
+
+class TestSqlTimeoutCeiling:
+    def test_default_statement_timeout_is_ten_seconds(self):
+        """Spec 4.1 lớp 4: 30s → 10s, nằm trong ngân sách wall-clock mục 5."""
+        import importlib
+
+        import graph.tools.sql_tool as sql_tool
+
+        importlib.reload(sql_tool)
+        assert sql_tool.SQL_TIMEOUT_MS == 10000
 
 
 if __name__ == "__main__":

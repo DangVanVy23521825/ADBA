@@ -20,7 +20,17 @@ from perception.sql_tables import tables_in_sql
 
 logger = logging.getLogger(__name__)
 
-SQL_TIMEOUT_MS = int(os.getenv("SQL_TIMEOUT_MS", "30000"))
+# 10s, không phải 30s: trần này nằm BÊN TRONG ngân sách wall-clock 45s
+# (spec mục 5). Một câu truy vấn chạy quá 10 giây trên schema BI cỡ này
+# gần như luôn là join sai, và để nó chạy tiếp chỉ ăn hết phần thời gian
+# lẽ ra dành cho bước insight.
+SQL_TIMEOUT_MS = int(os.getenv("SQL_TIMEOUT_MS", "10000"))
+
+# Trần dòng nạp về client. statement_timeout không cứu được trường hợp này:
+# Postgres trả dòng đúng hạn, chỗ chết là fetchall() phía client nạp trọn
+# result set vào RAM. Một SELECT * trên bảng chục triệu dòng làm sập tiến
+# trình trước khi có ai kịp báo lỗi.
+SQL_MAX_ROWS = int(os.getenv("SQL_MAX_ROWS", "50000"))
 
 # Guards against injection via f-string table-name interpolation.
 _TABLE_NAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
@@ -108,11 +118,16 @@ def execute_sql(
     user: str,
     params: tuple | None = None,
     timeout_ms: int = SQL_TIMEOUT_MS,
+    max_rows: int = SQL_MAX_ROWS,
 ) -> pd.DataFrame:
     """Chạy một câu SELECT, trả DataFrame.
 
     Kiểm quyền trước khi mở kết nối. Không có tham số nào cho phép bên gọi
     nới rộng tập bảng được chạm (spec tiêu chí 11).
+
+    Kết quả bị cắt ở `max_rows`. Cờ `truncated` đi qua `df.attrs` chứ không
+    qua kiểu trả về: đổi kiểu trả về sẽ buộc sql_agent, app.py và toàn bộ
+    test hiện có phải sửa, đổi lấy một bit thông tin.
     """
     assert_tables_permitted(sql, profile, user)
     conn = psycopg2.connect(profile.dsn)
@@ -120,11 +135,25 @@ def execute_sql(
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("SET LOCAL statement_timeout = %s", (timeout_ms,))
             cur.execute(sql, params)
-            rows = cur.fetchall()
+            # Lấy dư một dòng: đó là cách duy nhất phân biệt "đúng max_rows
+            # dòng" với "còn nữa" mà không phải đếm cả bảng.
+            rows = cur.fetchmany(max_rows + 1)
+            truncated = len(rows) > max_rows
+            if truncated:
+                logger.warning(
+                    "Kết quả bị cắt ở %d dòng — câu truy vấn trả về nhiều hơn thế.", max_rows
+                )
+                rows = rows[:max_rows]
+
             if not rows:
                 columns = [desc[0] for desc in cur.description] if cur.description else []
-                return pd.DataFrame(columns=columns)
-            return pd.DataFrame(rows)
+                df = pd.DataFrame(columns=columns)
+            else:
+                df = pd.DataFrame(rows)
+
+            df.attrs["truncated"] = truncated
+            df.attrs["row_cap"] = max_rows
+            return df
     finally:
         conn.close()
 

@@ -209,17 +209,17 @@ Dự án coi là thành công khi đồng thời:
 | `data` | 16 | 1 | 84.504 | DDL 3 domain, seed, và dataset huấn luyện/đánh giá (JSONL) |
 | `docker-compose.yml` | 1 | 0 | 21 | — |
 | `docs` | 19 | 0 | — | Bộ tài liệu dự án (chính file này) |
-| `eval` | 14 | 10 | 3.474 | Runner đo baseline / PEFT và so sánh hai lần chạy |
-| `graph` | 16 | 16 | 2.084 | LangGraph: state, các node agent, và tool thực thi |
+| `eval` | 14 | 10 | 3.361 | Runner đo baseline / PEFT và so sánh hai lần chạy |
+| `graph` | 16 | 16 | 2.096 | LangGraph: state, các node agent, và tool thực thi |
 | `model` | 3 | 3 | 374 | ModelClient (Ollama local-first, fallback OpenAI) + tham số theo agent |
 | `onboard.py` | 1 | 1 | 1.012 | — |
 | `pages` | 1 | 1 | 86 | — |
-| `perception` | 16 | 12 | 5.342 | Perception layer — introspect PostgreSQL sinh `info_box` JSON |
+| `perception` | 17 | 13 | 5.551 | Perception layer — introspect PostgreSQL sinh `info_box` JSON |
 | `prompts` | 5 | 0 | 514 | System prompt của từng skill, dạng file text tách khỏi code |
 | `requirements.txt` | 1 | 0 | 18 | — |
 | `schemas` | 3 | 3 | 735 | Pydantic contract: ExecutionPlan (Supervisor) và InsightOutput (Insight) |
 | `scripts` | 7 | 3 | 1.644 | Tiện ích vận hành: áp schema, kiểm tra kết nối, sinh tài liệu |
-| `tests` | 40 | 37 | 8.922 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
+| `tests` | 41 | 38 | 9.047 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
 | `training` | 13 | 5 | 3.795 | Sinh dữ liệu, LoRA/QLoRA notebook, checkpoint và kết quả |
 | `.cursorrules` | 1 | 0 | 0 | — |
 | `.github` | 1 | 0 | 29 | CI/CD — unit test, build & push image lên GHCR |
@@ -231,10 +231,10 @@ Dự án coi là thành công khi đồng thời:
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `eb65083` — feat(eval): dịch SQL vàng SQLite sang Postgres, mở BIRD cho tầng 2 |
+| Commit nguồn gần nhất | `a48fbff` — fix(sql): bọc nháy định danh mà Postgres sẽ gấp sai, ở đường chạy thật |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 100 |
+| Số commit nguồn | 101 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

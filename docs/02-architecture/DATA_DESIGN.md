@@ -380,10 +380,10 @@ giữa các lần chạy. Không dùng làm bản sao lưu production.
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `eb65083` — feat(eval): dịch SQL vàng SQLite sang Postgres, mở BIRD cho tầng 2 |
+| Commit nguồn gần nhất | `a48fbff` — fix(sql): bọc nháy định danh mà Postgres sẽ gấp sai, ở đường chạy thật |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 100 |
+| Số commit nguồn | 101 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

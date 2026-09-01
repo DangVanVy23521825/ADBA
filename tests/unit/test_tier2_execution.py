@@ -12,6 +12,7 @@ import pytest
 
 from eval.tier2_execution import (
     ExecReport,
+    Failure,
     QueryError,
     QueryResult,
     QueryTimeout,
@@ -394,3 +395,71 @@ def test_report_shows_that_both_empty_is_excluded_from_the_pass_rate():
 
 def test_exec_accuracy_is_zero_rather_than_dividing_by_zero():
     assert ExecReport(total=3, gold_error=3).exec_accuracy == 0.0
+
+
+# --- Chi tiết thất bại phải sống sót ra khỏi lượt chạy ---
+# Lượt 50 câu đầu tiên mất 34 phút rồi chỉ in 10 dòng đầu; 18 ca pred_error
+# còn lại không được lưu ở đâu, và phải chạy lại mới chẩn được.
+
+
+def test_a_failure_carries_the_sql_that_actually_ran():
+    """"Cột không tồn tại" mà không kèm SQL thì không chỉ ra được cột nào."""
+    report = measure_execution(
+        [_Rec("q", "GOLD")],
+        generate=lambda r: "SELECT MailStreet FROM schools",
+        execute=_fixed({
+            "GOLD": QueryResult(rows=(("a",),)),
+            "SELECT MailStreet FROM schools": QueryError('column "mailstreet" does not exist'),
+        }),
+    )
+    (f,) = report.failures
+    assert f.bucket == "pred_error"
+    assert "mailstreet" in f.detail
+    assert f.sql == "SELECT MailStreet FROM schools"
+
+
+def test_a_mismatch_also_carries_its_sql():
+    """Khác kết quả là ca CẦN đọc SQL nhất: nó chạy được, nên sai nằm ở
+    ngữ nghĩa và chỉ nhìn câu lệnh mới thấy."""
+    report = measure_execution(
+        [_Rec("q", "GOLD")],
+        generate=lambda r: "PRED",
+        execute=_fixed({
+            "GOLD": QueryResult(rows=(("a",),)),
+            "PRED": QueryResult(rows=(("b",),)),
+        }),
+    )
+    assert report.failures[0].sql == "PRED"
+
+
+def test_a_broken_golden_record_carries_its_own_sql():
+    report = measure_execution(
+        [_Rec("q", "GOLD_BAD")],
+        generate=lambda r: "PRED",
+        execute=_fixed({"GOLD_BAD": QueryError("boom")}),
+    )
+    assert report.failures[0].sql == "GOLD_BAD"
+
+
+def test_a_generate_failure_does_not_crash_on_the_unbound_sql():
+    """`pred_sql` được gán trước vòng try. Không gán thì nhánh bắt lỗi ném
+    NameError và giết cả lượt chạy — đúng đường code lẽ ra để cứu nó."""
+    def generate(rec):
+        raise RuntimeError("ollama reset")
+
+    report = measure_execution(
+        [_Rec("q", "GOLD")],
+        generate=generate,
+        execute=_fixed({"GOLD": QueryResult(rows=(("a",),))}),
+    )
+    assert report.failures[0].bucket == "generate_error"
+    assert report.failures[0].sql == ""
+
+
+def test_the_text_report_still_truncates_for_the_terminal():
+    """Cắt ở 10 là đúng cho màn hình; cái sai là để bản ĐẦY ĐỦ không có
+    đường nào ra file."""
+    report = ExecReport(total=20, mismatch=20,
+                        failures=[Failure(f"q{i}", "mismatch") for i in range(20)])
+    assert report.as_text().count("  - [") == 10
+    assert len(report.failures) == 20

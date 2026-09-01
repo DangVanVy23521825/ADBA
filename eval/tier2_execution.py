@@ -210,6 +210,26 @@ def compare_ignoring_column_order(
     return compare_results(g, p, ordered=ordered)
 
 
+@dataclass(frozen=True)
+class Failure:
+    """Một câu không đạt, đủ chi tiết để CHẨN mà không phải chạy lại.
+
+    Chạy lại là thứ đắt nhất ở tầng này: một lượt 50 câu mất 34 phút. Báo
+    cáo chỉ in 10 dòng đầu cho vừa màn hình, nên nếu bản ghi đầy đủ không
+    được lưu ra file thì phần còn lại mất hẳn — đúng chuyện đã xảy ra ở
+    lượt chạy đầu tiên, và nó phí nguyên 34 phút đó.
+
+    `sql` là câu model sinh ra, sau toàn bộ hậu xử lý — tức đúng chuỗi đã
+    gửi xuống Postgres. Không có nó thì "cột không tồn tại" không chỉ ra
+    được cột nào hay vì sao.
+    """
+
+    question: str
+    bucket: str
+    detail: str = ""
+    sql: str = ""
+
+
 @dataclass
 class ExecReport:
     """Các bucket, KHÔNG gộp thành một con số.
@@ -227,7 +247,7 @@ class ExecReport:
     truncated: int = 0
     gold_error: int = 0
     loose_match: int = 0
-    failures: list[tuple[str, str]] = field(default_factory=list)
+    failures: list[Failure] = field(default_factory=list)
 
     @property
     def scored(self) -> int:
@@ -270,8 +290,9 @@ class ExecReport:
             ]
         if self.failures:
             lines.append(f"\n{len(self.failures)} câu không đạt (10 câu đầu):")
-            for q, why in self.failures[:10]:
-                lines.append(f"  - [{why}] {q[:66]}")
+            for f in self.failures[:10]:
+                why = f"{f.bucket}: {f.detail}" if f.detail else f.bucket
+                lines.append(f"  - [{why[:60]}] {f.question[:60]}")
         return "\n".join(lines)
 
 
@@ -299,33 +320,40 @@ def measure_execution(
             gold_res = execute(rec.gold_sql)
         except QueryError as e:
             report.gold_error += 1
-            report.failures.append((rec.question, f"gold_error: {type(e).__name__}"))
+            report.failures.append(Failure(rec.question, "gold_error",
+                                          f"{type(e).__name__}: {e}"[:200],
+                                          rec.gold_sql))
             continue
 
+        # Gán trước vòng try: nếu `generate` ném thì nhánh bắt lỗi vẫn tham
+        # chiếu `pred_sql`, và một NameError ở đó sẽ giết cả lượt chạy dài
+        # hàng giờ vì đúng cái đường code lẽ ra để cứu nó.
+        pred_sql = ""
         try:
             pred_sql = generate(rec)
             pred_res = execute(pred_sql)
         except QueryTimeout:
             report.pred_timeout += 1
-            report.failures.append((rec.question, "pred_timeout"))
+            report.failures.append(Failure(rec.question, "pred_timeout", "", pred_sql))
             continue
         except QueryError as e:
             report.pred_error += 1
-            report.failures.append((rec.question, f"pred_error: {e}"[:80]))
+            report.failures.append(Failure(rec.question, "pred_error", str(e)[:200], pred_sql))
             continue
         except Exception as e:  # noqa: BLE001 — model/mạng hỏng, không giết cả lượt chạy
             # Kèm THÔNG ĐIỆP, không chỉ tên kiểu: một lượt chạy hàng giờ mà
             # báo "8 câu ValueError" thì phải chạy lại mới chẩn được, và
             # chạy lại là thứ đắt nhất ở tầng này.
             report.pred_error += 1
-            report.failures.append((rec.question, f"generate: {type(e).__name__}: {e}"[:120]))
+            report.failures.append(Failure(rec.question, "generate_error",
+                                          f"{type(e).__name__}: {e}"[:200]))
             continue
 
         if gold_res.truncated or pred_res.truncated:
             # Không tính đạt cũng không tính trượt: khi một bên bị cắt cụt
             # thì phép so không còn nói lên điều gì về tính đúng.
             report.truncated += 1
-            report.failures.append((rec.question, "truncated"))
+            report.failures.append(Failure(rec.question, "truncated", "", pred_sql))
             continue
 
         ordered = has_top_level_order_by(rec.gold_sql)
@@ -342,7 +370,7 @@ def measure_execution(
             report.both_empty += 1
         else:
             report.mismatch += 1
-            report.failures.append((rec.question, "mismatch"))
+            report.failures.append(Failure(rec.question, "mismatch", "", pred_sql))
 
     return report
 
@@ -519,6 +547,13 @@ def main() -> None:
                     "truncated": report.truncated,
                     "gold_error": report.gold_error,
                     "loose_match": report.loose_match,
+                    # ĐẦY ĐỦ, không cắt ở 10 như bản in ra màn hình. Đây là
+                    # thứ duy nhất cho phép chẩn mà không phải chạy lại.
+                    "failures": [
+                        {"question": f.question, "bucket": f.bucket,
+                         "detail": f.detail, "sql": f.sql}
+                        for f in report.failures
+                    ],
                 },
                 ensure_ascii=False,
                 indent=2,

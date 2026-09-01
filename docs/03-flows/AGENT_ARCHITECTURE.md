@@ -276,6 +276,7 @@ Ba điều đáng đọc kỹ:
 | `tests/integration/test_simple_queries.py` | 10 |
 | `tests/unit/test_annotate.py` | 38 |
 | `tests/unit/test_annotations.py` | 32 |
+| `tests/unit/test_budget.py` | 19 |
 | `tests/unit/test_connection_profile.py` | 16 |
 | `tests/unit/test_describe_dataset.py` | 6 |
 | `tests/unit/test_egress_boundary.py` | 13 |
@@ -302,7 +303,7 @@ Ba điều đáng đọc kỹ:
 | `tests/unit/test_supervisor.py` | 16 |
 | `tests/unit/test_tier1_recall.py` | 9 |
 | `tests/unit/test_viz_agent.py` | 11 |
-| **Tổng** | **542** |
+| **Tổng** | **561** |
 
 <!-- AUTO:end id=tests -->
 
@@ -327,10 +328,10 @@ Ba điều đáng đọc kỹ:
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `0120aaa` — feat(db): role adba_readonly — lớp bảo đảm chỉ-đọc ở tầng Postgres |
+| Commit nguồn gần nhất | `45b7b5d` — feat(budget): deadline_ts mang trong state, clock tiêm được |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 103 |
+| Số commit nguồn | 104 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

@@ -250,7 +250,7 @@ riêng qua MCP, và egress bị chặn ở tầng mạng. Chi tiết:
 | `docker-compose.yml` | 1 | 0 | 33 | — |
 | `docs` | 19 | 0 | — | Bộ tài liệu dự án (chính file này) |
 | `eval` | 12 | 8 | 2.719 | Runner đo baseline / PEFT và so sánh hai lần chạy |
-| `graph` | 16 | 16 | 2.187 | LangGraph: state, các node agent, và tool thực thi |
+| `graph` | 17 | 17 | 2.280 | LangGraph: state, các node agent, và tool thực thi |
 | `model` | 3 | 3 | 374 | ModelClient (Ollama local-first, fallback OpenAI) + tham số theo agent |
 | `onboard.py` | 1 | 1 | 1.012 | — |
 | `pages` | 1 | 1 | 86 | — |
@@ -259,7 +259,7 @@ riêng qua MCP, và egress bị chặn ở tầng mạng. Chi tiết:
 | `requirements.txt` | 1 | 0 | 18 | — |
 | `schemas` | 3 | 3 | 735 | Pydantic contract: ExecutionPlan (Supervisor) và InsightOutput (Insight) |
 | `scripts` | 8 | 3 | 1.683 | Tiện ích vận hành: áp schema, kiểm tra kết nối, sinh tài liệu |
-| `tests` | 39 | 36 | 8.459 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
+| `tests` | 40 | 37 | 8.592 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
 | `training` | 13 | 5 | 3.795 | Sinh dữ liệu, LoRA/QLoRA notebook, checkpoint và kết quả |
 | `.cursorrules` | 1 | 0 | 0 | — |
 | `.github` | 1 | 0 | 29 | CI/CD — unit test, build & push image lên GHCR |
@@ -276,6 +276,10 @@ kèm giá trị thật; `env.example` là bản mẫu.
 
 | Biến | Mặc định trong code | Có trong `env.example` | Nơi đọc |
 |---|---|---|---|
+| `ADBA_INSIGHT_RESERVE_S` | `"12"` | — | `graph/budget.py` |
+| `ADBA_MAX_LLM_CALLS` | `"12"` | — | `graph/budget.py` |
+| `ADBA_MODEL_CALL_ESTIMATE_S` | `"15"` | — | `graph/budget.py` |
+| `ADBA_QUERY_BUDGET_S` | `"45"` | — | `graph/budget.py` |
 | `BACKUP_MODEL` | `"llama3.1:8b-instruct-q4_K_M"` | — | `model/model_config.py` |
 | `DATABASE_URL` | `"postgresql://adba_user:adba@localhost:5432/adba_db"` | — | `data/seed/seed_data.py`, `perception/extract_info_box.py`, `training/generate_data.py` (+1) |
 | `ENABLE_OPENAI_FALLBACK` | — | — | `model/model_client.py` |
@@ -325,10 +329,10 @@ kèm giá trị thật; `env.example` là bản mẫu.
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `0120aaa` — feat(db): role adba_readonly — lớp bảo đảm chỉ-đọc ở tầng Postgres |
+| Commit nguồn gần nhất | `45b7b5d` — feat(budget): deadline_ts mang trong state, clock tiêm được |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 103 |
+| Số commit nguồn | 104 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

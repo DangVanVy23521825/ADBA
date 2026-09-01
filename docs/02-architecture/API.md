@@ -38,6 +38,10 @@ result: MultiAgentState = run_graph(
 |---|---|---|---|
 | `query` | `str` | bắt buộc | Input |
 | `schema_context` | `SchemaContext` | bắt buộc | Input |
+| `query_id` | `str` | bắt buộc | Ngân sách |
+| `deadline_ts` | `float` | bắt buộc | Ngân sách |
+| `llm_calls_used` | `int` | bắt buộc | Ngân sách |
+| `degradation_reason` | `list[str]` | bắt buộc | Ngân sách |
 | `execution_plan` | `list[dict[str, Any]]` | bắt buộc | Supervisor |
 | `dependency_graph` | `NotRequired[dict[str, list[str]]]` | tuỳ chọn | Supervisor |
 | `ready_agents` | `NotRequired[list[str]]` | tuỳ chọn | Supervisor |
@@ -279,10 +283,10 @@ Khi lớp HTTP có thật, thêm vào `scripts/update_docs.py` một khối AUTO
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `0120aaa` — feat(db): role adba_readonly — lớp bảo đảm chỉ-đọc ở tầng Postgres |
+| Commit nguồn gần nhất | `45b7b5d` — feat(budget): deadline_ts mang trong state, clock tiêm được |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 103 |
+| Số commit nguồn | 104 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

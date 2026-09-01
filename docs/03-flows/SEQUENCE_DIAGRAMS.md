@@ -242,10 +242,10 @@ sequenceDiagram
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `0120aaa` — feat(db): role adba_readonly — lớp bảo đảm chỉ-đọc ở tầng Postgres |
+| Commit nguồn gần nhất | `45b7b5d` — feat(budget): deadline_ts mang trong state, clock tiêm được |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 103 |
+| Số commit nguồn | 104 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

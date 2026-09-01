@@ -78,6 +78,7 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 **Tính năng mới**
 
+- deadline_ts mang trong state, clock tiêm được — `45b7b5d` (2026-09-01, Đặng Văn Vỹ)
 - role adba_readonly — lớp bảo đảm chỉ-đọc ở tầng Postgres — `0120aaa` (2026-09-01, Đặng Văn Vỹ)
 - Chinook làm schema demo phát hành lại được — `ff31b35` (2026-08-23, Đặng Văn Vỹ)
 - --threshold-tokens chốt chế độ schema tại build — `42ece63` (2026-08-23, Đặng Văn Vỹ)
@@ -234,10 +235,10 @@ Cập nhật `PRIMARY_MODEL` trong `.env`, `ollama pull <model>`, rồi chạy l
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `0120aaa` — feat(db): role adba_readonly — lớp bảo đảm chỉ-đọc ở tầng Postgres |
+| Commit nguồn gần nhất | `45b7b5d` — feat(budget): deadline_ts mang trong state, clock tiêm được |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 103 |
+| Số commit nguồn | 104 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

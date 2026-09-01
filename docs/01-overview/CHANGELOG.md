@@ -109,6 +109,7 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 **Sửa lỗi**
 
+- spawn + env rỗng — ranh giới là tiến trình, không phải namespace — `55aba8e` (2026-09-01, Đặng Văn Vỹ)
 - dọn ba lỗ đã park từ review Plan A — `6af3233` (2026-09-01, Đặng Văn Vỹ)
 - tên cột không mang nghĩa thì luôn low, bất kể model chấm gì — `4601a03` (2026-08-27, Đặng Văn Vỹ)
 - chia lô cột cho bảng rộng, annotate có ngân sách riêng — `da433e3` (2026-08-26, Đặng Văn Vỹ)
@@ -231,10 +232,10 @@ Cập nhật `PRIMARY_MODEL` trong `.env`, `ollama pull <model>`, rồi chạy l
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `8809e94` — docs(plan): cập nhật Plan B theo main hậu-merge Plan A |
+| Commit nguồn gần nhất | `55aba8e` — fix(sandbox): spawn + env rỗng — ranh giới là tiến trình, không phải namespace |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 100 |
+| Số commit nguồn | 101 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

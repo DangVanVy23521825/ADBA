@@ -201,6 +201,7 @@ vì thành phần sửa lỗi.
 | `tests/unit/test_profile_store.py` | 24 |
 | `tests/unit/test_prompts_are_schema_agnostic.py` | 6 |
 | `tests/unit/test_python_agent.py` | 14 |
+| `tests/unit/test_python_sandbox_isolation.py` | 6 |
 | `tests/unit/test_reflector.py` | 3 |
 | `tests/unit/test_render_schema.py` | 29 |
 | `tests/unit/test_retrieval.py` | 20 |
@@ -213,7 +214,7 @@ vì thành phần sửa lỗi.
 | `tests/unit/test_supervisor.py` | 16 |
 | `tests/unit/test_tier1_recall.py` | 9 |
 | `tests/unit/test_viz_agent.py` | 11 |
-| **Tổng** | **521** |
+| **Tổng** | **527** |
 
 <!-- AUTO:end id=tests -->
 
@@ -230,10 +231,10 @@ PYTHONPATH=. pytest tests/unit/ -v       # không cần DB và Ollama
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `8809e94` — docs(plan): cập nhật Plan B theo main hậu-merge Plan A |
+| Commit nguồn gần nhất | `55aba8e` — fix(sandbox): spawn + env rỗng — ranh giới là tiến trình, không phải namespace |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 100 |
+| Số commit nguồn | 101 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

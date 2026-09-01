@@ -202,6 +202,7 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Commit | Ngày | Tác giả | Nội dung |
 |---|---|---|---|
+| `55aba8e` | 2026-09-01 | Đặng Văn Vỹ | fix(sandbox): spawn + env rỗng — ranh giới là tiến trình, không phải namespace |
 | `8809e94` | 2026-09-01 | Đặng Văn Vỹ | docs(plan): cập nhật Plan B theo main hậu-merge Plan A |
 | `6af3233` | 2026-09-01 | Đặng Văn Vỹ | fix: dọn ba lỗ đã park từ review Plan A |
 | `03ab786` | 2026-08-27 | Đặng Văn Vỹ | test(onboard): fixture mật khẩu không còn giống bí mật thật |
@@ -216,7 +217,6 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 | `7cd8480` | 2026-08-22 | Đặng Văn Vỹ | fix(eval): khoá ngoại lùi về NOT VALID khi dữ liệu nguồn vi phạm |
 | `7cfa6ee` | 2026-08-22 | Đặng Văn Vỹ | chore(eval): ghim sha256 của BIRD dev.zip |
 | `3116622` | 2026-08-22 | Đặng Văn Vỹ | feat(eval): bridge BIRD SQLite databases into Postgres for onboarding evals |
-| `0e1f02d` | 2026-08-19 | Đặng Văn Vỹ | docs: sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO |
 
 <!-- AUTO:end id=commit-history -->
 
@@ -224,10 +224,10 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `8809e94` — docs(plan): cập nhật Plan B theo main hậu-merge Plan A |
+| Commit nguồn gần nhất | `55aba8e` — fix(sandbox): spawn + env rỗng — ranh giới là tiến trình, không phải namespace |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 100 |
+| Số commit nguồn | 101 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

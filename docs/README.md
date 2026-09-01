@@ -76,10 +76,10 @@ Chi tiết cơ chế, cách thêm khối mới, cách xử lý sự cố: [DOCS_
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `8809e94` — docs(plan): cập nhật Plan B theo main hậu-merge Plan A |
+| Commit nguồn gần nhất | `55aba8e` — fix(sandbox): spawn + env rỗng — ranh giới là tiến trình, không phải namespace |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 100 |
+| Số commit nguồn | 101 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

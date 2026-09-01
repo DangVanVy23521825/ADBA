@@ -20,12 +20,45 @@ from graph.utils import append_trace
 logger = logging.getLogger(__name__)
 
 
+def _safe_list(state: MultiAgentState, key: str) -> list:
+    """Đọc một trường list ra khỏi state, chịu được None hoặc sai kiểu.
+
+    State có thể bị ghi dở khi một node khác chết giữa chừng. `.get(key, [])`
+    chỉ đỡ được trường hợp khoá VẮNG MẶT — nếu khoá có mặt nhưng giá trị là
+    `None` (hoặc bất kỳ kiểu nào không phải list), `.get` vẫn trả nguyên giá
+    trị đó, và `for x in None` ném `TypeError`. finalize là node cuối cùng,
+    không được phép chết vì một state nửa vời như vậy.
+    """
+    value = state.get(key)
+    return value if isinstance(value, list) else []
+
+
+def _safe_dict(state: MultiAgentState, key: str) -> dict:
+    """Tương tự `_safe_list`, nhưng cho trường dict (vd. `last_error`)."""
+    value = state.get(key)
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_number(state: MultiAgentState, key: str, default: float) -> float:
+    """Tương tự `_safe_list`, nhưng cho trường số (vd. `deadline_ts`)."""
+    value = state.get(key)
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return value
+    return default
+
+
 def _planned_agents(state: MultiAgentState) -> list[str]:
-    return [str(step.get("agent", "")) for step in state.get("execution_plan", [])]
+    agents: list[str] = []
+    for step in _safe_list(state, "execution_plan"):
+        if isinstance(step, dict):
+            agents.append(str(step.get("agent", "")))
+        # Một bước không phải dict là dữ liệu hỏng (ghi dở, crash giữa
+        # chừng) — bỏ qua thay vì ném lỗi: finalize không được phép chết.
+    return agents
 
 
 def _skipped_agents(state: MultiAgentState) -> list[str]:
-    completed = set(state.get("completed_agents", []))
+    completed = set(_safe_list(state, "completed_agents"))
     return [agent for agent in _planned_agents(state) if agent not in completed]
 
 
@@ -44,12 +77,13 @@ def finalize_node(state: MultiAgentState) -> MultiAgentState:
     skipped = _skipped_agents(state)
     has_sql = bool(state.get("sql_result"))
 
-    reasons: list[str] = list(state.get("degradation_reason", []))
-    if is_expired(state.get("deadline_ts", 0.0)):
+    reasons: list[str] = list(_safe_list(state, "degradation_reason"))
+    if is_expired(_safe_number(state, "deadline_ts", 0.0)):
         reasons.append("Hết ngân sách thời gian trước khi kế hoạch chạy xong.")
-    if calls_exhausted(state.get("llm_calls_used", 0)):
+    llm_calls_used = _safe_number(state, "llm_calls_used", 0)
+    if calls_exhausted(llm_calls_used):
         reasons.append(
-            f"Chạm trần {state.get('llm_calls_used', 0)} lời gọi model cho một câu hỏi."
+            f"Chạm trần {llm_calls_used} lời gọi model cho một câu hỏi."
         )
     if skipped:
         reasons.append("Bước bị bỏ: " + ", ".join(skipped) + ".")
@@ -63,7 +97,7 @@ def finalize_node(state: MultiAgentState) -> MultiAgentState:
         observation = "Kết quả một phần — " + " ".join(reasons)
     else:
         status = "failed"
-        last_error = state.get("last_error") or {}
+        last_error = _safe_dict(state, "last_error")
         observation = (
             "Không có output dùng được. "
             f"Lỗi cuối: {last_error.get('error_type', 'không rõ')}."

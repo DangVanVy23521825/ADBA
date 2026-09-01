@@ -105,11 +105,46 @@ def test_finalize_always_appends_a_trace_entry():
     assert len(finalize_node(_state())["action_trace"]) == before + 1
 
 
-def test_finalize_never_raises_on_an_empty_state():
-    """finalize LUÔN chạy — quá hạn, xong kế hoạch, hay lỗi chí mạng. Nó là
-    node cuối duy nhất, nên nó ném lỗi là người dùng không nhận được gì."""
-    s = make_initial_state("q", SchemaContext())
+def test_finalize_never_raises_on_a_bare_empty_state():
+    """finalize LUÔN chạy — kể cả khi state chỉ là {} (ghi dở, crash giữa
+    chừng trước khi make_initial_state từng chạy). Nó là node cuối duy
+    nhất, nên nó ném lỗi là người dùng không nhận được gì."""
+    assert finalize_node({})["status"] in {"success", "partial", "failed"}
+
+
+def test_finalize_never_raises_when_execution_plan_is_none():
+    """Khoá có mặt nhưng giá trị None — khác với khoá vắng mặt, và
+    `.get(key, default)` không đỡ được trường hợp này."""
+    s = _state(execution_plan=None)
     assert finalize_node(s)["status"] in {"success", "partial", "failed"}
+
+
+def test_finalize_never_raises_when_completed_agents_is_none():
+    s = _state(completed_agents=None)
+    assert finalize_node(s)["status"] in {"success", "partial", "failed"}
+
+
+def test_finalize_never_raises_when_degradation_reason_is_none():
+    s = _state(degradation_reason=None)
+    assert finalize_node(s)["status"] in {"success", "partial", "failed"}
+
+
+def test_finalize_never_raises_when_last_error_is_not_a_dict():
+    s = _state(last_error="boom")
+    assert finalize_node(s)["status"] in {"success", "partial", "failed"}
+
+
+def test_finalize_skips_a_malformed_plan_step_instead_of_crashing():
+    """Một bước hỏng (không phải dict) trong execution_plan — ghi dở hoặc
+    dữ liệu bị hỏng — bị bỏ qua thay vì làm sập finalize."""
+    s = _state(
+        completed_agents=["supervisor", "sql"],
+        sql_result={"sql": "SELECT 1", "row_count": 3},
+        execution_plan=[{"step": 1, "agent": "sql", "task": "t1", "depends_on": [],
+                          "skill_type": "text-to-sql"}, "not_a_dict", 42],
+    )
+    out = finalize_node(s)
+    assert out["status"] in {"success", "partial", "failed"}
 
 
 def test_finalize_does_not_mutate_its_input():

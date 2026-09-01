@@ -49,11 +49,16 @@ def _safe_number(state: MultiAgentState, key: str, default: float) -> float:
 
 def _planned_agents(state: MultiAgentState) -> list[str]:
     agents: list[str] = []
-    for step in _safe_list(state, "execution_plan"):
+    for idx, step in enumerate(_safe_list(state, "execution_plan")):
         if isinstance(step, dict):
             agents.append(str(step.get("agent", "")))
-        # Một bước không phải dict là dữ liệu hỏng (ghi dở, crash giữa
-        # chừng) — bỏ qua thay vì ném lỗi: finalize không được phép chết.
+        else:
+            # Một bước không phải dict là dữ liệu hỏng (ghi dở, crash giữa
+            # chừng). Nó vẫn CÓ MẶT trong kế hoạch, nên phải tính là một
+            # agent chưa hoàn thành — biến mất lặng lẽ khỏi danh sách sẽ
+            # khiến finalize hiểu nhầm kế hoạch đã xong (status="success")
+            # trong khi thực ra một bước của nó đã hỏng.
+            agents.append(f"<bước hỏng #{idx}>")
     return agents
 
 
@@ -77,7 +82,9 @@ def finalize_node(state: MultiAgentState) -> MultiAgentState:
     skipped = _skipped_agents(state)
     has_sql = bool(state.get("sql_result"))
 
-    reasons: list[str] = list(_safe_list(state, "degradation_reason"))
+    # Phần tử không phải str (state hỏng, ghi dở) sẽ làm " ".join() ném
+    # lỗi ở nhánh "partial" bên dưới — ép kiểu ngay tại nguồn.
+    reasons: list[str] = [str(r) for r in _safe_list(state, "degradation_reason")]
     if is_expired(_safe_number(state, "deadline_ts", 0.0)):
         reasons.append("Hết ngân sách thời gian trước khi kế hoạch chạy xong.")
     llm_calls_used = _safe_number(state, "llm_calls_used", 0)

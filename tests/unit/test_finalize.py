@@ -134,9 +134,9 @@ def test_finalize_never_raises_when_last_error_is_not_a_dict():
     assert finalize_node(s)["status"] in {"success", "partial", "failed"}
 
 
-def test_finalize_skips_a_malformed_plan_step_instead_of_crashing():
+def test_finalize_handles_a_malformed_plan_step_instead_of_crashing():
     """Một bước hỏng (không phải dict) trong execution_plan — ghi dở hoặc
-    dữ liệu bị hỏng — bị bỏ qua thay vì làm sập finalize."""
+    dữ liệu bị hỏng — không được làm sập finalize."""
     s = _state(
         completed_agents=["supervisor", "sql"],
         sql_result={"sql": "SELECT 1", "row_count": 3},
@@ -145,6 +145,48 @@ def test_finalize_skips_a_malformed_plan_step_instead_of_crashing():
     )
     out = finalize_node(s)
     assert out["status"] in {"success", "partial", "failed"}
+
+
+def test_malformed_plan_step_is_not_silently_dropped_from_classification():
+    """Một bước hỏng vẫn CÓ MẶT trong kế hoạch — nó không được biến mất
+    lặng lẽ khỏi phân loại. Nếu mọi agent thật đều xong nhưng một bước
+    hỏng chưa từng được "hoàn thành" (nó không phải agent thật, nên không
+    thể nằm trong completed_agents), kết quả phải là "partial", không
+    phải "success" giả."""
+    s = _state(
+        completed_agents=["supervisor", "sql", "viz"],
+        sql_result={"sql": "SELECT 1", "row_count": 3},
+        execution_plan=[
+            {"step": 1, "agent": "sql", "task": "t1", "depends_on": [],
+             "skill_type": "text-to-sql"},
+            {"step": 2, "agent": "viz", "task": "t2", "depends_on": ["sql"],
+             "skill_type": "visualization"},
+            "corrupted-step",
+        ],
+    )
+    out = finalize_node(s)
+    assert out["status"] == "partial"
+
+
+def test_finalize_never_raises_when_degradation_reason_has_non_string_elements():
+    """degradation_reason là list hợp lệ về kiểu container, nhưng phần tử
+    không phải str (ghi dở, dữ liệu hỏng) — nhánh "partial" nối chúng bằng
+    " ".join(reasons), việc đó ném lỗi nếu không ép kiểu trước."""
+    s = _state(
+        completed_agents=["supervisor", "sql"],
+        sql_result={"sql": "SELECT 1", "row_count": 3},
+        degradation_reason=[1, 2, 3],
+    )
+    out = finalize_node(s)
+    assert out["status"] in {"success", "partial", "failed"}
+
+
+def test_finalize_never_raises_when_action_trace_is_none():
+    """action_trace có mặt nhưng là None — append_trace() (graph/utils.py)
+    có cùng lỗ hổng present-but-None như các trường khác; finalize gọi
+    append_trace() vô điều kiện nên không được phép sập vì lỗ hổng đó."""
+    s = _state(action_trace=None)
+    assert finalize_node(s)["status"] in {"success", "partial", "failed"}
 
 
 def test_finalize_does_not_mutate_its_input():

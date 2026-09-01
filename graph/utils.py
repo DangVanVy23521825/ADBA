@@ -53,7 +53,7 @@ def append_trace(
         "status": status,
         "timestamp": time.time(),
     }
-    return state.get("action_trace", []) + [entry]
+    return (state.get("action_trace") or []) + [entry]
 
 
 def with_routing(state: MultiAgentState) -> MultiAgentState:

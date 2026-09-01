@@ -275,7 +275,7 @@ Ba điều đáng đọc kỹ:
 | `tests/integration/test_simple_queries.py` | 10 |
 | `tests/integration/test_tier2_executor.py` | 10 |
 | `tests/unit/test_annotate.py` | 38 |
-| `tests/unit/test_annotations.py` | 26 |
+| `tests/unit/test_annotations.py` | 32 |
 | `tests/unit/test_connection_profile.py` | 16 |
 | `tests/unit/test_describe_dataset.py` | 6 |
 | `tests/unit/test_egress_boundary.py` | 13 |
@@ -292,7 +292,7 @@ Ba điều đáng đọc kỹ:
 | `tests/unit/test_reflector.py` | 3 |
 | `tests/unit/test_render_schema.py` | 29 |
 | `tests/unit/test_retrieval.py` | 20 |
-| `tests/unit/test_review_state.py` | 18 |
+| `tests/unit/test_review_state.py` | 21 |
 | `tests/unit/test_schema_context.py` | 12 |
 | `tests/unit/test_schema_model.py` | 7 |
 | `tests/unit/test_sql_agent.py` | 11 |
@@ -302,7 +302,7 @@ Ba điều đáng đọc kỹ:
 | `tests/unit/test_tier1_recall.py` | 9 |
 | `tests/unit/test_tier2_execution.py` | 32 |
 | `tests/unit/test_viz_agent.py` | 11 |
-| **Tổng** | **554** |
+| **Tổng** | **563** |
 
 <!-- AUTO:end id=tests -->
 

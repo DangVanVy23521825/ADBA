@@ -5,6 +5,7 @@ Trang chỉ vẽ; mọi quyết định về trạng thái nằm ở đây.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -81,6 +82,25 @@ def filter_rows(
         1 for r in rows if r.reviewed_by != HUMAN and r.confidence == "high"
     )
     return visible, hidden_confident
+
+
+def widget_key(table: str, column: str | None) -> str:
+    """Khoá định danh duy nhất cho một mục chờ duyệt trên giao diện.
+
+    Là `json.dumps` của một mảng 2 phần tử, KHÔNG phải nối chuỗi bằng dấu
+    phân cách. Postgres cho phép gần như mọi ký tự trong định danh có nháy
+    kép, kể cả ':', nên cách cũ `f"{table}::{column}"` nhập nhằng thật:
+    bảng 'a' + cột 'b::c' và bảng 'a::b' + cột 'c' cùng ra "a::b::c".
+
+    Hai widget trùng khoá thì Streamlit cho chúng dùng chung một ô session
+    state — người duyệt gõ vào mục này lại thấy chữ hiện ra ở mục kia, và
+    bấm Lưu thì ghi đè lên chú giải của cột không liên quan.
+
+    JSON không nhập nhằng được vì nó escape ký tự phân cách nằm trong dữ
+    liệu, và nó phân biệt cột không có (`null`, tức mục chú giải BẢNG) với
+    cột tên rỗng (`""`).
+    """
+    return json.dumps([table, column], ensure_ascii=False)
 
 
 def apply_edit(

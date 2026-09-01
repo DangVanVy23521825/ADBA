@@ -1,9 +1,12 @@
+import pytest
+
 from perception.annotations import Annotation, SchemaAnnotations, merge_annotations
 from perception.review_state import (
     apply_edit,
     filter_rows,
     review_progress,
     review_rows,
+    widget_key,
 )
 from perception.schema_model import Column, Table
 
@@ -188,3 +191,39 @@ def test_entries_a_human_already_reviewed_are_not_counted_as_hidden():
     rows = review_rows(TABLES, reviewed)
     _visible, hidden = filter_rows(rows, only_pending=True)
     assert hidden == 0
+
+
+# --- Khoá widget phải phân biệt được mọi cặp (bảng, cột) ---
+# Postgres cho phép gần như mọi ký tự trong định danh có nháy kép, kể cả
+# ':'. Khoá cũ nối chuỗi bằng "::" nên nhập nhằng thật, không phải lý
+# thuyết. Hai widget trùng khoá thì Streamlit cho dùng chung một ô session
+# state: người duyệt gõ vào mục này, chữ hiện ra ở mục kia.
+
+
+@pytest.mark.parametrize(
+    "a, b",
+    [
+        # Đây là ca phá khoá cũ mà KHÔNG cần tên rỗng: cả hai từng ra "a::b::c".
+        (("a", "b::c"), ("a::b", "c")),
+        # Mục chú giải BẢNG của 'a::b' và cột '' của bảng 'a' — cùng ra "a::b::".
+        (("a::b", None), ("a", "b::")),
+        # Cột không có, khác hẳn cột tên rỗng.
+        (("orders", None), ("orders", "")),
+        # Ranh giới bảng/cột không được trượt.
+        (("a", "b"), ("a::b", None)),
+    ],
+)
+def test_widget_key_separates_pairs_that_the_old_scheme_collided(a, b):
+    assert widget_key(*a) != widget_key(*b)
+
+
+def test_widget_key_is_stable_for_the_same_pair():
+    """Streamlit tra session state theo khoá; khoá đổi giữa hai lần vẽ thì
+    ô nhập bị reset mất chữ người dùng đang gõ."""
+    assert widget_key("đơn_hàng", "số_tiền") == widget_key("đơn_hàng", "số_tiền")
+
+
+def test_widget_key_keeps_vietnamese_readable():
+    """`ensure_ascii=False` cố ý: khoá hiện trong DOM và trong lỗi Streamlit
+    'duplicate key', mà đọc được thì mới chẩn được."""
+    assert "đơn_hàng" in widget_key("đơn_hàng", None)

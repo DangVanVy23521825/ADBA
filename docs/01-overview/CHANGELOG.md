@@ -112,6 +112,7 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 **Sửa lỗi**
 
+- remove unreachable fixture in test_supervisor.py (task 6 review) — `3e982da` (2026-09-01, Đặng Văn Vỹ)
 - conditional edge thành hàm thuần; node giữ việc ghi state (spec 5.5) — `6abe0cb` (2026-09-01, Đặng Văn Vỹ)
 - fail closed, statement_timeout 30s→10s, trần 50k dòng — `05b24f0` (2026-09-01, Đặng Văn Vỹ)
 - spawn + env rỗng — ranh giới là tiến trình, không phải namespace — `55aba8e` (2026-09-01, Đặng Văn Vỹ)
@@ -237,10 +238,10 @@ Cập nhật `PRIMARY_MODEL` trong `.env`, `ollama pull <model>`, rồi chạy l
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `2cf725e` — feat(budget): trần cứng thay đếm retry — reflector 8→1, sql retry 3→2, trần 12 call |
+| Commit nguồn gần nhất | `3e982da` — fix(test): remove unreachable fixture in test_supervisor.py (task 6 review) |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 106 |
+| Số commit nguồn | 107 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

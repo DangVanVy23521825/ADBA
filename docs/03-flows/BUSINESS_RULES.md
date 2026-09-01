@@ -214,10 +214,10 @@ vì thành phần sửa lỗi.
 | `tests/unit/test_sql_agent.py` | 16 |
 | `tests/unit/test_sql_tables.py` | 21 |
 | `tests/unit/test_sql_tool_guard.py` | 22 |
-| `tests/unit/test_supervisor.py` | 16 |
+| `tests/unit/test_supervisor.py` | 15 |
 | `tests/unit/test_tier1_recall.py` | 9 |
 | `tests/unit/test_viz_agent.py` | 11 |
-| **Tổng** | **573** |
+| **Tổng** | **572** |
 
 <!-- AUTO:end id=tests -->
 
@@ -234,10 +234,10 @@ PYTHONPATH=. pytest tests/unit/ -v       # không cần DB và Ollama
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `2cf725e` — feat(budget): trần cứng thay đếm retry — reflector 8→1, sql retry 3→2, trần 12 call |
+| Commit nguồn gần nhất | `3e982da` — fix(test): remove unreachable fixture in test_supervisor.py (task 6 review) |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 106 |
+| Số commit nguồn | 107 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

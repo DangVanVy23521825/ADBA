@@ -380,10 +380,10 @@ giữa các lần chạy. Không dùng làm bản sao lưu production.
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `3c96a2c` — feat(budget): ModelClient từ chối khởi động lời gọi không kịp deadline |
+| Commit nguồn gần nhất | `fc69ccb` — feat(graph): node finalize — thang success/partial/failed có lý do |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 108 |
+| Số commit nguồn | 109 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

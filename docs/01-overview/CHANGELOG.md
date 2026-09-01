@@ -78,6 +78,7 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 **Tính năng mới**
 
+- node finalize — thang success/partial/failed có lý do — `fc69ccb` (2026-09-01, Đặng Văn Vỹ)
 - ModelClient từ chối khởi động lời gọi không kịp deadline — `3c96a2c` (2026-09-01, Đặng Văn Vỹ)
 - trần cứng thay đếm retry — reflector 8→1, sql retry 3→2, trần 12 call — `2cf725e` (2026-09-01, Đặng Văn Vỹ)
 - deadline_ts mang trong state, clock tiêm được — `45b7b5d` (2026-09-01, Đặng Văn Vỹ)
@@ -239,10 +240,10 @@ Cập nhật `PRIMARY_MODEL` trong `.env`, `ollama pull <model>`, rồi chạy l
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `3c96a2c` — feat(budget): ModelClient từ chối khởi động lời gọi không kịp deadline |
+| Commit nguồn gần nhất | `fc69ccb` — feat(graph): node finalize — thang success/partial/failed có lý do |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 108 |
+| Số commit nguồn | 109 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

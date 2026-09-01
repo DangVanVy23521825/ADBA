@@ -194,6 +194,7 @@ vì thành phần sửa lỗi.
 | `tests/unit/test_describe_dataset.py` | 6 |
 | `tests/unit/test_egress_boundary.py` | 13 |
 | `tests/unit/test_fetch_dataset.py` | 25 |
+| `tests/unit/test_finalize.py` | 11 |
 | `tests/unit/test_insight_agent.py` | 7 |
 | `tests/unit/test_introspect.py` | 16 |
 | `tests/unit/test_load_sqlite_to_postgres.py` | 46 |
@@ -218,7 +219,7 @@ vì thành phần sửa lỗi.
 | `tests/unit/test_supervisor.py` | 15 |
 | `tests/unit/test_tier1_recall.py` | 9 |
 | `tests/unit/test_viz_agent.py` | 11 |
-| **Tổng** | **579** |
+| **Tổng** | **590** |
 
 <!-- AUTO:end id=tests -->
 
@@ -235,10 +236,10 @@ PYTHONPATH=. pytest tests/unit/ -v       # không cần DB và Ollama
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `3c96a2c` — feat(budget): ModelClient từ chối khởi động lời gọi không kịp deadline |
+| Commit nguồn gần nhất | `fc69ccb` — feat(graph): node finalize — thang success/partial/failed có lý do |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 108 |
+| Số commit nguồn | 109 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

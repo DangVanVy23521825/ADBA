@@ -34,6 +34,7 @@ flowchart LR
 
 | Agent | Node LangGraph | Prompt | Retry nội bộ | Temperature | Max tokens | Timeout (s) |
 |---|---|---|---|---|---|---|
+| `finalize` | `finalize_node()` | inline (trong file agent) | — | — | — | — |
 | `insight` | `insight_agent_node()` | `prompts/insight_generation.txt` | — | 0.2 | 512 | 200 |
 | `python` | `python_agent_node()` | `prompts/data_analysis.txt` | 2 | 0.1 | 1024 | 200 |
 | `reflector` | `reflector_agent_node()` | inline (trong file agent) | — | 0.1 | 512 | 120 |
@@ -281,6 +282,7 @@ Ba điều đáng đọc kỹ:
 | `tests/unit/test_describe_dataset.py` | 6 |
 | `tests/unit/test_egress_boundary.py` | 13 |
 | `tests/unit/test_fetch_dataset.py` | 25 |
+| `tests/unit/test_finalize.py` | 11 |
 | `tests/unit/test_insight_agent.py` | 7 |
 | `tests/unit/test_introspect.py` | 16 |
 | `tests/unit/test_load_sqlite_to_postgres.py` | 46 |
@@ -305,7 +307,7 @@ Ba điều đáng đọc kỹ:
 | `tests/unit/test_supervisor.py` | 15 |
 | `tests/unit/test_tier1_recall.py` | 9 |
 | `tests/unit/test_viz_agent.py` | 11 |
-| **Tổng** | **579** |
+| **Tổng** | **590** |
 
 <!-- AUTO:end id=tests -->
 
@@ -330,10 +332,10 @@ Ba điều đáng đọc kỹ:
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `3c96a2c` — feat(budget): ModelClient từ chối khởi động lời gọi không kịp deadline |
+| Commit nguồn gần nhất | `fc69ccb` — feat(graph): node finalize — thang success/partial/failed có lý do |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 108 |
+| Số commit nguồn | 109 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

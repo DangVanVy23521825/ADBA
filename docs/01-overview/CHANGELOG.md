@@ -110,6 +110,7 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 **Sửa lỗi**
 
+- dọn ba lỗ đã park từ review Plan A — `6af3233` (2026-09-01, Đặng Văn Vỹ)
 - tên cột không mang nghĩa thì luôn low, bất kể model chấm gì — `4601a03` (2026-08-27, Đặng Văn Vỹ)
 - chia lô cột cho bảng rộng, annotate có ngân sách riêng — `da433e3` (2026-08-26, Đặng Văn Vỹ)
 - resolve four BIRD loader bugs found against real Postgres — `749bdd7` (2026-08-23, Đặng Văn Vỹ)
@@ -232,7 +233,7 @@ Cập nhật `PRIMARY_MODEL` trong `.env`, `ollama pull <model>`, rồi chạy l
 | Commit nguồn gần nhất | `d7783b6` — feat(eval): tầng 2 — execution accuracy |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 98 |
+| Số commit nguồn | 99 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

@@ -208,7 +208,7 @@ Dự án coi là thành công khi đồng thời:
 | `conftest.py` | 1 | 1 | 2 | — |
 | `data` | 16 | 1 | 84.504 | DDL 3 domain, seed, và dataset huấn luyện/đánh giá (JSONL) |
 | `docker-compose.yml` | 1 | 0 | 21 | — |
-| `docs` | 18 | 0 | — | Bộ tài liệu dự án (chính file này) |
+| `docs` | 19 | 0 | — | Bộ tài liệu dự án (chính file này) |
 | `eval` | 12 | 8 | 2.719 | Runner đo baseline / PEFT và so sánh hai lần chạy |
 | `graph` | 16 | 16 | 2.084 | LangGraph: state, các node agent, và tool thực thi |
 | `model` | 3 | 3 | 374 | ModelClient (Ollama local-first, fallback OpenAI) + tham số theo agent |
@@ -231,10 +231,10 @@ Dự án coi là thành công khi đồng thời:
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `6af3233` — fix: dọn ba lỗ đã park từ review Plan A |
+| Commit nguồn gần nhất | `8809e94` — docs(plan): cập nhật Plan B theo main hậu-merge Plan A |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 98 |
+| Số commit nguồn | 100 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

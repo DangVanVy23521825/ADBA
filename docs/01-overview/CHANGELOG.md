@@ -149,7 +149,9 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 **Tài liệu**
 
+- cập nhật Plan B theo main hậu-merge Plan A — `8809e94` (2026-09-01, Đặng Văn Vỹ)
 - sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO — `0e1f02d` (2026-08-19, Đặng Văn Vỹ)
+- Plan B — cứng hóa ngân sách thời gian và cô lập sandbox, 12 task — `70dba92` (2026-08-17, Đặng Văn Vỹ)
 - Plan A — đường onboarding, 12 task — `4fd4557` (2026-08-16, Đặng Văn Vỹ)
 - lộ trình tới bản đóng gói giao khách — `f8fa0cb` (2026-08-16, Đặng Văn Vỹ)
 - mục 6.2.1 — điều kiện pháp lý khi dùng ba benchmark — `49da143` (2026-08-16, Đặng Văn Vỹ)
@@ -229,10 +231,10 @@ Cập nhật `PRIMARY_MODEL` trong `.env`, `ollama pull <model>`, rồi chạy l
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `6af3233` — fix: dọn ba lỗ đã park từ review Plan A |
+| Commit nguồn gần nhất | `8809e94` — docs(plan): cập nhật Plan B theo main hậu-merge Plan A |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 98 |
+| Số commit nguồn | 100 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

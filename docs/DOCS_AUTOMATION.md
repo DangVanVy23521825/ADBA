@@ -176,10 +176,10 @@ Marker có `id` không có generator sẽ được **giữ nguyên** kèm cảnh
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `6af3233` — fix: dọn ba lỗ đã park từ review Plan A |
+| Commit nguồn gần nhất | `8809e94` — docs(plan): cập nhật Plan B theo main hậu-merge Plan A |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 98 |
+| Số commit nguồn | 100 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

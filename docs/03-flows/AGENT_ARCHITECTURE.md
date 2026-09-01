@@ -77,7 +77,7 @@ Cả năm file prompt theo cùng một khung, và thứ tự các mục là có 
 | `prompts/data_analysis.txt` | 108 | 3.3 KB | `{columns}`, `{sample}`, `{task}` |
 | `prompts/insight_generation.txt` | 143 | 5.4 KB | `{anomalies}`, `{chart_description}`, `{query}`, `{sql}`, `{stats}` |
 | `prompts/supervisor_routing.txt` | 150 | 5.2 KB | `{query}`, `{schema}` |
-| `prompts/text_to_sql.txt` | 31 | 1.1 KB | `{few_shots}`, `{schema}`, `{task}` |
+| `prompts/text_to_sql.txt` | 35 | 1.4 KB | `{few_shots}`, `{schema}`, `{task}` |
 | `prompts/viz_generation.txt` | 82 | 2.7 KB | `{columns}`, `{sample}`, `{task}` |
 
 <!-- AUTO:end id=prompts -->
@@ -298,11 +298,12 @@ Ba điều đáng đọc kỹ:
 | `tests/unit/test_sql_agent.py` | 11 |
 | `tests/unit/test_sql_tables.py` | 21 |
 | `tests/unit/test_sql_tool_guard.py` | 19 |
+| `tests/unit/test_sqlite_dialect.py` | 18 |
 | `tests/unit/test_supervisor.py` | 16 |
 | `tests/unit/test_tier1_recall.py` | 9 |
 | `tests/unit/test_tier2_execution.py` | 32 |
 | `tests/unit/test_viz_agent.py` | 11 |
-| **Tổng** | **563** |
+| **Tổng** | **581** |
 
 <!-- AUTO:end id=tests -->
 
@@ -327,10 +328,10 @@ Ba điều đáng đọc kỹ:
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `d7783b6` — feat(eval): tầng 2 — execution accuracy |
+| Commit nguồn gần nhất | `eb65083` — feat(eval): dịch SQL vàng SQLite sang Postgres, mở BIRD cho tầng 2 |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 99 |
+| Số commit nguồn | 100 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

@@ -78,6 +78,7 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 **Tính năng mới**
 
+- dịch SQL vàng SQLite sang Postgres, mở BIRD cho tầng 2 — `eb65083` (2026-09-01, Đặng Văn Vỹ)
 - tầng 2 — execution accuracy — `d7783b6` (2026-09-01, Đặng Văn Vỹ)
 - Chinook làm schema demo phát hành lại được — `ff31b35` (2026-08-23, Đặng Văn Vỹ)
 - --threshold-tokens chốt chế độ schema tại build — `42ece63` (2026-08-23, Đặng Văn Vỹ)
@@ -230,10 +231,10 @@ Cập nhật `PRIMARY_MODEL` trong `.env`, `ollama pull <model>`, rồi chạy l
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `d7783b6` — feat(eval): tầng 2 — execution accuracy |
+| Commit nguồn gần nhất | `eb65083` — feat(eval): dịch SQL vàng SQLite sang Postgres, mở BIRD cho tầng 2 |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 99 |
+| Số commit nguồn | 100 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

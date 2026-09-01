@@ -202,6 +202,7 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Commit | Ngày | Tác giả | Nội dung |
 |---|---|---|---|
+| `eb65083` | 2026-09-01 | Đặng Văn Vỹ | feat(eval): dịch SQL vàng SQLite sang Postgres, mở BIRD cho tầng 2 |
 | `d7783b6` | 2026-09-01 | Đặng Văn Vỹ | feat(eval): tầng 2 — execution accuracy |
 | `6af3233` | 2026-09-01 | Đặng Văn Vỹ | fix: dọn ba lỗ đã park từ review Plan A |
 | `03ab786` | 2026-08-27 | Đặng Văn Vỹ | test(onboard): fixture mật khẩu không còn giống bí mật thật |
@@ -216,7 +217,6 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 | `7cd8480` | 2026-08-22 | Đặng Văn Vỹ | fix(eval): khoá ngoại lùi về NOT VALID khi dữ liệu nguồn vi phạm |
 | `7cfa6ee` | 2026-08-22 | Đặng Văn Vỹ | chore(eval): ghim sha256 của BIRD dev.zip |
 | `3116622` | 2026-08-22 | Đặng Văn Vỹ | feat(eval): bridge BIRD SQLite databases into Postgres for onboarding evals |
-| `0e1f02d` | 2026-08-19 | Đặng Văn Vỹ | docs: sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO |
 
 <!-- AUTO:end id=commit-history -->
 
@@ -224,10 +224,10 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `d7783b6` — feat(eval): tầng 2 — execution accuracy |
+| Commit nguồn gần nhất | `eb65083` — feat(eval): dịch SQL vàng SQLite sang Postgres, mở BIRD cho tầng 2 |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 99 |
+| Số commit nguồn | 100 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

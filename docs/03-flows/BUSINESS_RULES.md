@@ -211,11 +211,12 @@ vì thành phần sửa lỗi.
 | `tests/unit/test_sql_agent.py` | 11 |
 | `tests/unit/test_sql_tables.py` | 21 |
 | `tests/unit/test_sql_tool_guard.py` | 19 |
+| `tests/unit/test_sqlite_dialect.py` | 18 |
 | `tests/unit/test_supervisor.py` | 16 |
 | `tests/unit/test_tier1_recall.py` | 9 |
 | `tests/unit/test_tier2_execution.py` | 32 |
 | `tests/unit/test_viz_agent.py` | 11 |
-| **Tổng** | **563** |
+| **Tổng** | **581** |
 
 <!-- AUTO:end id=tests -->
 
@@ -232,10 +233,10 @@ PYTHONPATH=. pytest tests/unit/ -v       # không cần DB và Ollama
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `d7783b6` — feat(eval): tầng 2 — execution accuracy |
+| Commit nguồn gần nhất | `eb65083` — feat(eval): dịch SQL vàng SQLite sang Postgres, mở BIRD cho tầng 2 |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 99 |
+| Số commit nguồn | 100 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

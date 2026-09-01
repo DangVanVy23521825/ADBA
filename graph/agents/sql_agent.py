@@ -31,6 +31,15 @@ MAX_RETRIES = 3
 _SQL_START = re.compile(r"\b(?:SELECT|WITH)\b", re.IGNORECASE)
 # Hình dạng bắt buộc của một mệnh đề WITH thật: `WITH [RECURSIVE] <tên>
 # [(cột,...)] AS (`. Văn xuôi "with a CTE:" không khớp.
+# Từ khoá có thể mở đầu phần TIẾP THEO của một truy vấn sau dòng trống.
+# Thấy một trong số này thì dòng trống chỉ là định dạng, không phải ranh
+# giới giữa SQL và lời giải thích.
+_SQL_CONTINUES = re.compile(
+    r"\b(?:SELECT|FROM|WHERE|GROUP|ORDER|HAVING|LIMIT|OFFSET|FETCH|JOIN|"
+    r"LEFT|RIGHT|INNER|OUTER|FULL|CROSS|UNION|INTERSECT|EXCEPT|AND|OR|ON|"
+    r"USING|WITH|WINDOW|QUALIFY)\b",
+    re.IGNORECASE,
+)
 _CTE_HEAD = re.compile(
     r'WITH\s+(?:RECURSIVE\s+)?[\w"]+\s*(?:\([^)]*\))?\s*AS\s*\(',
     re.IGNORECASE,
@@ -78,8 +87,35 @@ def _extract_sql(text: str) -> str:
             continue
         parsed = sqlparse.parse(candidate)
         if parsed and parsed[0].get_type() == "SELECT":
-            return candidate
+            return _cut_trailing_prose(candidate)
     return body
+
+
+def _cut_trailing_prose(sql: str) -> str:
+    """Bỏ phần giải thích model viết SAU câu SQL.
+
+    Sửa chỗ bắt đầu thôi chưa đủ: model hay viết xong SQL rồi giải thích
+    tiếp, và lấy tới hết chuỗi thì nuốt cả đoạn văn. Đo trên 50 câu BIRD,
+    8 ca lỗi cú pháp đều là dạng này — thông điệp đổi từ `near "highest"`
+    (văn xuôi ĐẦU) sang `near "This"` (văn xuôi ĐUÔI) sau khi sửa nửa
+    trước.
+
+    Hai đường cắt, khớp đúng hai hình dạng đã quan sát được:
+
+    1. Có dấu `;` — 7/8 ca. `sqlparse.split` cắt sạch ở câu lệnh đầu.
+    2. Không có `;` — 1/8 ca. Cắt ở DÒNG TRỐNG, nhưng chỉ khi phần sau
+       không mở đầu bằng từ khoá SQL. Không có điều kiện đó thì một truy
+       vấn có dòng trống giữa các mệnh đề sẽ bị cắt cụt, và đó là hỏng
+       nặng hơn hẳn thứ đang sửa.
+    """
+    parts = sqlparse.split(sql)
+    if len(parts) > 1:
+        return parts[0].strip()
+
+    chunks = re.split(r"\n\s*\n", sql, maxsplit=1)
+    if len(chunks) == 2 and not _SQL_CONTINUES.match(chunks[1].lstrip()):
+        return chunks[0].strip()
+    return sql.strip()
 
 
 def build_system_prompt(schema_context: SchemaContext) -> str:

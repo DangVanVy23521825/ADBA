@@ -106,6 +106,30 @@ class TestExtractSql:
         )
         assert _extract_sql(raw) == "SELECT 1 FROM t"
 
+    def test_prose_after_a_semicolon_is_dropped(self):
+        """7 trong 8 ca lỗi cú pháp trên BIRD có hình dạng này: model viết
+        xong SQL, chấm phẩy, rồi giải thích tiếp."""
+        raw = (
+            "SELECT a FROM t ORDER BY b DESC LIMIT 1;\n\n"
+            "This query performs the following steps:\n"
+            "1. Joins the tables on the key."
+        )
+        assert _extract_sql(raw) == "SELECT a FROM t ORDER BY b DESC LIMIT 1;"
+
+    def test_prose_after_a_blank_line_is_dropped_when_there_is_no_semicolon(self):
+        """Ca thứ 8: không có dấu chấm phẩy nào để cắt."""
+        raw = (
+            "SELECT a\nFROM t\nWHERE x = (SELECT MAX(y) FROM u)\n\n"
+            "This query joins the tables based on their respective keys."
+        )
+        assert _extract_sql(raw) == "SELECT a\nFROM t\nWHERE x = (SELECT MAX(y) FROM u)"
+
+    def test_a_blank_line_inside_the_query_does_not_truncate_it(self):
+        """Điều kiện bảo vệ: cắt vô điều kiện ở dòng trống sẽ làm cụt một
+        truy vấn được định dạng thoáng — hỏng nặng hơn hẳn thứ đang sửa."""
+        raw = "SELECT a\nFROM t\n\nORDER BY a DESC"
+        assert _extract_sql(raw) == raw
+
     def test_the_word_with_inside_an_identifier_is_not_a_start(self):
         """`\b` ở cả hai đầu: thiếu nó thì `WITH` khớp trong `WITHIN`."""
         raw = "SELECT x FROM t GROUP BY y WITHIN GROUP (ORDER BY z)"

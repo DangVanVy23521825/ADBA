@@ -253,13 +253,13 @@ riêng qua MCP, và egress bị chặn ở tầng mạng. Chi tiết:
 | `graph` | 16 | 16 | 2.084 | LangGraph: state, các node agent, và tool thực thi |
 | `model` | 3 | 3 | 374 | ModelClient (Ollama local-first, fallback OpenAI) + tham số theo agent |
 | `onboard.py` | 1 | 1 | 1.012 | — |
-| `pages` | 1 | 1 | 85 | — |
-| `perception` | 16 | 12 | 5.296 | Perception layer — introspect PostgreSQL sinh `info_box` JSON |
+| `pages` | 1 | 1 | 86 | — |
+| `perception` | 16 | 12 | 5.342 | Perception layer — introspect PostgreSQL sinh `info_box` JSON |
 | `prompts` | 5 | 0 | 510 | System prompt của từng skill, dạng file text tách khỏi code |
 | `requirements.txt` | 1 | 0 | 18 | — |
 | `schemas` | 3 | 3 | 735 | Pydantic contract: ExecutionPlan (Supervisor) và InsightOutput (Insight) |
 | `scripts` | 7 | 3 | 1.644 | Tiện ích vận hành: áp schema, kiểm tra kết nối, sinh tài liệu |
-| `tests` | 37 | 34 | 8.109 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
+| `tests` | 37 | 34 | 8.218 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
 | `training` | 13 | 5 | 3.795 | Sinh dữ liệu, LoRA/QLoRA notebook, checkpoint và kết quả |
 | `.cursorrules` | 1 | 0 | 0 | — |
 | `.github` | 1 | 0 | 29 | CI/CD — unit test, build & push image lên GHCR |
@@ -324,10 +324,10 @@ kèm giá trị thật; `env.example` là bản mẫu.
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `03ab786` — test(onboard): fixture mật khẩu không còn giống bí mật thật |
+| Commit nguồn gần nhất | `6af3233` — fix: dọn ba lỗ đã park từ review Plan A |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-08-27 |
-| Số commit nguồn | 97 |
+| Ngày commit | 2026-09-01 |
+| Số commit nguồn | 98 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

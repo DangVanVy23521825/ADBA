@@ -187,7 +187,7 @@ vì thành phần sửa lỗi.
 | `tests/integration/test_schema_context_wiring.py` | 6 |
 | `tests/integration/test_simple_queries.py` | 10 |
 | `tests/unit/test_annotate.py` | 38 |
-| `tests/unit/test_annotations.py` | 26 |
+| `tests/unit/test_annotations.py` | 32 |
 | `tests/unit/test_connection_profile.py` | 16 |
 | `tests/unit/test_describe_dataset.py` | 6 |
 | `tests/unit/test_egress_boundary.py` | 13 |
@@ -204,7 +204,7 @@ vì thành phần sửa lỗi.
 | `tests/unit/test_reflector.py` | 3 |
 | `tests/unit/test_render_schema.py` | 29 |
 | `tests/unit/test_retrieval.py` | 20 |
-| `tests/unit/test_review_state.py` | 18 |
+| `tests/unit/test_review_state.py` | 21 |
 | `tests/unit/test_schema_context.py` | 12 |
 | `tests/unit/test_schema_model.py` | 7 |
 | `tests/unit/test_sql_agent.py` | 11 |
@@ -213,7 +213,7 @@ vì thành phần sửa lỗi.
 | `tests/unit/test_supervisor.py` | 16 |
 | `tests/unit/test_tier1_recall.py` | 9 |
 | `tests/unit/test_viz_agent.py` | 11 |
-| **Tổng** | **512** |
+| **Tổng** | **521** |
 
 <!-- AUTO:end id=tests -->
 
@@ -230,10 +230,10 @@ PYTHONPATH=. pytest tests/unit/ -v       # không cần DB và Ollama
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `03ab786` — test(onboard): fixture mật khẩu không còn giống bí mật thật |
+| Commit nguồn gần nhất | `6af3233` — fix: dọn ba lỗ đã park từ review Plan A |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-08-27 |
-| Số commit nguồn | 97 |
+| Ngày commit | 2026-09-01 |
+| Số commit nguồn | 98 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

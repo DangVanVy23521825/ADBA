@@ -11,7 +11,7 @@ from pathlib import Path
 
 from graph.state import MultiAgentState
 from graph.tools.python_tool import run_pandas_safe
-from graph.utils import append_trace, df_from_state, df_to_state
+from graph.utils import append_trace, df_from_state, df_to_state, with_routing
 from model.model_client import ModelClient
 
 logger = logging.getLogger(__name__)
@@ -130,7 +130,7 @@ def python_agent_node(state: MultiAgentState) -> MultiAgentState:
         logger.info("Python Agent: %d rows output, %d new columns",
                     len(df_out), len(stats["new_columns"]))
 
-        return {
+        return with_routing({
             **state,
             "current_agent": "python",
             "completed_agents": state.get("completed_agents", []) + ["python"],
@@ -148,7 +148,7 @@ def python_agent_node(state: MultiAgentState) -> MultiAgentState:
             },
             "action_trace": trace,
             "status": "running",
-        }
+        })
 
     # ── Exhausted retries ─────────────────────────────────────
     error_summary = f"Python Agent failed after {MAX_RETRIES} attempts. Last error: {error_context}"

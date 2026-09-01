@@ -54,3 +54,26 @@ def append_trace(
         "timestamp": time.time(),
     }
     return state.get("action_trace", []) + [entry]
+
+
+def with_routing(state: MultiAgentState) -> MultiAgentState:
+    """Gắn ảnh chụp định tuyến vào state mà node sắp trả về.
+
+    Đây là chỗ ghi HỢP LỆ cho dependency_graph/ready_agents: node trả state
+    qua reducer của LangGraph, conditional edge thì không (spec 5.5).
+    Import cục bộ để tránh vòng import graph.utils ↔ graph.agents.supervisor.
+    """
+    from graph.agents.supervisor import routing_snapshot
+
+    snapshot = routing_snapshot(state)
+    return {
+        **state,
+        "dependency_graph": snapshot["dependency_graph"],
+        "ready_agents": snapshot["ready_agents"],
+        "shared_metadata": {
+            **state.get("shared_metadata", {}),
+            "dependency_graph": snapshot["dependency_graph"],
+            "ready_agents": snapshot["ready_agents"],
+            "parallel_ready": len(snapshot["ready_agents"]) > 1,
+        },
+    }

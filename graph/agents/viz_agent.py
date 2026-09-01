@@ -10,7 +10,7 @@ from pathlib import Path
 
 from graph.state import MultiAgentState
 from graph.tools.python_tool import run_chart_safe
-from graph.utils import append_trace, df_from_state
+from graph.utils import append_trace, df_from_state, with_routing
 from model.model_client import ModelClient
 
 logger = logging.getLogger(__name__)
@@ -121,7 +121,7 @@ def viz_agent_node(state: MultiAgentState) -> MultiAgentState:
                              f"OK — {chart_type} chart, "
                              f"{len(chart_b64)//1024} KB base64", "ok")
 
-        return {
+        return with_routing({
             **state,
             "current_agent": "viz",
             "completed_agents": state.get("completed_agents", []) + ["viz"],
@@ -148,7 +148,7 @@ def viz_agent_node(state: MultiAgentState) -> MultiAgentState:
             },
             "action_trace": trace,
             "status": "running",
-        }
+        })
 
     # ── Exhausted retries ──────────────────────────
     error_summary = f"Viz Agent failed after {MAX_RETRIES} attempts: {error_context}"

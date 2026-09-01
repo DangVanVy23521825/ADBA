@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from collections import defaultdict, deque
-from typing import Any, Literal
+from typing import Any
 
 from graph.state import MultiAgentState
 from graph.utils import append_trace
@@ -209,50 +209,25 @@ def supervisor_node(state: MultiAgentState) -> MultiAgentState:
 
 # ── Routing ───────────────────────────────────────────────────────────────────
 
-def route_next_agent(state: MultiAgentState) -> Literal[
-    "sql", "python", "viz", "insight", "reflector", "__end__"
-]:
-    """Conditional edge — decide which agent runs next.
+def _blocked_agents(state: MultiAgentState) -> tuple[set[str], str | None]:
+    """Agent nào đang kẹt lỗi, và có cần gọi reflector ngay không.
 
-    Rules:
-      1. status == 'failed' or 'success' → END.
-      2. Resolve the full dependency graph and expose all currently ready agents
-         in state/shared_metadata for future parallel dispatch.
-      3. Sequentially dispatch the first ready agent by step order.
-      4. Specialist stuck failing: agent_outputs[name].status == 'error' OR
-         agent_error_counts[name] >= 3. Then decide whether to call reflector
-         again vs skip the step — see shared_metadata.reflect_error_snapshot and
-         reflect_passes_per_agent (maintained by reflector_agent_node). A new
-         failure tick (incrementing agent_error_counts) clears staleness relative
-         to the previous snapshot so reflector runs again until the budget is
-         exhausted.
-      5. No runnable agent → END.
+    Trả `(blocked, "reflector" | None)`. Hàm thuần — không ghi gì.
     """
-    if state["status"] in {"failed", "success"}:
-        from langgraph.graph import END
-        return END
-
     plan = state.get("execution_plan", [])
     completed = set(state.get("completed_agents", []))
     error_counts = state.get("agent_error_counts", {})
-    blocked_agents: set[str] = set()
+    agent_outputs = state.get("agent_outputs", {})
+    meta = state.get("shared_metadata", {})
+    passes_map: dict[str, int] = dict(meta.get("reflect_passes_per_agent", {}))
+    snapshot: dict[str, int] = dict(meta.get("reflect_error_snapshot", {}))
 
-    try:
-        dependency_graph = validate_dependency_graph(plan)
-    except Exception as exc:
-        logger.error("Invalid dependency graph: %s", exc)
-        from langgraph.graph import END
-        return END
-
+    blocked: set[str] = set()
     for step in plan:
         agent: str = step.get("agent", "")
         if agent in completed:
             continue
 
-        agent_outputs = state.get("agent_outputs", {})
-        meta = state.get("shared_metadata", {})
-        passes_map: dict[str, int] = dict(meta.get("reflect_passes_per_agent", {}))
-        snapshot: dict[str, int] = dict(meta.get("reflect_error_snapshot", {}))
         seen_at_reflect = snapshot.get(agent, -1)
         curr = error_counts.get(agent, 0)
         passes = passes_map.get(agent, 0)
@@ -265,7 +240,7 @@ def route_next_agent(state: MultiAgentState) -> Literal[
             needs_reflector = ("reflector" not in agent_outputs) or (not stale)
 
             if needs_reflector and passes < MAX_REFLECTOR_PASSES_PER_AGENT:
-                return "reflector"
+                return blocked, "reflector"
 
             if needs_reflector:
                 logger.warning(
@@ -277,25 +252,68 @@ def route_next_agent(state: MultiAgentState) -> Literal[
                     "Agent '%s' still failing with no new error_count since last reflector — skipping",
                     agent,
                 )
-            blocked_agents.add(agent)
-            continue
+            blocked.add(agent)
 
-    ready_agents = resolve_ready_agents(plan, list(completed), blocked_agents)
-    state["dependency_graph"] = dependency_graph
-    state["ready_agents"] = ready_agents
-    state["shared_metadata"] = {
-        **state.get("shared_metadata", {}),
+    return blocked, None
+
+
+def routing_snapshot(state: MultiAgentState) -> dict[str, Any]:
+    """Tính dependency_graph / ready_agents / blocked_agents — HÀM THUẦN.
+
+    Node gọi hàm này rồi ghi kết quả vào state nó TRẢ VỀ; conditional edge
+    chỉ đọc. Xem docstring của route_next_agent về lý do phân vai này.
+    """
+    plan = state.get("execution_plan", [])
+    completed = list(state.get("completed_agents", []))
+    try:
+        dependency_graph = validate_dependency_graph(plan)
+    except Exception as exc:
+        logger.error("Invalid dependency graph: %s", exc)
+        return {"dependency_graph": {}, "ready_agents": [], "blocked_agents": []}
+
+    blocked, _ = _blocked_agents(state)
+    return {
         "dependency_graph": dependency_graph,
-        "ready_agents": ready_agents,
-        "parallel_ready": len(ready_agents) > 1,
+        "ready_agents": resolve_ready_agents(plan, completed, blocked),
+        "blocked_agents": sorted(blocked),
     }
 
-    for agent in ready_agents:
-        if agent in SPECIALIST_AGENTS:
-            return agent  # type: ignore[return-value]
 
-    from langgraph.graph import END
-    return END
+def route_next_agent(state: MultiAgentState) -> str:
+    """Conditional edge — quyết định node nào chạy tiếp. KHÔNG ghi vào state.
+
+    Bản trước gán state["dependency_graph"], state["ready_agents"] và
+    state["shared_metadata"] ngay tại đây. LangGraph coi conditional edge
+    là hàm thuần trả về tên route: những gán đó không đi qua reducer nên
+    không có gì bảo đảm chúng persist — một bug im lặng, vì đọc code thì
+    thấy như đã cập nhật (spec 5.5). Việc ghi giờ thuộc về node, qua
+    graph.utils.with_routing.
+
+    Rules:
+      1. status == 'failed' hoặc 'success' → finalize.
+      2. Agent kẹt lỗi → reflector, tới khi hết ngân sách reflector.
+      3. Agent sẵn sàng đầu tiên theo thứ tự step.
+      4. Không còn gì chạy được → finalize.
+    """
+    if state["status"] in {"failed", "success"}:
+        return "finalize"
+
+    plan = state.get("execution_plan", [])
+    try:
+        validate_dependency_graph(plan)
+    except Exception as exc:
+        logger.error("Invalid dependency graph: %s", exc)
+        return "finalize"
+
+    blocked, reflector = _blocked_agents(state)
+    if reflector is not None:
+        return reflector
+
+    for agent in resolve_ready_agents(plan, list(state.get("completed_agents", [])), blocked):
+        if agent in SPECIALIST_AGENTS:
+            return agent
+
+    return "finalize"
 
 
 def route_reflector_return(state: MultiAgentState) -> str:

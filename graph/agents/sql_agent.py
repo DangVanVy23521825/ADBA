@@ -10,7 +10,7 @@ from pathlib import Path
 
 from graph.state import MultiAgentState
 from graph.tools.sql_tool import TableNotPermittedError, execute_sql, explain_query_plan
-from graph.utils import append_trace, df_to_state
+from graph.utils import append_trace, df_to_state, with_routing
 from model.model_client import ModelClient
 from perception.schema_context import SchemaContext
 
@@ -184,7 +184,7 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
                              f"OK — {len(df)} rows{truncated_note}, cost ~{cost}", "ok")
         logger.info("SQL Agent: %d rows returned", len(df))
 
-        return {
+        return with_routing({
             **state,
             "current_agent": "sql",
             "completed_agents": state.get("completed_agents", []) + ["sql"],
@@ -202,7 +202,7 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
             },
             "action_trace": trace,
             "status": "running",
-        }
+        })
 
     # ── Exhausted retries ─────────────────────────────────────
     error_summary = f"SQL Agent failed after {MAX_RETRIES} attempts. Last error: {error_context}"

@@ -19,3 +19,15 @@ services:
 
 volumes:
   postgres_data:
+
+# Role chỉ-đọc không dựng được bằng biến môi trường của image postgres —
+# nó cần chạy sau khi schema tồn tại. Sau khi container healthy:
+#
+#   docker exec -i -e PGPASSWORD=$POSTGRES_PASSWORD adba-postgres \
+#     psql -v ON_ERROR_STOP=1 -v ro_password="$ADBA_READONLY_PASSWORD" \
+#          -U $POSTGRES_USER -d $POSTGRES_DB < scripts/create_readonly_role.sql
+#
+# Rồi trỏ ứng dụng vào role đó:
+#   ADBA_READONLY_URL=postgresql://adba_readonly:<pw>@localhost:5432/adba_db
+#
+# adba_user giữ nguyên quyền ghi, và chỉ dùng cho data/seed/seed_data.py.

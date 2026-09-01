@@ -271,6 +271,7 @@ Ba điều đáng đọc kỹ:
 | `tests/fixtures/mini_schema.py` | 0 |
 | `tests/integration/test_complex_queries.py` | 10 |
 | `tests/integration/test_onboard_flow.py` | 3 |
+| `tests/integration/test_readonly_role.py` | 7 |
 | `tests/integration/test_schema_context_wiring.py` | 6 |
 | `tests/integration/test_simple_queries.py` | 10 |
 | `tests/unit/test_annotate.py` | 38 |
@@ -301,7 +302,7 @@ Ba điều đáng đọc kỹ:
 | `tests/unit/test_supervisor.py` | 16 |
 | `tests/unit/test_tier1_recall.py` | 9 |
 | `tests/unit/test_viz_agent.py` | 11 |
-| **Tổng** | **535** |
+| **Tổng** | **542** |
 
 <!-- AUTO:end id=tests -->
 
@@ -326,10 +327,10 @@ Ba điều đáng đọc kỹ:
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `05b24f0` — fix(sql): fail closed, statement_timeout 30s→10s, trần 50k dòng |
+| Commit nguồn gần nhất | `0120aaa` — feat(db): role adba_readonly — lớp bảo đảm chỉ-đọc ở tầng Postgres |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 102 |
+| Số commit nguồn | 103 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

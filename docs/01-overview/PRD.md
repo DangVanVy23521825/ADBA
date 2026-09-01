@@ -207,7 +207,7 @@ Dự án coi là thành công khi đồng thời:
 | `app.py` | 1 | 1 | 354 | Streamlit UI — điểm vào duy nhất cho người dùng cuối |
 | `conftest.py` | 1 | 1 | 2 | — |
 | `data` | 16 | 1 | 84.504 | DDL 3 domain, seed, và dataset huấn luyện/đánh giá (JSONL) |
-| `docker-compose.yml` | 1 | 0 | 21 | — |
+| `docker-compose.yml` | 1 | 0 | 33 | — |
 | `docs` | 19 | 0 | — | Bộ tài liệu dự án (chính file này) |
 | `eval` | 12 | 8 | 2.719 | Runner đo baseline / PEFT và so sánh hai lần chạy |
 | `graph` | 16 | 16 | 2.187 | LangGraph: state, các node agent, và tool thực thi |
@@ -218,8 +218,8 @@ Dự án coi là thành công khi đồng thời:
 | `prompts` | 5 | 0 | 510 | System prompt của từng skill, dạng file text tách khỏi code |
 | `requirements.txt` | 1 | 0 | 18 | — |
 | `schemas` | 3 | 3 | 735 | Pydantic contract: ExecutionPlan (Supervisor) và InsightOutput (Insight) |
-| `scripts` | 7 | 3 | 1.644 | Tiện ích vận hành: áp schema, kiểm tra kết nối, sinh tài liệu |
-| `tests` | 38 | 35 | 8.388 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
+| `scripts` | 8 | 3 | 1.683 | Tiện ích vận hành: áp schema, kiểm tra kết nối, sinh tài liệu |
+| `tests` | 39 | 36 | 8.459 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
 | `training` | 13 | 5 | 3.795 | Sinh dữ liệu, LoRA/QLoRA notebook, checkpoint và kết quả |
 | `.cursorrules` | 1 | 0 | 0 | — |
 | `.github` | 1 | 0 | 29 | CI/CD — unit test, build & push image lên GHCR |
@@ -231,10 +231,10 @@ Dự án coi là thành công khi đồng thời:
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `05b24f0` — fix(sql): fail closed, statement_timeout 30s→10s, trần 50k dòng |
+| Commit nguồn gần nhất | `0120aaa` — feat(db): role adba_readonly — lớp bảo đảm chỉ-đọc ở tầng Postgres |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 102 |
+| Số commit nguồn | 103 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

@@ -111,6 +111,7 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 **Sửa lỗi**
 
+- lưu chi tiết từng câu không đạt, kèm SQL đã chạy — `c43ce64` (2026-09-01, Đặng Văn Vỹ)
 - bọc nháy định danh mà Postgres sẽ gấp sai, ở đường chạy thật — `a48fbff` (2026-09-01, Đặng Văn Vỹ)
 - dọn ba lỗ đã park từ review Plan A — `6af3233` (2026-09-01, Đặng Văn Vỹ)
 - tên cột không mang nghĩa thì luôn low, bất kể model chấm gì — `4601a03` (2026-08-27, Đặng Văn Vỹ)
@@ -232,10 +233,10 @@ Cập nhật `PRIMARY_MODEL` trong `.env`, `ollama pull <model>`, rồi chạy l
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `a48fbff` — fix(sql): bọc nháy định danh mà Postgres sẽ gấp sai, ở đường chạy thật |
+| Commit nguồn gần nhất | `c43ce64` — fix(eval): lưu chi tiết từng câu không đạt, kèm SQL đã chạy |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 101 |
+| Số commit nguồn | 102 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

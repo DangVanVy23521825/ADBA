@@ -302,9 +302,9 @@ Ba điều đáng đọc kỹ:
 | `tests/unit/test_sqlite_dialect.py` | 18 |
 | `tests/unit/test_supervisor.py` | 16 |
 | `tests/unit/test_tier1_recall.py` | 9 |
-| `tests/unit/test_tier2_execution.py` | 32 |
+| `tests/unit/test_tier2_execution.py` | 37 |
 | `tests/unit/test_viz_agent.py` | 11 |
-| **Tổng** | **593** |
+| **Tổng** | **598** |
 
 <!-- AUTO:end id=tests -->
 
@@ -329,10 +329,10 @@ Ba điều đáng đọc kỹ:
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `a48fbff` — fix(sql): bọc nháy định danh mà Postgres sẽ gấp sai, ở đường chạy thật |
+| Commit nguồn gần nhất | `c43ce64` — fix(eval): lưu chi tiết từng câu không đạt, kèm SQL đã chạy |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 101 |
+| Số commit nguồn | 102 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

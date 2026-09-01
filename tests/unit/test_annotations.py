@@ -5,6 +5,8 @@ from pathlib import Path
 import pytest
 
 from perception.annotations import (
+    HUMAN,
+    LLM,
     Annotation,
     SchemaAnnotations,
     apply_annotations,
@@ -369,3 +371,61 @@ def test_load_rejects_bad_confidence_on_column_annotation(tmp_path: Path):
     message = str(excinfo.value)
     assert "medium" in message
     assert "orders" in message
+
+
+# --- Miền giá trị bị chặn ngay ở constructor, không chỉ khi đọc file ---
+# `_from_plain` chắn đường vào từ YAML. Nhưng code nội bộ dựng thẳng
+# `Annotation(...)` thì đi vòng qua nó, nên trước bản sửa này một giá trị
+# sai miền GHI RA `schema.yaml` được mà `load_annotations` từ chối ĐỌC
+# LẠI — hỏng ở lần chạy sau, cách xa dòng gây ra nó.
+
+
+@pytest.mark.parametrize("bad", ["Human", "HUMAN", "", None, 0, "nguoi"])
+def test_annotation_rejects_reviewed_by_outside_the_documented_domain(bad):
+    with pytest.raises(ValueError) as e:
+        Annotation(text="x", reviewed_by=bad)
+    assert "reviewed_by" in str(e.value)
+    assert repr(bad) in str(e.value)
+
+
+@pytest.mark.parametrize("bad", ["High", "HIGH", "", None, "medium", 1])
+def test_annotation_rejects_confidence_outside_the_documented_domain(bad):
+    with pytest.raises(ValueError) as e:
+        Annotation(text="x", confidence=bad)
+    assert "confidence" in str(e.value)
+    assert repr(bad) in str(e.value)
+
+
+@pytest.mark.parametrize("reviewed_by", [LLM, HUMAN])
+@pytest.mark.parametrize("confidence", ["high", "low"])
+def test_annotation_accepts_every_documented_combination(reviewed_by, confidence):
+    ann = Annotation(text="x", reviewed_by=reviewed_by, confidence=confidence)
+    assert (ann.reviewed_by, ann.confidence) == (reviewed_by, confidence)
+
+
+def test_annotation_defaults_are_inside_the_domain():
+    """Nếu mặc định rơi ra ngoài miền thì `Annotation("x")` trần sẽ ném.
+    Khoá lại để không ai đổi mặc định mà quên đổi miền."""
+    assert Annotation(text="x") == Annotation(text="x", reviewed_by=LLM, confidence="high")
+
+
+def test_replace_keeps_validating(tmp_path):
+    """`dataclasses.replace` chạy lại `__post_init__`, nên đường sửa-một-
+    trường cũng phải bị chặn — nó là đường code nội bộ hay dùng nhất."""
+    import dataclasses
+
+    ann = Annotation(text="x")
+    assert dataclasses.replace(ann, reviewed_by=HUMAN).reviewed_by == HUMAN
+    with pytest.raises(ValueError):
+        dataclasses.replace(ann, reviewed_by="Human")
+
+
+def test_everything_that_can_be_written_can_be_read_back(tmp_path):
+    """Chính cái vòng mà lỗ này phá: ghi được thì phải đọc lại được."""
+    path = tmp_path / "schema.yaml"
+    ann = SchemaAnnotations(
+        tables={"orders": Annotation("Đơn hàng", reviewed_by=HUMAN, confidence="low")},
+        columns={"orders": {"amount": Annotation("Số tiền", confidence="high")}},
+    )
+    save_annotations(ann, path)
+    assert load_annotations(path) == ann

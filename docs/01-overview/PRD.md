@@ -210,7 +210,7 @@ Dự án coi là thành công khi đồng thời:
 | `docker-compose.yml` | 1 | 0 | 33 | — |
 | `docs` | 19 | 0 | — | Bộ tài liệu dự án (chính file này) |
 | `eval` | 12 | 8 | 2.719 | Runner đo baseline / PEFT và so sánh hai lần chạy |
-| `graph` | 18 | 18 | 2.453 | LangGraph: state, các node agent, và tool thực thi |
+| `graph` | 18 | 18 | 2.460 | LangGraph: state, các node agent, và tool thực thi |
 | `model` | 3 | 3 | 428 | ModelClient (Ollama local-first, fallback OpenAI) + tham số theo agent |
 | `onboard.py` | 1 | 1 | 1.012 | — |
 | `pages` | 1 | 1 | 86 | — |
@@ -219,7 +219,7 @@ Dự án coi là thành công khi đồng thời:
 | `requirements.txt` | 1 | 0 | 18 | — |
 | `schemas` | 3 | 3 | 735 | Pydantic contract: ExecutionPlan (Supervisor) và InsightOutput (Insight) |
 | `scripts` | 8 | 3 | 1.683 | Tiện ích vận hành: áp schema, kiểm tra kết nối, sinh tài liệu |
-| `tests` | 43 | 40 | 8.956 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
+| `tests` | 43 | 40 | 8.998 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
 | `training` | 13 | 5 | 3.795 | Sinh dữ liệu, LoRA/QLoRA notebook, checkpoint và kết quả |
 | `.cursorrules` | 1 | 0 | 0 | — |
 | `.github` | 1 | 0 | 29 | CI/CD — unit test, build & push image lên GHCR |
@@ -231,10 +231,10 @@ Dự án coi là thành công khi đồng thời:
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `ac65f33` — fix(graph): finalize_node chịu được state None/sai kiểu, không ném lỗi |
+| Commit nguồn gần nhất | `eaceedf` — fix(graph): đóng 2 lỗ hổng present-but-wrong-shape còn sót trong finalize |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 110 |
+| Số commit nguồn | 111 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

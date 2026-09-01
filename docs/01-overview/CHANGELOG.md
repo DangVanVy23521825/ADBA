@@ -114,6 +114,7 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 **Sửa lỗi**
 
+- đóng 2 lỗ hổng present-but-wrong-shape còn sót trong finalize — `eaceedf` (2026-09-01, Đặng Văn Vỹ)
 - finalize_node chịu được state None/sai kiểu, không ném lỗi — `ac65f33` (2026-09-01, Đặng Văn Vỹ)
 - remove unreachable fixture in test_supervisor.py (task 6 review) — `3e982da` (2026-09-01, Đặng Văn Vỹ)
 - conditional edge thành hàm thuần; node giữ việc ghi state (spec 5.5) — `6abe0cb` (2026-09-01, Đặng Văn Vỹ)
@@ -241,10 +242,10 @@ Cập nhật `PRIMARY_MODEL` trong `.env`, `ollama pull <model>`, rồi chạy l
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `ac65f33` — fix(graph): finalize_node chịu được state None/sai kiểu, không ném lỗi |
+| Commit nguồn gần nhất | `eaceedf` — fix(graph): đóng 2 lỗ hổng present-but-wrong-shape còn sót trong finalize |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 110 |
+| Số commit nguồn | 111 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

@@ -194,7 +194,7 @@ vì thành phần sửa lỗi.
 | `tests/unit/test_describe_dataset.py` | 6 |
 | `tests/unit/test_egress_boundary.py` | 13 |
 | `tests/unit/test_fetch_dataset.py` | 25 |
-| `tests/unit/test_finalize.py` | 16 |
+| `tests/unit/test_finalize.py` | 19 |
 | `tests/unit/test_insight_agent.py` | 7 |
 | `tests/unit/test_introspect.py` | 16 |
 | `tests/unit/test_load_sqlite_to_postgres.py` | 46 |
@@ -219,7 +219,7 @@ vì thành phần sửa lỗi.
 | `tests/unit/test_supervisor.py` | 15 |
 | `tests/unit/test_tier1_recall.py` | 9 |
 | `tests/unit/test_viz_agent.py` | 11 |
-| **Tổng** | **595** |
+| **Tổng** | **598** |
 
 <!-- AUTO:end id=tests -->
 
@@ -236,10 +236,10 @@ PYTHONPATH=. pytest tests/unit/ -v       # không cần DB và Ollama
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `ac65f33` — fix(graph): finalize_node chịu được state None/sai kiểu, không ném lỗi |
+| Commit nguồn gần nhất | `eaceedf` — fix(graph): đóng 2 lỗ hổng present-but-wrong-shape còn sót trong finalize |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 110 |
+| Số commit nguồn | 111 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

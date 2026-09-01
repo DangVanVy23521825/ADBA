@@ -109,6 +109,7 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 **Sửa lỗi**
 
+- fail closed, statement_timeout 30s→10s, trần 50k dòng — `05b24f0` (2026-09-01, Đặng Văn Vỹ)
 - spawn + env rỗng — ranh giới là tiến trình, không phải namespace — `55aba8e` (2026-09-01, Đặng Văn Vỹ)
 - dọn ba lỗ đã park từ review Plan A — `6af3233` (2026-09-01, Đặng Văn Vỹ)
 - tên cột không mang nghĩa thì luôn low, bất kể model chấm gì — `4601a03` (2026-08-27, Đặng Văn Vỹ)
@@ -232,10 +233,10 @@ Cập nhật `PRIMARY_MODEL` trong `.env`, `ollama pull <model>`, rồi chạy l
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `55aba8e` — fix(sandbox): spawn + env rỗng — ranh giới là tiến trình, không phải namespace |
+| Commit nguồn gần nhất | `05b24f0` — fix(sql): fail closed, statement_timeout 30s→10s, trần 50k dòng |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 101 |
+| Số commit nguồn | 102 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

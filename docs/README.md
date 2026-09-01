@@ -76,10 +76,10 @@ Chi tiết cơ chế, cách thêm khối mới, cách xử lý sự cố: [DOCS_
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `55aba8e` — fix(sandbox): spawn + env rỗng — ranh giới là tiến trình, không phải namespace |
+| Commit nguồn gần nhất | `05b24f0` — fix(sql): fail closed, statement_timeout 30s→10s, trần 50k dòng |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 101 |
+| Số commit nguồn | 102 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

@@ -202,6 +202,7 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Commit | Ngày | Tác giả | Nội dung |
 |---|---|---|---|
+| `05b24f0` | 2026-09-01 | Đặng Văn Vỹ | fix(sql): fail closed, statement_timeout 30s→10s, trần 50k dòng |
 | `55aba8e` | 2026-09-01 | Đặng Văn Vỹ | fix(sandbox): spawn + env rỗng — ranh giới là tiến trình, không phải namespace |
 | `8809e94` | 2026-09-01 | Đặng Văn Vỹ | docs(plan): cập nhật Plan B theo main hậu-merge Plan A |
 | `6af3233` | 2026-09-01 | Đặng Văn Vỹ | fix: dọn ba lỗ đã park từ review Plan A |
@@ -216,7 +217,6 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 | `5337fd2` | 2026-08-22 | Đặng Văn Vỹ | fix(perception): gấp định danh SQL đúng quy tắc Postgres, không hạ hết về chữ thường |
 | `7cd8480` | 2026-08-22 | Đặng Văn Vỹ | fix(eval): khoá ngoại lùi về NOT VALID khi dữ liệu nguồn vi phạm |
 | `7cfa6ee` | 2026-08-22 | Đặng Văn Vỹ | chore(eval): ghim sha256 của BIRD dev.zip |
-| `3116622` | 2026-08-22 | Đặng Văn Vỹ | feat(eval): bridge BIRD SQLite databases into Postgres for onboarding evals |
 
 <!-- AUTO:end id=commit-history -->
 
@@ -224,10 +224,10 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `55aba8e` — fix(sandbox): spawn + env rỗng — ranh giới là tiến trình, không phải namespace |
+| Commit nguồn gần nhất | `05b24f0` — fix(sql): fail closed, statement_timeout 30s→10s, trần 50k dòng |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 101 |
+| Số commit nguồn | 102 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

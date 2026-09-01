@@ -208,13 +208,13 @@ vì thành phần sửa lỗi.
 | `tests/unit/test_review_state.py` | 21 |
 | `tests/unit/test_schema_context.py` | 12 |
 | `tests/unit/test_schema_model.py` | 7 |
-| `tests/unit/test_sql_agent.py` | 11 |
+| `tests/unit/test_sql_agent.py` | 16 |
 | `tests/unit/test_sql_tables.py` | 21 |
-| `tests/unit/test_sql_tool_guard.py` | 19 |
+| `tests/unit/test_sql_tool_guard.py` | 22 |
 | `tests/unit/test_supervisor.py` | 16 |
 | `tests/unit/test_tier1_recall.py` | 9 |
 | `tests/unit/test_viz_agent.py` | 11 |
-| **Tổng** | **527** |
+| **Tổng** | **535** |
 
 <!-- AUTO:end id=tests -->
 
@@ -231,10 +231,10 @@ PYTHONPATH=. pytest tests/unit/ -v       # không cần DB và Ollama
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `55aba8e` — fix(sandbox): spawn + env rỗng — ranh giới là tiến trình, không phải namespace |
+| Commit nguồn gần nhất | `05b24f0` — fix(sql): fail closed, statement_timeout 30s→10s, trần 50k dòng |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 101 |
+| Số commit nguồn | 102 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

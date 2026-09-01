@@ -242,10 +242,10 @@ sequenceDiagram
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `fc69ccb` — feat(graph): node finalize — thang success/partial/failed có lý do |
+| Commit nguồn gần nhất | `ac65f33` — fix(graph): finalize_node chịu được state None/sai kiểu, không ném lỗi |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 109 |
+| Số commit nguồn | 110 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

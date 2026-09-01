@@ -202,6 +202,7 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Commit | Ngày | Tác giả | Nội dung |
 |---|---|---|---|
+| `ac65f33` | 2026-09-01 | Đặng Văn Vỹ | fix(graph): finalize_node chịu được state None/sai kiểu, không ném lỗi |
 | `fc69ccb` | 2026-09-01 | Đặng Văn Vỹ | feat(graph): node finalize — thang success/partial/failed có lý do |
 | `3c96a2c` | 2026-09-01 | Đặng Văn Vỹ | feat(budget): ModelClient từ chối khởi động lời gọi không kịp deadline |
 | `3e982da` | 2026-09-01 | Đặng Văn Vỹ | fix(test): remove unreachable fixture in test_supervisor.py (task 6 review) |
@@ -216,7 +217,6 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 | `03ab786` | 2026-08-27 | Đặng Văn Vỹ | test(onboard): fixture mật khẩu không còn giống bí mật thật |
 | `4601a03` | 2026-08-27 | Đặng Văn Vỹ | fix(perception): tên cột không mang nghĩa thì luôn low, bất kể model chấm gì |
 | `da433e3` | 2026-08-26 | Đặng Văn Vỹ | fix(perception): chia lô cột cho bảng rộng, annotate có ngân sách riêng |
-| `749bdd7` | 2026-08-23 | Đặng Văn Vỹ | fix(eval): resolve four BIRD loader bugs found against real Postgres |
 
 <!-- AUTO:end id=commit-history -->
 
@@ -224,10 +224,10 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `fc69ccb` — feat(graph): node finalize — thang success/partial/failed có lý do |
+| Commit nguồn gần nhất | `ac65f33` — fix(graph): finalize_node chịu được state None/sai kiểu, không ném lỗi |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 109 |
+| Số commit nguồn | 110 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

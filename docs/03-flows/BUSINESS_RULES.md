@@ -189,7 +189,7 @@ vì thành phần sửa lỗi.
 | `tests/integration/test_simple_queries.py` | 10 |
 | `tests/unit/test_annotate.py` | 38 |
 | `tests/unit/test_annotations.py` | 32 |
-| `tests/unit/test_budget.py` | 19 |
+| `tests/unit/test_budget.py` | 23 |
 | `tests/unit/test_connection_profile.py` | 16 |
 | `tests/unit/test_describe_dataset.py` | 6 |
 | `tests/unit/test_egress_boundary.py` | 13 |
@@ -217,7 +217,7 @@ vì thành phần sửa lỗi.
 | `tests/unit/test_supervisor.py` | 16 |
 | `tests/unit/test_tier1_recall.py` | 9 |
 | `tests/unit/test_viz_agent.py` | 11 |
-| **Tổng** | **569** |
+| **Tổng** | **573** |
 
 <!-- AUTO:end id=tests -->
 
@@ -234,10 +234,10 @@ PYTHONPATH=. pytest tests/unit/ -v       # không cần DB và Ollama
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `6abe0cb` — fix(routing): conditional edge thành hàm thuần; node giữ việc ghi state (spec 5.5) |
+| Commit nguồn gần nhất | `2cf725e` — feat(budget): trần cứng thay đếm retry — reflector 8→1, sql retry 3→2, trần 12 call |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 105 |
+| Số commit nguồn | 106 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

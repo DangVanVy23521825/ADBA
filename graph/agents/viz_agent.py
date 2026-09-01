@@ -4,19 +4,12 @@ Viz Agent — generate matplotlib chart code, execute in safe sandbox, return ba
 
 from __future__ import annotations
 
-import base64
-import io
 import logging
 import re
 from pathlib import Path
 
-import matplotlib
-import matplotlib.pyplot as plt
-
-matplotlib.use("Agg")
-
 from graph.state import MultiAgentState
-from graph.tools.python_tool import run_dict_safe
+from graph.tools.python_tool import run_chart_safe
 from graph.utils import append_trace, df_from_state
 from model.model_client import ModelClient
 
@@ -110,11 +103,7 @@ def viz_agent_node(state: MultiAgentState) -> MultiAgentState:
                 lines[-1] = "result = " + lines[-1]
                 code = "\n".join(lines)
 
-            result = run_dict_safe(
-                code,
-                {"df": df.copy(), "matplotlib": matplotlib,
-                 "plt": plt, "io": io, "base64": base64},
-            )
+            result = run_chart_safe(code, df)
             if "chart_b64" not in result:
                 raise ValueError("Code did not produce a chart result dict")
 

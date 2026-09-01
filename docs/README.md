@@ -76,10 +76,10 @@ Chi tiết cơ chế, cách thêm khối mới, cách xử lý sự cố: [DOCS_
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `03ab786` — test(onboard): fixture mật khẩu không còn giống bí mật thật |
+| Commit nguồn gần nhất | `d7783b6` — feat(eval): tầng 2 — execution accuracy |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-08-27 |
-| Số commit nguồn | 97 |
+| Ngày commit | 2026-09-01 |
+| Số commit nguồn | 98 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

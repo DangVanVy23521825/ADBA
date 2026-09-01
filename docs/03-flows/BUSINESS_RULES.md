@@ -186,6 +186,7 @@ vì thành phần sửa lỗi.
 | `tests/integration/test_onboard_flow.py` | 3 |
 | `tests/integration/test_schema_context_wiring.py` | 6 |
 | `tests/integration/test_simple_queries.py` | 10 |
+| `tests/integration/test_tier2_executor.py` | 10 |
 | `tests/unit/test_annotate.py` | 38 |
 | `tests/unit/test_annotations.py` | 26 |
 | `tests/unit/test_connection_profile.py` | 16 |
@@ -212,8 +213,9 @@ vì thành phần sửa lỗi.
 | `tests/unit/test_sql_tool_guard.py` | 19 |
 | `tests/unit/test_supervisor.py` | 16 |
 | `tests/unit/test_tier1_recall.py` | 9 |
+| `tests/unit/test_tier2_execution.py` | 32 |
 | `tests/unit/test_viz_agent.py` | 11 |
-| **Tổng** | **512** |
+| **Tổng** | **554** |
 
 <!-- AUTO:end id=tests -->
 
@@ -230,10 +232,10 @@ PYTHONPATH=. pytest tests/unit/ -v       # không cần DB và Ollama
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `03ab786` — test(onboard): fixture mật khẩu không còn giống bí mật thật |
+| Commit nguồn gần nhất | `d7783b6` — feat(eval): tầng 2 — execution accuracy |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-08-27 |
-| Số commit nguồn | 97 |
+| Ngày commit | 2026-09-01 |
+| Số commit nguồn | 98 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

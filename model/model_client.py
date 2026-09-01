@@ -9,7 +9,7 @@ import os
 import re
 import time
 import warnings
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import ollama
 
@@ -27,6 +27,16 @@ from model.model_config import (
     deployment_mode,
     egress_allowed,
 )
+
+if TYPE_CHECKING:
+    # Chỉ dùng cho type hint (`clock: Clock = time.time`). Import thật ở
+    # cấp module sẽ tạo vòng: `graph/__init__.py` import tới
+    # `graph.agents.supervisor`, mà module đó lại `import model.model_client`
+    # — nếu import graph.budget ở đây trước khi ModelClient được định nghĩa
+    # xong, Python sẽ gặp module `model.model_client` đang dở dang. Các hàm
+    # dùng `graph.budget` thật sự (`effective_timeout_s`, `_assert_budget`)
+    # import nó cục bộ, lúc đó toàn bộ cây import đã nạp xong.
+    from graph.budget import Clock
 
 
 def _strip_markdown_fences(text: str) -> str:
@@ -58,6 +68,16 @@ def safe_parse_json(text: str) -> dict[str, Any]:
     return data
 
 
+class BudgetExceededError(RuntimeError):
+    """Không còn đủ thời gian để khởi động một lời gọi model.
+
+    Tách khỏi RuntimeError thường vì nó KHÔNG phải lỗi của Ollama, nên
+    không được kích hoạt đường fallback sang OpenAI: gọi sang API ngoài
+    lúc sắp hết giờ chỉ tiêu thêm thời gian mình không có, và làm schema
+    của khách rời khỏi mạng của họ.
+    """
+
+
 class ModelClient:
     """
     Local-first model wrapper:
@@ -73,6 +93,8 @@ class ModelClient:
         max_retries: int = MODEL_MAX_RETRIES,
         enable_openai_fallback: bool | None = None,
         openai_model: str | None = None,
+        deadline_ts: float | None = None,
+        clock: Clock = time.time,
     ) -> None:
         self.agent_type = agent_type
         self.model_name = model_name or PRIMARY_MODEL
@@ -136,6 +158,9 @@ class ModelClient:
         self.openai_model = openai_model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
         self.fallback_agents = {"supervisor", "sql"}
 
+        self.deadline_ts = deadline_ts
+        self.clock = clock
+
     def _chat_once_ollama(self, messages: list[dict[str, str]]) -> str:
         response = self.ollama_client.chat(
             model=self.model_name,
@@ -155,14 +180,15 @@ class ModelClient:
         ]
 
         last_error: Exception | None = None
+        budget = self.effective_timeout_s()
         for attempt in range(1, self.max_retries + 1):
             start = time.time()
             try:
                 out = self._chat_once_ollama(messages)
                 elapsed = time.time() - start
-                if elapsed > self.timeout_s:
+                if elapsed > budget:
                     raise TimeoutError(
-                        f"Ollama response exceeded timeout: {elapsed:.1f}s > {self.timeout_s:.1f}s"
+                        f"Ollama response exceeded timeout: {elapsed:.1f}s > {budget:.1f}s"
                     )
                 if not out:
                     raise ValueError("Ollama returned empty content.")
@@ -205,12 +231,40 @@ class ModelClient:
             raise RuntimeError("OpenAI returned empty content.")
         return _strip_markdown_fences(content)
 
+    def effective_timeout_s(self) -> float:
+        """Timeout thực dùng: nhỏ hơn giữa timeout của agent và thời gian còn lại.
+
+        AGENT_TIMEOUT_S['sql'] là 200s — lớn hơn cả ngân sách 45s của cả
+        lượt. Không siết theo thời gian còn lại thì tham số deadline chỉ là
+        trang trí.
+        """
+        if self.deadline_ts is None:
+            return self.timeout_s
+        from graph.budget import time_left
+
+        return max(0.0, min(self.timeout_s, time_left(self.deadline_ts, self.clock)))
+
+    def _assert_budget(self) -> None:
+        if self.deadline_ts is None:
+            return
+        from graph.budget import MODEL_CALL_ESTIMATE_S, has_room_for, time_left
+
+        if not has_room_for(self.deadline_ts, MODEL_CALL_ESTIMATE_S, clock=self.clock):
+            raise BudgetExceededError(
+                f"Không khởi động lời gọi model cho agent '{self.agent_type}': còn "
+                f"{time_left(self.deadline_ts, self.clock):.1f}s, cần khoảng "
+                f"{MODEL_CALL_ESTIMATE_S:.0f}s — vượt ngân sách."
+            )
+
     def invoke(self, system_prompt: str, user_prompt: str) -> str:
         """
         Invoke model text with local-first strategy.
         """
+        self._assert_budget()
         try:
             return self._invoke_ollama(system_prompt=system_prompt, user_prompt=user_prompt)
+        except BudgetExceededError:
+            raise
         except Exception as ollama_error:  # noqa: BLE001
             can_fallback = (
                 self.enable_openai_fallback and self.agent_type in self.fallback_agents

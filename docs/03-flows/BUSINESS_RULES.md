@@ -197,6 +197,7 @@ vì thành phần sửa lỗi.
 | `tests/unit/test_insight_agent.py` | 7 |
 | `tests/unit/test_introspect.py` | 16 |
 | `tests/unit/test_load_sqlite_to_postgres.py` | 46 |
+| `tests/unit/test_model_client_deadline.py` | 7 |
 | `tests/unit/test_onboard_cli.py` | 45 |
 | `tests/unit/test_onboard_refresh.py` | 5 |
 | `tests/unit/test_onboard_verify.py` | 20 |
@@ -217,7 +218,7 @@ vì thành phần sửa lỗi.
 | `tests/unit/test_supervisor.py` | 15 |
 | `tests/unit/test_tier1_recall.py` | 9 |
 | `tests/unit/test_viz_agent.py` | 11 |
-| **Tổng** | **572** |
+| **Tổng** | **579** |
 
 <!-- AUTO:end id=tests -->
 
@@ -234,10 +235,10 @@ PYTHONPATH=. pytest tests/unit/ -v       # không cần DB và Ollama
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `3e982da` — fix(test): remove unreachable fixture in test_supervisor.py (task 6 review) |
+| Commit nguồn gần nhất | `3c96a2c` — feat(budget): ModelClient từ chối khởi động lời gọi không kịp deadline |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 107 |
+| Số commit nguồn | 108 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

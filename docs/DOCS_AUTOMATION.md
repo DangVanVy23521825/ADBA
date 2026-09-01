@@ -176,10 +176,10 @@ Marker có `id` không có generator sẽ được **giữ nguyên** kèm cảnh
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `3e982da` — fix(test): remove unreachable fixture in test_supervisor.py (task 6 review) |
+| Commit nguồn gần nhất | `3c96a2c` — feat(budget): ModelClient từ chối khởi động lời gọi không kịp deadline |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 107 |
+| Số commit nguồn | 108 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

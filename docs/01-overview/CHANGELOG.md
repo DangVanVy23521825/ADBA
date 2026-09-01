@@ -111,6 +111,7 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 **Sửa lỗi**
 
+- bỏ cả phần giải thích model viết SAU câu SQL — `a3682b8` (2026-09-01, Đặng Văn Vỹ)
 - bộ bóc SQL cắt nhầm từ chữ 'with' trong văn xuôi — `ee0c38a` (2026-09-01, Đặng Văn Vỹ)
 - lưu chi tiết từng câu không đạt, kèm SQL đã chạy — `c43ce64` (2026-09-01, Đặng Văn Vỹ)
 - bọc nháy định danh mà Postgres sẽ gấp sai, ở đường chạy thật — `a48fbff` (2026-09-01, Đặng Văn Vỹ)
@@ -234,10 +235,10 @@ Cập nhật `PRIMARY_MODEL` trong `.env`, `ollama pull <model>`, rồi chạy l
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `ee0c38a` — fix(sql): bộ bóc SQL cắt nhầm từ chữ 'with' trong văn xuôi |
+| Commit nguồn gần nhất | `a3682b8` — fix(sql): bỏ cả phần giải thích model viết SAU câu SQL |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 103 |
+| Số commit nguồn | 104 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

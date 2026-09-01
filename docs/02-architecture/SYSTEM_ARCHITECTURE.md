@@ -250,7 +250,7 @@ riêng qua MCP, và egress bị chặn ở tầng mạng. Chi tiết:
 | `docker-compose.yml` | 1 | 0 | 21 | — |
 | `docs` | 19 | 0 | — | Bộ tài liệu dự án (chính file này) |
 | `eval` | 14 | 10 | 3.396 | Runner đo baseline / PEFT và so sánh hai lần chạy |
-| `graph` | 16 | 16 | 2.137 | LangGraph: state, các node agent, và tool thực thi |
+| `graph` | 16 | 16 | 2.173 | LangGraph: state, các node agent, và tool thực thi |
 | `model` | 3 | 3 | 374 | ModelClient (Ollama local-first, fallback OpenAI) + tham số theo agent |
 | `onboard.py` | 1 | 1 | 1.012 | — |
 | `pages` | 1 | 1 | 86 | — |
@@ -259,7 +259,7 @@ riêng qua MCP, và egress bị chặn ở tầng mạng. Chi tiết:
 | `requirements.txt` | 1 | 0 | 18 | — |
 | `schemas` | 3 | 3 | 735 | Pydantic contract: ExecutionPlan (Supervisor) và InsightOutput (Insight) |
 | `scripts` | 7 | 3 | 1.644 | Tiện ích vận hành: áp schema, kiểm tra kết nối, sinh tài liệu |
-| `tests` | 41 | 38 | 9.151 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
+| `tests` | 41 | 38 | 9.175 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
 | `training` | 13 | 5 | 3.795 | Sinh dữ liệu, LoRA/QLoRA notebook, checkpoint và kết quả |
 | `.cursorrules` | 1 | 0 | 0 | — |
 | `.github` | 1 | 0 | 29 | CI/CD — unit test, build & push image lên GHCR |
@@ -324,10 +324,10 @@ kèm giá trị thật; `env.example` là bản mẫu.
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `ee0c38a` — fix(sql): bộ bóc SQL cắt nhầm từ chữ 'with' trong văn xuôi |
+| Commit nguồn gần nhất | `a3682b8` — fix(sql): bỏ cả phần giải thích model viết SAU câu SQL |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 103 |
+| Số commit nguồn | 104 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

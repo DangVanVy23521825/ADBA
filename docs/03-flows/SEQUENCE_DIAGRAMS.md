@@ -242,10 +242,10 @@ sequenceDiagram
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `ee0c38a` — fix(sql): bộ bóc SQL cắt nhầm từ chữ 'with' trong văn xuôi |
+| Commit nguồn gần nhất | `a3682b8` — fix(sql): bỏ cả phần giải thích model viết SAU câu SQL |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 103 |
+| Số commit nguồn | 104 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

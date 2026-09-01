@@ -76,10 +76,10 @@ Chi tiết cơ chế, cách thêm khối mới, cách xử lý sự cố: [DOCS_
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `45b7b5d` — feat(budget): deadline_ts mang trong state, clock tiêm được |
+| Commit nguồn gần nhất | `6abe0cb` — fix(routing): conditional edge thành hàm thuần; node giữ việc ghi state (spec 5.5) |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 104 |
+| Số commit nguồn | 105 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

@@ -202,6 +202,7 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Commit | Ngày | Tác giả | Nội dung |
 |---|---|---|---|
+| `6abe0cb` | 2026-09-01 | Đặng Văn Vỹ | fix(routing): conditional edge thành hàm thuần; node giữ việc ghi state (spec 5.5) |
 | `45b7b5d` | 2026-09-01 | Đặng Văn Vỹ | feat(budget): deadline_ts mang trong state, clock tiêm được |
 | `0120aaa` | 2026-09-01 | Đặng Văn Vỹ | feat(db): role adba_readonly — lớp bảo đảm chỉ-đọc ở tầng Postgres |
 | `05b24f0` | 2026-09-01 | Đặng Văn Vỹ | fix(sql): fail closed, statement_timeout 30s→10s, trần 50k dòng |
@@ -216,7 +217,6 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 | `1df5dd6` | 2026-08-23 | Đặng Văn Vỹ | fix(perception): chú giải lẫn chữ Hán bị hạ xuống low, vào hàng đợi duyệt |
 | `ff31b35` | 2026-08-23 | Đặng Văn Vỹ | feat(demo): Chinook làm schema demo phát hành lại được |
 | `42ece63` | 2026-08-23 | Đặng Văn Vỹ | feat(onboard): --threshold-tokens chốt chế độ schema tại build |
-| `5337fd2` | 2026-08-22 | Đặng Văn Vỹ | fix(perception): gấp định danh SQL đúng quy tắc Postgres, không hạ hết về chữ thường |
 
 <!-- AUTO:end id=commit-history -->
 
@@ -224,10 +224,10 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `45b7b5d` — feat(budget): deadline_ts mang trong state, clock tiêm được |
+| Commit nguồn gần nhất | `6abe0cb` — fix(routing): conditional edge thành hàm thuần; node giữ việc ghi state (spec 5.5) |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 104 |
+| Số commit nguồn | 105 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

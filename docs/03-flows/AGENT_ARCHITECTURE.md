@@ -295,6 +295,7 @@ Ba điều đáng đọc kỹ:
 | `tests/unit/test_render_schema.py` | 29 |
 | `tests/unit/test_retrieval.py` | 20 |
 | `tests/unit/test_review_state.py` | 21 |
+| `tests/unit/test_routing_is_pure.py` | 8 |
 | `tests/unit/test_schema_context.py` | 12 |
 | `tests/unit/test_schema_model.py` | 7 |
 | `tests/unit/test_sql_agent.py` | 16 |
@@ -303,7 +304,7 @@ Ba điều đáng đọc kỹ:
 | `tests/unit/test_supervisor.py` | 16 |
 | `tests/unit/test_tier1_recall.py` | 9 |
 | `tests/unit/test_viz_agent.py` | 11 |
-| **Tổng** | **561** |
+| **Tổng** | **569** |
 
 <!-- AUTO:end id=tests -->
 
@@ -328,10 +329,10 @@ Ba điều đáng đọc kỹ:
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `45b7b5d` — feat(budget): deadline_ts mang trong state, clock tiêm được |
+| Commit nguồn gần nhất | `6abe0cb` — fix(routing): conditional edge thành hàm thuần; node giữ việc ghi state (spec 5.5) |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 104 |
+| Số commit nguồn | 105 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

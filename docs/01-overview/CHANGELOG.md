@@ -111,6 +111,7 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 **Sửa lỗi**
 
+- conditional edge thành hàm thuần; node giữ việc ghi state (spec 5.5) — `6abe0cb` (2026-09-01, Đặng Văn Vỹ)
 - fail closed, statement_timeout 30s→10s, trần 50k dòng — `05b24f0` (2026-09-01, Đặng Văn Vỹ)
 - spawn + env rỗng — ranh giới là tiến trình, không phải namespace — `55aba8e` (2026-09-01, Đặng Văn Vỹ)
 - dọn ba lỗ đã park từ review Plan A — `6af3233` (2026-09-01, Đặng Văn Vỹ)
@@ -235,10 +236,10 @@ Cập nhật `PRIMARY_MODEL` trong `.env`, `ollama pull <model>`, rồi chạy l
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `45b7b5d` — feat(budget): deadline_ts mang trong state, clock tiêm được |
+| Commit nguồn gần nhất | `6abe0cb` — fix(routing): conditional edge thành hàm thuần; node giữ việc ghi state (spec 5.5) |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-01 |
-| Số commit nguồn | 104 |
+| Số commit nguồn | 105 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

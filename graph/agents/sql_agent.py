@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import logging
 import re
+
+import sqlparse
 from pathlib import Path
 
 from graph.state import MultiAgentState
@@ -24,21 +26,60 @@ SQL_SYSTEM_PROMPT: str = _PROMPT_PATH.read_text(encoding="utf-8")
 MAX_RETRIES = 3
 
 
-_SQL_KEYWORDS = ("SELECT", "WITH", "select", "with")
+# Ranh giới từ ở CẢ HAI đầu: không có `\b` thì `WITH` khớp cả trong
+# "GROUP BY WITHIN", và `SELECT` khớp trong "SELECTED".
+_SQL_START = re.compile(r"\b(?:SELECT|WITH)\b", re.IGNORECASE)
+# Hình dạng bắt buộc của một mệnh đề WITH thật: `WITH [RECURSIVE] <tên>
+# [(cột,...)] AS (`. Văn xuôi "with a CTE:" không khớp.
+_CTE_HEAD = re.compile(
+    r'WITH\s+(?:RECURSIVE\s+)?[\w"]+\s*(?:\([^)]*\))?\s*AS\s*\(',
+    re.IGNORECASE,
+)
 
 
 def _extract_sql(text: str) -> str:
-    """Strip markdown fences and extract the SQL query from model output."""
-    text = re.sub(r"```(?:sql)?\s*|\s*```", "", text).strip()
-    # Scan for the earliest SQL keyword (WITH may start before SELECT inside a CTE)
-    earliest = len(text)
-    for kw in _SQL_KEYWORDS:
-        idx = text.find(kw)
-        if 0 <= idx < earliest:
-            earliest = idx
-    if earliest < len(text):
-        return text[earliest:].strip()
-    return text
+    """Bóc câu SQL ra khỏi đầu ra của model.
+
+    Bản cũ tìm chuỗi con `"with"` bằng `str.find`, nên nó khớp chữ **with**
+    trong văn xuôi tiếng Anh. Model viết "To find the school with the
+    highest average score... you can use:" rồi mới tới SQL, và bộ bóc cắt
+    ngay từ chữ "with" giữa câu văn, trả về một mớ không phải SQL.
+
+    Đo trên 50 câu BIRD: 8 trong 18 ca SQL-sinh-lỗi (44%) là do đúng lỗi
+    này, KHÔNG phải do model viết SQL sai. Prompt cấm văn xuôi (quy tắc 1
+    và 3) nhưng model 7B không phải lúc nào cũng nghe.
+
+    Ba lớp, theo thứ tự tin cậy giảm dần:
+
+    1. Nội dung trong hàng rào ```sql — tín hiệu mạnh nhất, model đánh dấu
+       sẵn đâu là code.
+    2. Ứng viên bắt đầu ở RANH GIỚI TỪ, kiểm bằng `sqlparse.get_type()`.
+       Nó phân biệt sạch: `WITH x AS (...) SELECT` ra "SELECT", còn
+       "with the highest average" ra "UNKNOWN".
+    3. Không có ứng viên nào hợp lệ thì trả nguyên văn, để lỗi nổ ở tầng
+       thực thi kèm nội dung thật — im lặng trả chuỗi rỗng sẽ khó chẩn hơn.
+
+    Còn sót một ca: văn xuôi BẮT ĐẦU bằng "select" ("select the data you
+    need") vẫn parse ra "SELECT". Hiếm hơn hẳn ca "with" vì nó đòi câu văn
+    mở đầu bằng đúng từ đó, và chưa gặp lần nào trên 50 câu đã đo.
+    """
+    fenced = re.search(r"```(?:sql)?\s*(.+?)```", text, re.S | re.I)
+    body = fenced.group(1) if fenced else re.sub(r"```(?:sql)?\s*|\s*```", "", text)
+    body = body.strip()
+
+    for match in _SQL_START.finditer(body):
+        candidate = body[match.start():].strip()
+        if candidate[:4].upper() == "WITH" and not _CTE_HEAD.match(candidate):
+            # `get_type()` một mình KHÔNG đủ ở đây: với "with a CTE:\nWITH
+            # cte AS (...) SELECT ..." nó vẫn trả "SELECT", vì nó quét tới
+            # khi gặp SELECT ở phía sau và không quan tâm phần đầu là văn
+            # xuôi. Một mệnh đề WITH thật luôn có hình dạng
+            # `WITH <tên> AS (`, nên kiểm hình dạng đó mới loại được.
+            continue
+        parsed = sqlparse.parse(candidate)
+        if parsed and parsed[0].get_type() == "SELECT":
+            return candidate
+    return body
 
 
 def build_system_prompt(schema_context: SchemaContext) -> str:

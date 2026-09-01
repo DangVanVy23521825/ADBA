@@ -76,6 +76,41 @@ class TestExtractSql:
     def test_no_sql_keyword_returns_original(self):
         assert _extract_sql("Just some text") == "Just some text"
 
+    def test_the_english_word_with_in_prose_is_not_mistaken_for_a_cte(self):
+        """Ca quan sát được thật trên BIRD: 8 trong 18 ca SQL-sinh-lỗi
+        (44%) là do đúng lỗi này, không phải do model viết SQL sai.
+
+        Bản cũ dùng `str.find("with")` nên cắt ngay từ chữ "with" giữa câu
+        văn và trả về một mớ không phải SQL."""
+        raw = (
+            "To find the school with the highest average score in Reading, "
+            "you can use the following query:\n"
+            "SELECT name FROM schools ORDER BY score DESC LIMIT 1"
+        )
+        assert _extract_sql(raw) == "SELECT name FROM schools ORDER BY score DESC LIMIT 1"
+
+    def test_a_real_cte_after_prose_is_still_found(self):
+        """Sửa ca trên không được làm mất CTE thật: `WITH ... SELECT` phải
+        giữ nguyên cả mệnh đề WITH, không được cắt vào SELECT bên trong."""
+        raw = (
+            "Here is a query with a CTE:\n"
+            "WITH cte AS (SELECT * FROM orders) SELECT * FROM cte"
+        )
+        assert _extract_sql(raw) == "WITH cte AS (SELECT * FROM orders) SELECT * FROM cte"
+
+    def test_prose_wrapped_around_a_fenced_block_is_dropped(self):
+        raw = (
+            "Sure! To answer that with the data you have:\n"
+            "```sql\nSELECT 1 FROM t\n```\n"
+            "Let me know if you want it filtered."
+        )
+        assert _extract_sql(raw) == "SELECT 1 FROM t"
+
+    def test_the_word_with_inside_an_identifier_is_not_a_start(self):
+        """`\b` ở cả hai đầu: thiếu nó thì `WITH` khớp trong `WITHIN`."""
+        raw = "SELECT x FROM t GROUP BY y WITHIN GROUP (ORDER BY z)"
+        assert _extract_sql(raw) == raw
+
 
 class TestSqlAgentNode:
     @patch("graph.agents.sql_agent.explain_query_plan")

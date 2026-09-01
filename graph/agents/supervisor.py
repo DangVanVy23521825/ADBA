@@ -9,6 +9,7 @@ from pathlib import Path
 from collections import defaultdict, deque
 from typing import Any
 
+from graph.budget import calls_exhausted
 from graph.state import MultiAgentState
 from graph.utils import append_trace
 from model.model_client import ModelClient
@@ -17,10 +18,12 @@ from schemas.plan_schema import ExecutionPlan
 
 logger = logging.getLogger(__name__)
 
-# Max reflector invocations targeted at the same specialist agent — avoids infinite
-# sql ↔ reflector loops while still allowing a new diagnosis each time that agent's
-# agent_error_counts increases after a retry.
-MAX_REFLECTOR_PASSES_PER_AGENT = 8
+# Số lần reflector được gọi cho cùng một specialist. Bằng 1, không phải 8:
+# reflector sinh `corrected_context`, và một chẩn đoán cộng một lần thử lại
+# không sửa được thì bảy lần nữa cũng vậy — model kẹt ở cùng lớp lỗi.
+# `reflector_json_rate = 100%` cho thấy reflector không hỏng ở khâu sinh
+# output, nên lặp thêm chỉ đốt ngân sách (spec 5.4).
+MAX_REFLECTOR_PASSES_PER_AGENT = 1
 MAX_SUPERVISOR_RETRIES = 3
 SPECIALIST_AGENTS = {"sql", "python", "viz", "insight"}
 
@@ -291,11 +294,21 @@ def route_next_agent(state: MultiAgentState) -> str:
 
     Rules:
       1. status == 'failed' hoặc 'success' → finalize.
-      2. Agent kẹt lỗi → reflector, tới khi hết ngân sách reflector.
-      3. Agent sẵn sàng đầu tiên theo thứ tự step.
-      4. Không còn gì chạy được → finalize.
+      2. Trần số lời gọi model đã chạm → finalize (spec 5.4, tuyến phòng thủ
+         thứ ba sau deadline và trần retry per-agent — bắt cả trường hợp
+         đồng hồ vì lý do nào đó không cứu được).
+      3. Agent kẹt lỗi → reflector, tới khi hết ngân sách reflector.
+      4. Agent sẵn sàng đầu tiên theo thứ tự step.
+      5. Không còn gì chạy được → finalize.
     """
     if state["status"] in {"failed", "success"}:
+        return "finalize"
+
+    if calls_exhausted(state.get("llm_calls_used", 0)):
+        logger.warning(
+            "Trần %d lời gọi model đã chạm — đi thẳng tới finalize",
+            state.get("llm_calls_used", 0),
+        )
         return "finalize"
 
     plan = state.get("execution_plan", [])

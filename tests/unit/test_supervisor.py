@@ -143,6 +143,9 @@ class TestRouteNextAgent:
 
     # 11. New failure wave after reflector → reflector again (not stuck skip)
     def test_sql_second_failure_wave_routes_back_to_reflector(self):
+        # reflect_passes_per_agent must stay strictly below
+        # MAX_REFLECTOR_PASSES_PER_AGENT (now 1, was 8) for this case to be
+        # "still under budget" rather than "cap reached" — see task 6.
         s = _state(
             PLAN_SIMPLE,
             agent_outputs={
@@ -152,7 +155,7 @@ class TestRouteNextAgent:
             error_counts={"sql": 2},
             shared_metadata={
                 "reflect_error_snapshot": {"sql": 1},
-                "reflect_passes_per_agent": {"sql": 1},
+                "reflect_passes_per_agent": {"sql": 0},
             },
         )
         assert route_next_agent(s) == "reflector"

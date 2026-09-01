@@ -131,3 +131,51 @@ def test_old_two_argument_call_still_works():
     s = make_initial_state("q", SchemaContext())
     assert s["query"] == "q"
     assert s["deadline_ts"] > 0
+
+
+# ── trần cứng thay đếm retry ─────────────────────────────────────────────────
+
+def test_reflector_cap_is_one():
+    """Spec 5.4: reflector sinh corrected_context. Một chẩn đoán + một lần
+    thử lại không sửa được thì bảy lần nữa cũng vậy — model kẹt ở cùng lớp
+    lỗi, và reflector_json_rate = 100% cho thấy nó không hỏng ở khâu sinh
+    output."""
+    from graph.agents.supervisor import MAX_REFLECTOR_PASSES_PER_AGENT
+
+    assert MAX_REFLECTOR_PASSES_PER_AGENT == 1
+
+
+def test_sql_node_retry_is_two():
+    """Một lần sinh + một lần sửa theo error context."""
+    from graph.agents.sql_agent import MAX_RETRIES
+
+    assert MAX_RETRIES == 2
+
+
+def test_router_goes_to_finalize_when_the_call_ceiling_is_hit():
+    from graph.agents.supervisor import route_next_agent
+
+    s = _state_for_ceiling()
+    s["llm_calls_used"] = 12
+    assert route_next_agent(s) == "finalize"
+
+
+def test_router_still_routes_below_the_call_ceiling():
+    from graph.agents.supervisor import route_next_agent
+
+    s = _state_for_ceiling()
+    s["llm_calls_used"] = 11
+    assert route_next_agent(s) == "sql"
+
+
+def _state_for_ceiling():
+    from graph.state import make_initial_state
+    from perception.schema_context import SchemaContext
+
+    s = make_initial_state("q", SchemaContext())
+    s["execution_plan"] = [
+        {"step": 1, "agent": "sql", "task": "t", "depends_on": [], "skill_type": "text-to-sql"},
+    ]
+    s["completed_agents"] = ["supervisor"]
+    s["status"] = "running"
+    return s

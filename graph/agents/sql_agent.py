@@ -20,7 +20,9 @@ _PROMPT_PATH = Path(__file__).resolve().parents[2] / "prompts" / "text_to_sql.tx
 
 SQL_SYSTEM_PROMPT: str = _PROMPT_PATH.read_text(encoding="utf-8")
 
-MAX_RETRIES = 3
+# Một lần sinh + một lần sửa theo error context. Lần thứ ba trước đây chỉ
+# lặp lại cùng một lớp lỗi với giá một lời gọi model (spec 5.4).
+MAX_RETRIES = 2
 
 
 _SQL_KEYWORDS = ("SELECT", "WITH", "select", "with")

@@ -15,6 +15,7 @@ from perception.review_state import (
     filter_rows,
     review_progress,
     review_rows,
+    widget_key,
 )
 
 st.set_page_config(page_title="Chú giải schema", page_icon="📝", layout="wide")
@@ -71,7 +72,7 @@ for table_name, table_rows in by_table.items():
     with st.expander(f"**{table_name}**  ({len(table_rows)} mục)", expanded=True):
         for r in table_rows:
             label = f"Bảng `{r.table}`" if r.column is None else f"Cột `{r.column}` — {r.type_hint}"
-            key = f"{r.table}::{r.column or ''}"
+            key = widget_key(r.table, r.column)
             col_input, col_btn = st.columns([5, 1])
             with col_input:
                 new = st.text_input(label, value=r.current_text, key=key)

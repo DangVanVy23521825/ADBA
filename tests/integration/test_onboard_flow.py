@@ -23,7 +23,17 @@ def test_extract_build_verify_runs_end_to_end(tmp_path):
         encoding="utf-8",
     )
     report = cmd_verify(tmp_path, golden, user="admin")
+
+    # `total` một mình KHÔNG khẳng định chuỗi chạy thành công: nó chỉ đếm
+    # số dòng golden đọc được, nên một report `total=1, passed=False,
+    # recall=0.0` vẫn qua. Đây là test duy nhất chạy suốt extract → build
+    # → verify, nên nó phải khẳng định KẾT QUẢ, không phải khẳng định là
+    # có chạy.
     assert report.total == 1
+    assert report.misses == [], f"retriever trượt bảng: {report.misses}"
+    assert report.recall == 1.0, f"recall {report.recall}, kỳ vọng 1.0"
+    assert report.passed
+    assert report.avg_context_tables >= 1
 
 
 def test_the_built_profile_matches_the_live_schema(tmp_path):

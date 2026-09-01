@@ -35,6 +35,32 @@ class Annotation:
     reviewed_by: str = LLM
     confidence: str = "high"
 
+    def __post_init__(self) -> None:
+        """Từ chối giá trị ngoài miền ngay lúc dựng, không đợi tới lúc đọc lại.
+
+        `_from_plain` đã kiểm hai trường này, nhưng nó chỉ chắn được đường
+        VÀO TỪ FILE. Code nội bộ gọi thẳng `Annotation(...)` đi vòng qua
+        nó, nên một giá trị sai miền vẫn ghi ra `schema.yaml` được — rồi
+        `load_annotations` từ chối đọc chính file mình vừa ghi. Ghi được,
+        đọc lại không được, và lỗi nổ ở LẦN CHẠY SAU, cách xa dòng gây ra
+        nó. Chặn ở constructor thì nó nổ đúng chỗ.
+
+        `_from_plain` vẫn giữ kiểm tra riêng chứ không uỷ thác xuống đây:
+        nó biết đường dẫn file và vị trí bảng/cột, còn constructor thì
+        không — mà đúng thông tin đó mới cho người vận hành sửa được file
+        của họ. Ở đây chỉ cần nêu trường và giá trị.
+        """
+        if self.reviewed_by not in _REVIEWED_BY_VALUES:
+            raise ValueError(
+                f"Annotation.reviewed_by có giá trị không hợp lệ "
+                f"{self.reviewed_by!r}; cần một trong {sorted(_REVIEWED_BY_VALUES)}"
+            )
+        if self.confidence not in _CONFIDENCE_VALUES:
+            raise ValueError(
+                f"Annotation.confidence có giá trị không hợp lệ "
+                f"{self.confidence!r}; cần một trong {sorted(_CONFIDENCE_VALUES)}"
+            )
+
 
 @dataclass(frozen=True)
 class SchemaAnnotations:

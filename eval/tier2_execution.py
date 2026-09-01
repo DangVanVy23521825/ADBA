@@ -538,6 +538,7 @@ def _generator(profile) -> Callable[[EvalRecord], str]:
     from model.model_client import ModelClient
     from perception.retrieval import LexicalRetriever
     from perception.schema_context import resolve_schema_context
+    from perception.sql_identifiers import requote_for_tables
 
     # `enable_openai_fallback=False` cố ý, giống `onboard.py`: một lượt chấm
     # BIRD gửi hàng nghìn schema qua model, và nếu Ollama chết giữa chừng
@@ -555,10 +556,11 @@ def _generator(profile) -> Callable[[EvalRecord], str]:
     def generate(rec: EvalRecord) -> str:
         ctx = resolve_schema_context(profile, rec.question, permitted, retriever=retriever)
         raw = client.invoke(build_system_prompt(ctx), f"Task: {rec.question}")
-        # Đi qua đúng bộ bóc mà production dùng: model hay bọc SQL trong hàng
-        # rào ```sql, và chấm chuỗi thô sẽ tính là lỗi cú pháp những câu vốn
-        # chạy tốt trong sản phẩm.
-        return _extract_sql(raw)
+        # Đi qua đúng CHUỖI hậu xử lý mà `sql_agent_node` dùng, cả hai
+        # bước. Bỏ sót một bước là đo một hệ thống không tồn tại: lần đầu
+        # tôi chỉ gọi `_extract_sql`, và lượt đo báo bản sửa bọc nháy
+        # "không ăn thua" trong khi nó chưa hề được chạy.
+        return requote_for_tables(_extract_sql(raw), ctx.tables)
 
     return generate
 

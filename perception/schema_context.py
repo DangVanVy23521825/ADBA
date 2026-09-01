@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from perception.connection_profile import ConnectionProfile
 from perception.render_schema import render_schema
 from perception.retrieval import Retriever, expand_by_foreign_keys
+from perception.schema_model import Table
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,12 @@ class SchemaContext:
     retrieved_tables: tuple[str, ...] = ()
     rendered_text: str = ""
     few_shots: tuple[dict, ...] = field(default_factory=tuple)
+    # Đúng lát schema đã kết xuất ra `rendered_text`, dưới dạng cấu trúc.
+    # Không mang thêm thông tin nào so với `rendered_text` — cùng bảng,
+    # cùng cột — nên nó KHÔNG mở kênh lộ dữ liệu mới; nó chỉ tránh cho nơi
+    # gọi phải phân tích ngược DDL để lấy lại thứ vừa được dựng ra.
+    # `sql_agent` cần nó để bọc nháy định danh (perception/sql_identifiers).
+    tables: tuple[Table, ...] = ()
 
 
 def resolve_schema_context(
@@ -79,8 +86,10 @@ def resolve_schema_context(
     # giữa các câu hỏi thì prefix caching mới dùng được.
     ordered = tuple(t.name for t in profile.tables if t.name in chosen)
 
+    sliced = tuple(by_name[n] for n in ordered)
     return SchemaContext(
         retrieved_tables=ordered,
-        rendered_text=render_schema([by_name[n] for n in ordered]),
+        rendered_text=render_schema(list(sliced)),
         few_shots=(),
+        tables=sliced,
     )

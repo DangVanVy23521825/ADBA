@@ -13,6 +13,7 @@ from graph.tools.sql_tool import TableNotPermittedError, execute_sql, explain_qu
 from graph.utils import append_trace, df_to_state
 from model.model_client import ModelClient
 from perception.schema_context import SchemaContext
+from perception.sql_identifiers import requote_for_tables
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +138,18 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
             logger.warning("SQL Agent attempt %d: %s", attempt, error_context)
             continue
 
-        sql = _extract_sql(raw)
+        # Bọc nháy định danh TRƯỚC khi log và trước khi chạy: log phải là
+        # đúng câu SQL được thực thi, nếu không thì đọc log đi chẩn lỗi sẽ
+        # thấy một câu khác câu đã hỏng.
+        #
+        # Cần bước này vì `render_schema` in DDL có nháy (`"MailStreet"`)
+        # mà model vẫn viết trần, rồi Postgres gấp thành `mailstreet` và
+        # câu hỏng. Quy tắc 11 của prompt chỉ giảm 6 lỗi xuống 5 trên mẫu 8
+        # câu BIRD — model 7B không tuân thủ ổn định.
+        #
+        # No-op trên schema toàn chữ thường (phần lớn khách hàng): điều
+        # kiện sửa là tên thật có ký tự hoa. Xem perception/sql_identifiers.
+        sql = requote_for_tables(_extract_sql(raw), schema_context.tables)
         logger.info("SQL Agent attempt %d:\n%s", attempt, sql)
 
         # ── Execution ────────────────────────────────────────────

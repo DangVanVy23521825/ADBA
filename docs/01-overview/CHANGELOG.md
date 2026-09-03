@@ -78,6 +78,7 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 **Tính năng mới**
 
+- mọi đường ra đi qua finalize, không còn END trần — `71b19c6` (2026-09-03, Đặng Văn Vỹ)
 - node finalize — thang success/partial/failed có lý do — `fc69ccb` (2026-09-01, Đặng Văn Vỹ)
 - ModelClient từ chối khởi động lời gọi không kịp deadline — `3c96a2c` (2026-09-01, Đặng Văn Vỹ)
 - trần cứng thay đếm retry — reflector 8→1, sql retry 3→2, trần 12 call — `2cf725e` (2026-09-01, Đặng Văn Vỹ)
@@ -242,10 +243,10 @@ Cập nhật `PRIMARY_MODEL` trong `.env`, `ollama pull <model>`, rồi chạy l
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `eaceedf` — fix(graph): đóng 2 lỗ hổng present-but-wrong-shape còn sót trong finalize |
+| Commit nguồn gần nhất | `71b19c6` — feat(graph): mọi đường ra đi qua finalize, không còn END trần |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-09-01 |
-| Số commit nguồn | 111 |
+| Ngày commit | 2026-09-03 |
+| Số commit nguồn | 112 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

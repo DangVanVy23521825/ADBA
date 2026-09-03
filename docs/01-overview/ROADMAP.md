@@ -202,6 +202,7 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Commit | Ngày | Tác giả | Nội dung |
 |---|---|---|---|
+| `71b19c6` | 2026-09-03 | Đặng Văn Vỹ | feat(graph): mọi đường ra đi qua finalize, không còn END trần |
 | `eaceedf` | 2026-09-01 | Đặng Văn Vỹ | fix(graph): đóng 2 lỗ hổng present-but-wrong-shape còn sót trong finalize |
 | `ac65f33` | 2026-09-01 | Đặng Văn Vỹ | fix(graph): finalize_node chịu được state None/sai kiểu, không ném lỗi |
 | `fc69ccb` | 2026-09-01 | Đặng Văn Vỹ | feat(graph): node finalize — thang success/partial/failed có lý do |
@@ -216,7 +217,6 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 | `8809e94` | 2026-09-01 | Đặng Văn Vỹ | docs(plan): cập nhật Plan B theo main hậu-merge Plan A |
 | `6af3233` | 2026-09-01 | Đặng Văn Vỹ | fix: dọn ba lỗ đã park từ review Plan A |
 | `03ab786` | 2026-08-27 | Đặng Văn Vỹ | test(onboard): fixture mật khẩu không còn giống bí mật thật |
-| `4601a03` | 2026-08-27 | Đặng Văn Vỹ | fix(perception): tên cột không mang nghĩa thì luôn low, bất kể model chấm gì |
 
 <!-- AUTO:end id=commit-history -->
 
@@ -224,10 +224,10 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `eaceedf` — fix(graph): đóng 2 lỗ hổng present-but-wrong-shape còn sót trong finalize |
+| Commit nguồn gần nhất | `71b19c6` — feat(graph): mọi đường ra đi qua finalize, không còn END trần |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-09-01 |
-| Số commit nguồn | 111 |
+| Ngày commit | 2026-09-03 |
+| Số commit nguồn | 112 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

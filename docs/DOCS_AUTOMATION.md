@@ -176,10 +176,10 @@ Marker có `id` không có generator sẽ được **giữ nguyên** kèm cảnh
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `eaceedf` — fix(graph): đóng 2 lỗ hổng present-but-wrong-shape còn sót trong finalize |
+| Commit nguồn gần nhất | `71b19c6` — feat(graph): mọi đường ra đi qua finalize, không còn END trần |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-09-01 |
-| Số commit nguồn | 111 |
+| Ngày commit | 2026-09-03 |
+| Số commit nguồn | 112 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

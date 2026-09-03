@@ -202,6 +202,7 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Commit | Ngày | Tác giả | Nội dung |
 |---|---|---|---|
+| `40c7214` | 2026-09-03 | Đặng Văn Vỹ | docs(eval): kết quả lượt đo tầng 2 đầu tiên, gồm phép quét k |
 | `87bac69` | 2026-09-03 | Đặng Văn Vỹ | feat(eval): cờ --k cho tầng 2, để đo ảnh hưởng của bề rộng context |
 | `a3682b8` | 2026-09-01 | Đặng Văn Vỹ | fix(sql): bỏ cả phần giải thích model viết SAU câu SQL |
 | `ee0c38a` | 2026-09-01 | Đặng Văn Vỹ | fix(sql): bộ bóc SQL cắt nhầm từ chữ 'with' trong văn xuôi |
@@ -216,7 +217,6 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 | `749bdd7` | 2026-08-23 | Đặng Văn Vỹ | fix(eval): resolve four BIRD loader bugs found against real Postgres |
 | `5433c78` | 2026-08-23 | Đặng Văn Vỹ | chore: ignore profile-noann (mốc đo, không phải nguồn) |
 | `1df5dd6` | 2026-08-23 | Đặng Văn Vỹ | fix(perception): chú giải lẫn chữ Hán bị hạ xuống low, vào hàng đợi duyệt |
-| `ff31b35` | 2026-08-23 | Đặng Văn Vỹ | feat(demo): Chinook làm schema demo phát hành lại được |
 
 <!-- AUTO:end id=commit-history -->
 
@@ -224,10 +224,10 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `87bac69` — feat(eval): cờ --k cho tầng 2, để đo ảnh hưởng của bề rộng context |
+| Commit nguồn gần nhất | `40c7214` — docs(eval): kết quả lượt đo tầng 2 đầu tiên, gồm phép quét k |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-03 |
-| Số commit nguồn | 105 |
+| Số commit nguồn | 106 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

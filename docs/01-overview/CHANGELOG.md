@@ -156,6 +156,7 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 **Tài liệu**
 
+- kết quả lượt đo tầng 2 đầu tiên, gồm phép quét k — `40c7214` (2026-09-03, Đặng Văn Vỹ)
 - sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO — `0e1f02d` (2026-08-19, Đặng Văn Vỹ)
 - Plan A — đường onboarding, 12 task — `4fd4557` (2026-08-16, Đặng Văn Vỹ)
 - lộ trình tới bản đóng gói giao khách — `f8fa0cb` (2026-08-16, Đặng Văn Vỹ)
@@ -236,10 +237,10 @@ Cập nhật `PRIMARY_MODEL` trong `.env`, `ollama pull <model>`, rồi chạy l
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `87bac69` — feat(eval): cờ --k cho tầng 2, để đo ảnh hưởng của bề rộng context |
+| Commit nguồn gần nhất | `40c7214` — docs(eval): kết quả lượt đo tầng 2 đầu tiên, gồm phép quét k |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-03 |
-| Số commit nguồn | 105 |
+| Số commit nguồn | 106 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

@@ -9,6 +9,7 @@ import logging
 import re
 from pathlib import Path
 
+from graph.budget import node_may_run
 from graph.state import MultiAgentState
 from graph.tools.python_tool import run_pandas_safe
 from graph.utils import append_trace, df_from_state, df_to_state, with_routing
@@ -50,6 +51,18 @@ def python_agent_node(state: MultiAgentState) -> MultiAgentState:
 
     Reads shared_dataframe from state. On failure retries once with error context.
     """
+    may_run, reason = node_may_run(state, "python")
+    if not may_run:
+        logger.warning("Python Agent: %s", reason)
+        return {
+            **state,
+            "current_agent": "python",
+            "completed_agents": state.get("completed_agents", []) + ["python"],
+            "degradation_reason": state.get("degradation_reason", []) + [reason],
+            "action_trace": append_trace(state, "python", "budget_check", reason, "error"),
+            "status": "running",
+        }
+
     step = _find_python_step(state)
     if step is None:
         logger.error("Python Agent: no python step in execution plan")
@@ -84,7 +97,7 @@ def python_agent_node(state: MultiAgentState) -> MultiAgentState:
     trace = append_trace(state, "python", "generate_code",
                          f"Task: {task} | cols: {columns}", "started")
 
-    client = ModelClient(agent_type="python")
+    client = ModelClient(agent_type="python", deadline_ts=state.get("deadline_ts"))
     error_context: str = ""
 
     for attempt in range(1, MAX_RETRIES + 1):
@@ -148,6 +161,7 @@ def python_agent_node(state: MultiAgentState) -> MultiAgentState:
             },
             "action_trace": trace,
             "status": "running",
+            "llm_calls_used": state.get("llm_calls_used", 0) + attempt,
         })
 
     # ── Exhausted retries ─────────────────────────────────────
@@ -173,4 +187,5 @@ def python_agent_node(state: MultiAgentState) -> MultiAgentState:
         },
         "action_trace": trace,
         "status": "running",
+        "llm_calls_used": state.get("llm_calls_used", 0) + MAX_RETRIES,
     }

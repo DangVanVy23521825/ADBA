@@ -125,7 +125,7 @@ def supervisor_node(state: MultiAgentState) -> MultiAgentState:
     trace = append_trace(state, "supervisor", "parse_intent",
                          f"Planning query: {query}", "started")
 
-    client = ModelClient(agent_type="supervisor")
+    client = ModelClient(agent_type="supervisor", deadline_ts=state.get("deadline_ts"))
     system_prompt = build_system_prompt(schema_context)
     last_exc: Exception | None = None
 

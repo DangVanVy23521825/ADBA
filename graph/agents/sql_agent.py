@@ -8,6 +8,7 @@ import logging
 import re
 from pathlib import Path
 
+from graph.budget import node_may_run
 from graph.state import MultiAgentState
 from graph.tools.sql_tool import TableNotPermittedError, execute_sql, explain_query_plan
 from graph.utils import append_trace, df_to_state, with_routing
@@ -109,6 +110,18 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
     Returns state with sql_result, shared_dataframe, and updated trace.
     On fatal failure sets status='failed' and populates last_error.
     """
+    may_run, reason = node_may_run(state, "sql")
+    if not may_run:
+        logger.warning("SQL Agent: %s", reason)
+        return {
+            **state,
+            "current_agent": "sql",
+            "completed_agents": state.get("completed_agents", []) + ["sql"],
+            "degradation_reason": state.get("degradation_reason", []) + [reason],
+            "action_trace": append_trace(state, "sql", "budget_check", reason, "error"),
+            "status": "running",
+        }
+
     step = _find_sql_step(state)
     if step is None:
         logger.error("SQL Agent: no sql step in execution plan")
@@ -125,7 +138,7 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
     trace = append_trace(state, "sql", "generate_sql",
                          f"Task: {task}", "started")
 
-    client = ModelClient(agent_type="sql")
+    client = ModelClient(agent_type="sql", deadline_ts=state.get("deadline_ts"))
     error_context: str = ""
 
     for attempt in range(1, MAX_RETRIES + 1):
@@ -204,6 +217,7 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
             },
             "action_trace": trace,
             "status": "running",
+            "llm_calls_used": state.get("llm_calls_used", 0) + attempt,
         })
 
     # ── Exhausted retries ─────────────────────────────────────
@@ -229,4 +243,5 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
         },
         "action_trace": trace,
         "status": "running",
+        "llm_calls_used": state.get("llm_calls_used", 0) + MAX_RETRIES,
     }

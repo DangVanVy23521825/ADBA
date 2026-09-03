@@ -8,6 +8,7 @@ import logging
 import re
 from pathlib import Path
 
+from graph.budget import node_may_run
 from graph.state import MultiAgentState
 from graph.tools.python_tool import run_chart_safe
 from graph.utils import append_trace, df_from_state, with_routing
@@ -46,6 +47,18 @@ def _find_viz_step(state: MultiAgentState) -> dict | None:
 
 def viz_agent_node(state: MultiAgentState) -> MultiAgentState:
     """Generate chart code via LLM → execute → return chart_b64 in state."""
+    may_run, reason = node_may_run(state, "viz")
+    if not may_run:
+        logger.warning("Viz Agent: %s", reason)
+        return {
+            **state,
+            "current_agent": "viz",
+            "completed_agents": state.get("completed_agents", []) + ["viz"],
+            "degradation_reason": state.get("degradation_reason", []) + [reason],
+            "action_trace": append_trace(state, "viz", "budget_check", reason, "error"),
+            "status": "running",
+        }
+
     step = _find_viz_step(state)
     if step is None:
         logger.error("Viz Agent: no viz step in execution plan")
@@ -73,7 +86,7 @@ def viz_agent_node(state: MultiAgentState) -> MultiAgentState:
     trace = append_trace(state, "viz", "generate_chart",
                          f"Task: {task}", "started")
 
-    client = ModelClient(agent_type="viz")
+    client = ModelClient(agent_type="viz", deadline_ts=state.get("deadline_ts"))
     error_context = ""
 
     for attempt in range(1, MAX_RETRIES + 1):
@@ -148,6 +161,7 @@ def viz_agent_node(state: MultiAgentState) -> MultiAgentState:
             },
             "action_trace": trace,
             "status": "running",
+            "llm_calls_used": state.get("llm_calls_used", 0) + attempt,
         })
 
     # ── Exhausted retries ──────────────────────────
@@ -170,4 +184,5 @@ def viz_agent_node(state: MultiAgentState) -> MultiAgentState:
                        "traceback": error_summary},
         "action_trace": trace,
         "status": "running",
+        "llm_calls_used": state.get("llm_calls_used", 0) + MAX_RETRIES,
     }

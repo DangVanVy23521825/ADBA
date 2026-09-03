@@ -69,3 +69,41 @@ def has_room_for(
 
 def calls_exhausted(llm_calls_used: int) -> bool:
     return llm_calls_used >= MAX_LLM_CALLS_PER_QUERY
+
+
+# Node nào được lấn vào phần dự trữ dành cho insight.
+#
+#   sql       — bắt buộc. Không có kết quả SQL thì không có gì để nhận xét,
+#               nên nó được lấn.
+#   insight   — chính là chủ của phần dự trữ, nên không tự trừ nó của mình.
+#   python/viz/reflector — bị cắt trước tiên. Người dùng mất biểu đồ nhưng
+#               vẫn nhận được bảng và nhận xét (spec 5.2).
+_MAY_USE_RESERVE = frozenset({"sql", "insight"})
+
+
+def node_may_run(state, agent: str) -> tuple[bool, str]:
+    """Node `agent` còn được phép chạy không, và nếu không thì vì sao.
+
+    `state` là MultiAgentState nhưng không annotate ở đây: module này nằm
+    dưới đáy cây phụ thuộc và import graph.state sẽ tạo vòng.
+
+    Đọc `state["_clock"]` nếu có — chỉ để test tiêm đồng hồ; production
+    không đặt khoá đó và rơi về time.time.
+    """
+    clock: Clock = state.get("_clock", time.time)
+    deadline_ts = state.get("deadline_ts", 0.0)
+
+    if calls_exhausted(state.get("llm_calls_used", 0)):
+        return False, (
+            f"Bỏ qua '{agent}': đã chạm trần "
+            f"{state.get('llm_calls_used', 0)} lời gọi model cho câu hỏi này."
+        )
+
+    reserve = 0.0 if agent in _MAY_USE_RESERVE else INSIGHT_RESERVE_S
+    if not has_room_for(deadline_ts, MODEL_CALL_ESTIMATE_S, reserve_s=reserve, clock=clock):
+        return False, (
+            f"Bỏ qua '{agent}': còn {time_left(deadline_ts, clock):.1f}s, "
+            f"không đủ ngân sách cho một lời gọi model"
+            + (f" mà không lấn vào {reserve:.0f}s dự trữ cho insight." if reserve else ".")
+        )
+    return True, ""

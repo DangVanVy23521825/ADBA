@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 
+from graph.budget import node_may_run
 from graph.state import MultiAgentState
 from graph.utils import append_trace
 from model.model_client import ModelClient
@@ -49,6 +50,18 @@ Output:
 
 def reflector_agent_node(state: MultiAgentState) -> MultiAgentState:
     """Diagnose the last error and produce a corrected context for the failed agent."""
+    may_run, reason = node_may_run(state, "reflector")
+    if not may_run:
+        logger.warning("Reflector Agent: %s", reason)
+        return {
+            **state,
+            "current_agent": "reflector",
+            "completed_agents": state.get("completed_agents", []) + ["reflector"],
+            "degradation_reason": state.get("degradation_reason", []) + [reason],
+            "action_trace": append_trace(state, "reflector", "budget_check", reason, "error"),
+            "status": "running",
+        }
+
     last_error = state.get("last_error") or {}
     failed_agent = last_error.get("agent", "unknown")
     error_message = last_error.get("traceback", str(last_error))
@@ -74,7 +87,7 @@ def reflector_agent_node(state: MultiAgentState) -> MultiAgentState:
                          f"Diagnosing {failed_agent}: {error_message[:100]}", "started")
 
     try:
-        client = ModelClient(agent_type="reflector")
+        client = ModelClient(agent_type="reflector", deadline_ts=state.get("deadline_ts"))
         diagnosis = client.invoke_json(
             system_prompt=system_prompt,
             user_prompt=error_message,
@@ -115,4 +128,5 @@ def reflector_agent_node(state: MultiAgentState) -> MultiAgentState:
         "shared_metadata": meta,
         "action_trace": trace,
         "status": "running",
+        "llm_calls_used": state.get("llm_calls_used", 0) + 1,
     }

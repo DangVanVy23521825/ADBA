@@ -8,6 +8,7 @@ import logging
 import json
 from pathlib import Path
 
+from graph.budget import node_may_run
 from graph.state import MultiAgentState
 from graph.utils import append_trace
 from model.model_client import ModelClient
@@ -29,6 +30,18 @@ def _find_insight_step(state: MultiAgentState) -> dict | None:
 
 def insight_agent_node(state: MultiAgentState) -> MultiAgentState:
     """Gather all agent outputs → call ModelClient.invoke_json() → validate InsightOutput."""
+    may_run, reason = node_may_run(state, "insight")
+    if not may_run:
+        logger.warning("Insight Agent: %s", reason)
+        return {
+            **state,
+            "current_agent": "insight",
+            "completed_agents": state.get("completed_agents", []) + ["insight"],
+            "degradation_reason": state.get("degradation_reason", []) + [reason],
+            "action_trace": append_trace(state, "insight", "budget_check", reason, "error"),
+            "status": "running",
+        }
+
     step = _find_insight_step(state)
     if step is None:
         logger.error("Insight Agent: no insight step in execution plan")
@@ -90,7 +103,7 @@ def insight_agent_node(state: MultiAgentState) -> MultiAgentState:
                          f"Query: {query}", "started")
 
     try:
-        client = ModelClient(agent_type="insight")
+        client = ModelClient(agent_type="insight", deadline_ts=state.get("deadline_ts"))
         raw = client.invoke_json(system_prompt=system_prompt, user_prompt=query)
 
         # Pydantic validation
@@ -114,6 +127,7 @@ def insight_agent_node(state: MultiAgentState) -> MultiAgentState:
             },
             "action_trace": trace,
             "status": "success",
+            "llm_calls_used": state.get("llm_calls_used", 0) + 1,
         }
 
     except Exception as exc:
@@ -140,4 +154,5 @@ def insight_agent_node(state: MultiAgentState) -> MultiAgentState:
             },
             "action_trace": trace,
             "status": "failed",
+            "llm_calls_used": state.get("llm_calls_used", 0) + 1,
         }

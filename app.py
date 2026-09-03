@@ -205,6 +205,17 @@ def _display_result(result: MultiAgentState) -> None:
     """Display all result sections from a completed run."""
     st.divider()
 
+    # ── Trạng thái và lý do bị cắt ──
+    status = result.get("status", "unknown")
+    reasons = result.get("degradation_reason") or []
+    if status == "partial":
+        st.warning(
+            "**Kết quả một phần.** " + " ".join(reasons)
+            + "\n\nPhần hiển thị bên dưới là những gì chạy xong trong ngân sách thời gian."
+        )
+    elif status == "failed" and reasons:
+        st.error("**Không hoàn thành.** " + " ".join(reasons))
+
     # ── Execution Plan ──
     plan = result.get("execution_plan")
     if plan:
@@ -352,3 +363,4 @@ with st.sidebar:
         st.metric("Status", result.get("status", "unknown"))
         st.metric("Agents Completed", len(result.get("completed_agents", [])))
         st.metric("Errors", result.get("error_count", 0))
+        st.metric("Lời gọi model", result.get("llm_calls_used", 0))

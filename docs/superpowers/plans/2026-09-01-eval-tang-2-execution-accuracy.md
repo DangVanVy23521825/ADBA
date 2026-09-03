@@ -1,6 +1,6 @@
 # Eval tầng 2 — execution accuracy
 
-**Trạng thái:** phác thảo, chưa hiện thực.
+**Trạng thái:** đã hiện thực (`eval/tier2_execution.py`). Kết quả lượt đo đầu ở mục 9.
 **Vì sao bây giờ:** không có nó thì few-shot, retriever embedding, hay bất
 cứ cải tiến nào về *chất lượng SQL* đều không kiểm chứng được.
 
@@ -216,3 +216,61 @@ là proxy, không phải thẩm phán.
 
 **Không đo được thứ khách thật sự hỏi.** Golden set là câu hỏi ai đó nghĩ
 ra trước, không phải câu hỏi phát sinh trong công việc.
+
+
+---
+
+## 9. Kết quả lượt đo đầu (2026-09-03)
+
+50 câu đầu của `golden_all.jsonl`, đều thuộc `california_schools`. **Không
+phải mẫu ngẫu nhiên** — mọi số dưới đây chỉ nói về một database.
+
+| Cấu hình | recall chọn bảng | bảng/context | exec accuracy | khớp |
+|---|---|---|---|---|
+| `bird_all` 75 bảng, k=3 | 0.760 | 6.6 | 0.071 | 3 |
+| `bird_all` 75 bảng, k=8 | 0.920 | 16.8 | 0.071 | 3 |
+| `bird_all` 75 bảng, **k=6** | 0.920 | 12.4 | **0.143** | 6 |
+| `bird_ca_schools` 3 bảng | — | 3 | **0.238** | 10 |
+
+**Sàn nhiễu gần bằng 0.** Ba lượt độc lập ở k=8 cho đúng 3 khớp cả ba lần
+(`AGENT_TEMPERATURES["sql"] = 0.0`). Nên mọi khác biệt trong bảng trên đều
+thật, và thiết kế so-theo-cặp ở mục 7.2 có độ nhạy rất cao.
+
+### Ba điều bảng này nói
+
+**1. Nhiễu trong context có hại ngay cả khi không thiếu gì.** k=6 và k=8 có
+recall Y HỆT (0.920) — thông tin cần thiết luôn có mặt ở cả hai. Chỉ bớt 4
+bảng thừa mà độ chính xác gấp đôi. Khớp với phân loại lỗi: model lấy cột
+CÓ THẬT nhưng gán cho nhầm bảng, đúng thứ xảy ra khi nhiều bảng chia nhau
+những tên cột giống nhau.
+
+**2. Có một đỉnh, không phải một chiều.** k=3 rơi về 0.071 vì recall tụt
+xuống 0.760 — mất bảng đắt đúng bằng cái lợi từ bớt nhiễu.
+
+**3. k không phải lõi.** Cấu hình retrieval tốt nhất (0.143) vẫn thua xa
+một database đơn lẻ (0.238). Chỉnh k lấy lại một nửa khoảng cách. Cái chi
+phối là BỀ RỘNG SCHEMA; k chỉ điều tiết chứ không xoá được.
+
+### Hệ quả sản phẩm chưa thực hiện
+
+Hạ mặc định `k` từ 8 xuống 6. Recall không đổi, độ chính xác gấp đôi. CHƯA
+làm vì căn cứ là 50 câu trên một database, và đường cong recall-theo-k phụ
+thuộc bộ dữ liệu — cần thêm ít nhất một database nữa trước khi đổi mặc
+định cho mọi khách hàng.
+
+### Điều KHÔNG kết luận được
+
+Vì sao 0.238 vẫn thấp. Chưa đo model nào khác 7B, nên "đây là trần của
+model" là GIẢ THUYẾT, không phải kết quả. Giờ đã có thước đo để kiểm nó.
+
+Và toàn bộ số ở đây là **tiếng Anh**. Chưa nói gì về đường tiếng Việt —
+xem mục 7.4 cho thiết kế thí nghiệm ngôn ngữ.
+
+### Ba lỗi sản phẩm mà chính lượt đo này tìm ra
+
+Không lỗi nào lộ ra ở 656 test đơn vị; cả ba chỉ hiện khi chạy thật trên
+schema thật.
+
+1. Định danh giữ hoa thường bị Postgres gấp sai → `perception/sql_identifiers.py`
+2. Bộ bóc SQL cắt từ chữ "with" trong văn xuôi → 8/18 ca lỗi, không phải model sai
+3. Bộ bóc nuốt cả phần giải thích SAU câu SQL → lỗi cú pháp 8 → 0

@@ -10,6 +10,7 @@ from collections import defaultdict, deque
 from typing import Any
 
 from graph.budget import calls_exhausted
+from graph.errors import PLANNING_FAILURE
 from graph.state import MultiAgentState
 from graph.utils import append_trace
 from model.model_client import ModelClient
@@ -175,7 +176,7 @@ def supervisor_node(state: MultiAgentState) -> MultiAgentState:
                 },
                 "last_error": {
                     "agent": "supervisor",
-                    "error_type": "planning_failure",
+                    "error_type": PLANNING_FAILURE,
                     "traceback": error_msg,
                 },
                 "action_trace": trace,

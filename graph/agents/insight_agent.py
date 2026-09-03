@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 
 from graph.budget import node_may_run
+from graph.errors import INSIGHT_GENERATION
 from graph.state import MultiAgentState
 from graph.utils import append_trace
 from model.model_client import ModelClient
@@ -149,7 +150,7 @@ def insight_agent_node(state: MultiAgentState) -> MultiAgentState:
             },
             "last_error": {
                 "agent": "insight",
-                "error_type": "insight_generation_failure",
+                "error_type": INSIGHT_GENERATION,
                 "traceback": error_msg,
             },
             "action_trace": trace,

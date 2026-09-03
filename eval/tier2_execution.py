@@ -496,6 +496,8 @@ def main() -> None:
     ap.add_argument("--dsn", help="DSN Postgres; mặc định lấy POSTGRES_URL/DATABASE_URL")
     ap.add_argument("--limit", type=int,
                     help="chỉ chấm N câu đầu (lượt chạy đầy đủ tốn vài giờ)")
+    ap.add_argument("--k", type=int, default=8,
+                    help="số bảng retriever chọn trước khi mở rộng theo khoá ngoại")
     ap.add_argument("--timeout-s", type=int, default=30)
     ap.add_argument("--max-rows", type=int, default=10_000)
     ap.add_argument("--json", type=Path, help="ghi báo cáo dạng JSON ra đây")
@@ -521,12 +523,12 @@ def main() -> None:
         records = records[: args.limit]
 
     print(f"{len(records)} câu, {len(profile.tables)} bảng, "
-          f"schema_mode={profile.schema_mode}", flush=True)
+          f"schema_mode={profile.schema_mode}, k={args.k}", flush=True)
 
     conn = psycopg2.connect(dsn)
     try:
         execute = make_executor(conn, timeout_s=args.timeout_s, max_rows=args.max_rows)
-        report = measure_execution(records, _generator(profile), execute)
+        report = measure_execution(records, _generator(profile, k=args.k), execute)
     finally:
         conn.close()
 
@@ -562,7 +564,7 @@ def main() -> None:
         )
 
 
-def _generator(profile) -> Callable[[EvalRecord], str]:
+def _generator(profile, k: int = 8) -> Callable[[EvalRecord], str]:
     """Sinh SQL qua đúng đường mà production dùng.
 
     Nhập bên trong hàm chứ không ở đầu file: `measure_execution` và toàn bộ
@@ -589,7 +591,8 @@ def _generator(profile) -> Callable[[EvalRecord], str]:
     retriever = LexicalRetriever(profile.tables)
 
     def generate(rec: EvalRecord) -> str:
-        ctx = resolve_schema_context(profile, rec.question, permitted, retriever=retriever)
+        ctx = resolve_schema_context(profile, rec.question, permitted,
+                                     retriever=retriever, k=k)
         raw = client.invoke(build_system_prompt(ctx), f"Task: {rec.question}")
         # Đi qua đúng CHUỖI hậu xử lý mà `sql_agent_node` dùng, cả hai
         # bước. Bỏ sót một bước là đo một hệ thống không tồn tại: lần đầu

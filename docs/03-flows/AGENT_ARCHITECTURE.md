@@ -308,8 +308,9 @@ Ba điều đáng đọc kỹ:
 | `tests/unit/test_sql_tool_guard.py` | 22 |
 | `tests/unit/test_supervisor.py` | 15 |
 | `tests/unit/test_tier1_recall.py` | 9 |
+| `tests/unit/test_trace_jsonl.py` | 10 |
 | `tests/unit/test_viz_agent.py` | 11 |
-| **Tổng** | **611** |
+| **Tổng** | **621** |
 
 <!-- AUTO:end id=tests -->
 
@@ -334,10 +335,10 @@ Ba điều đáng đọc kỹ:
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `0ba85e1` — feat(budget): cấp phát theo dự trữ — python/viz bị cắt trước, insight được bảo vệ |
+| Commit nguồn gần nhất | `ddaeb5a` — feat(trace): query_id + ngân sách trong trace, ghi JSONL; nhãn lỗi một nguồn |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-03 |
-| Số commit nguồn | 113 |
+| Số commit nguồn | 114 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

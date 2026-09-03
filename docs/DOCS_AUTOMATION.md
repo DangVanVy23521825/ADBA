@@ -176,10 +176,10 @@ Marker có `id` không có generator sẽ được **giữ nguyên** kèm cảnh
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `0ba85e1` — feat(budget): cấp phát theo dự trữ — python/viz bị cắt trước, insight được bảo vệ |
+| Commit nguồn gần nhất | `ddaeb5a` — feat(trace): query_id + ngân sách trong trace, ghi JSONL; nhãn lỗi một nguồn |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-03 |
-| Số commit nguồn | 113 |
+| Số commit nguồn | 114 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

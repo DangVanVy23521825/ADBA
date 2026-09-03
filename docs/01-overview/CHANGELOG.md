@@ -78,6 +78,7 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 **Tính năng mới**
 
+- query_id + ngân sách trong trace, ghi JSONL; nhãn lỗi một nguồn — `ddaeb5a` (2026-09-03, Đặng Văn Vỹ)
 - cấp phát theo dự trữ — python/viz bị cắt trước, insight được bảo vệ — `0ba85e1` (2026-09-03, Đặng Văn Vỹ)
 - mọi đường ra đi qua finalize, không còn END trần — `71b19c6` (2026-09-03, Đặng Văn Vỹ)
 - node finalize — thang success/partial/failed có lý do — `fc69ccb` (2026-09-01, Đặng Văn Vỹ)
@@ -244,10 +245,10 @@ Cập nhật `PRIMARY_MODEL` trong `.env`, `ollama pull <model>`, rồi chạy l
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `0ba85e1` — feat(budget): cấp phát theo dự trữ — python/viz bị cắt trước, insight được bảo vệ |
+| Commit nguồn gần nhất | `ddaeb5a` — feat(trace): query_id + ngân sách trong trace, ghi JSONL; nhãn lỗi một nguồn |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-03 |
-| Số commit nguồn | 113 |
+| Số commit nguồn | 114 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

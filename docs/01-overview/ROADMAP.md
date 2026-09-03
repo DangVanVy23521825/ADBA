@@ -202,6 +202,7 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Commit | Ngày | Tác giả | Nội dung |
 |---|---|---|---|
+| `ddaeb5a` | 2026-09-03 | Đặng Văn Vỹ | feat(trace): query_id + ngân sách trong trace, ghi JSONL; nhãn lỗi một nguồn |
 | `0ba85e1` | 2026-09-03 | Đặng Văn Vỹ | feat(budget): cấp phát theo dự trữ — python/viz bị cắt trước, insight được bảo vệ |
 | `71b19c6` | 2026-09-03 | Đặng Văn Vỹ | feat(graph): mọi đường ra đi qua finalize, không còn END trần |
 | `eaceedf` | 2026-09-01 | Đặng Văn Vỹ | fix(graph): đóng 2 lỗ hổng present-but-wrong-shape còn sót trong finalize |
@@ -216,7 +217,6 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 | `05b24f0` | 2026-09-01 | Đặng Văn Vỹ | fix(sql): fail closed, statement_timeout 30s→10s, trần 50k dòng |
 | `55aba8e` | 2026-09-01 | Đặng Văn Vỹ | fix(sandbox): spawn + env rỗng — ranh giới là tiến trình, không phải namespace |
 | `8809e94` | 2026-09-01 | Đặng Văn Vỹ | docs(plan): cập nhật Plan B theo main hậu-merge Plan A |
-| `6af3233` | 2026-09-01 | Đặng Văn Vỹ | fix: dọn ba lỗ đã park từ review Plan A |
 
 <!-- AUTO:end id=commit-history -->
 
@@ -224,10 +224,10 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `0ba85e1` — feat(budget): cấp phát theo dự trữ — python/viz bị cắt trước, insight được bảo vệ |
+| Commit nguồn gần nhất | `ddaeb5a` — feat(trace): query_id + ngân sách trong trace, ghi JSONL; nhãn lỗi một nguồn |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-03 |
-| Số commit nguồn | 113 |
+| Số commit nguồn | 114 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

@@ -249,7 +249,7 @@ riêng qua MCP, và egress bị chặn ở tầng mạng. Chi tiết:
 | `data` | 16 | 1 | 84.504 | DDL 3 domain, seed, và dataset huấn luyện/đánh giá (JSONL) |
 | `docker-compose.yml` | 1 | 0 | 21 | — |
 | `docs` | 19 | 0 | — | Bộ tài liệu dự án (chính file này) |
-| `eval` | 14 | 10 | 3.396 | Runner đo baseline / PEFT và so sánh hai lần chạy |
+| `eval` | 14 | 10 | 3.399 | Runner đo baseline / PEFT và so sánh hai lần chạy |
 | `graph` | 16 | 16 | 2.173 | LangGraph: state, các node agent, và tool thực thi |
 | `model` | 3 | 3 | 374 | ModelClient (Ollama local-first, fallback OpenAI) + tham số theo agent |
 | `onboard.py` | 1 | 1 | 1.012 | — |
@@ -324,10 +324,10 @@ kèm giá trị thật; `env.example` là bản mẫu.
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `a3682b8` — fix(sql): bỏ cả phần giải thích model viết SAU câu SQL |
+| Commit nguồn gần nhất | `87bac69` — feat(eval): cờ --k cho tầng 2, để đo ảnh hưởng của bề rộng context |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-09-01 |
-| Số commit nguồn | 104 |
+| Ngày commit | 2026-09-03 |
+| Số commit nguồn | 105 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

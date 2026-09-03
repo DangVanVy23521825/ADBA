@@ -78,6 +78,7 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 **Tính năng mới**
 
+- cờ --k cho tầng 2, để đo ảnh hưởng của bề rộng context — `87bac69` (2026-09-03, Đặng Văn Vỹ)
 - dịch SQL vàng SQLite sang Postgres, mở BIRD cho tầng 2 — `eb65083` (2026-09-01, Đặng Văn Vỹ)
 - tầng 2 — execution accuracy — `d7783b6` (2026-09-01, Đặng Văn Vỹ)
 - Chinook làm schema demo phát hành lại được — `ff31b35` (2026-08-23, Đặng Văn Vỹ)
@@ -235,10 +236,10 @@ Cập nhật `PRIMARY_MODEL` trong `.env`, `ollama pull <model>`, rồi chạy l
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `a3682b8` — fix(sql): bỏ cả phần giải thích model viết SAU câu SQL |
+| Commit nguồn gần nhất | `87bac69` — feat(eval): cờ --k cho tầng 2, để đo ảnh hưởng của bề rộng context |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-09-01 |
-| Số commit nguồn | 104 |
+| Ngày commit | 2026-09-03 |
+| Số commit nguồn | 105 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

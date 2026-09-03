@@ -22,8 +22,6 @@ import pytest
 # Project root on sys.path (same pattern used by all scripts in this repo)
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from langgraph.graph import END
-
 from graph.agents.supervisor import build_system_prompt, route_next_agent, supervisor_node
 from graph.state import MultiAgentState, make_initial_state
 from perception.schema_context import SchemaContext
@@ -124,12 +122,12 @@ class TestRouteNextAgent:
     # 7. Plan with all agents completed → END
     def test_all_completed_routes_to_end(self):
         s = _state(PLAN_SIMPLE, completed=["sql", "insight"])
-        assert route_next_agent(s) == END
+        assert route_next_agent(s) == "finalize"
 
     # 8. Failed status → END regardless of plan
     def test_failed_status_routes_to_end(self):
         s = _state(PLAN_COMPLEX, status="failed")
-        assert route_next_agent(s) == END
+        assert route_next_agent(s) == "finalize"
 
     # 9. Agent error count >= 3 → reflector
     def test_error_limit_triggers_reflector(self):
@@ -139,7 +137,7 @@ class TestRouteNextAgent:
     # 10. Empty plan → END
     def test_empty_plan_routes_to_end(self):
         s = _state(plan=[], completed=[])
-        assert route_next_agent(s) == END
+        assert route_next_agent(s) == "finalize"
 
     # 11. Fresh failure wave but reflector budget exhausted → END (stuck specialist)
     #
@@ -172,7 +170,7 @@ class TestRouteNextAgent:
                 "reflect_passes_per_agent": {"sql": MAX_REFLECTOR_PASSES_PER_AGENT},
             },
         )
-        assert route_next_agent(s) == END
+        assert route_next_agent(s) == "finalize"
 
 
 # ── Supervisor node tests ─────────────────────────────────────────────────────

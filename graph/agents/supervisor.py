@@ -331,11 +331,9 @@ def route_next_agent(state: MultiAgentState) -> str:
 
 def route_reflector_return(state: MultiAgentState) -> str:
     """After reflector diagnoses, route back to the failed agent."""
-    from langgraph.graph import END
-
     last_error = state.get("last_error") or {}
     failed_agent = last_error.get("agent", "")
     if failed_agent in {"sql", "python", "viz", "insight"}:
         return failed_agent
-    logger.warning("Reflector: no valid agent target → END")
-    return END
+    logger.warning("Reflector: no valid agent target → finalize")
+    return "finalize"

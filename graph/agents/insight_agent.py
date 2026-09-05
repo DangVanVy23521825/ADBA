@@ -8,7 +8,7 @@ import logging
 import json
 from pathlib import Path
 
-from graph.budget import node_may_run
+from graph.budget import calls_remaining, node_may_run
 from graph.errors import BUDGET_EXCEEDED, INSIGHT_GENERATION, MISSING_STEP
 from graph.state import MultiAgentState
 from graph.utils import append_trace
@@ -108,7 +108,11 @@ def insight_agent_node(state: MultiAgentState) -> MultiAgentState:
     # model/model_client.py::ModelClient.__init__) — nếu client chỉ tồn
     # tại trong try, nhánh except tham chiếu nó sẽ NameError khi client
     # chưa kịp gán.
-    client = ModelClient(agent_type="insight", deadline_ts=state.get("deadline_ts"))
+    client = ModelClient(
+        agent_type="insight",
+        deadline_ts=state.get("deadline_ts"),
+        call_budget_remaining=calls_remaining(state.get("llm_calls_used", 0)),
+    )
     try:
         raw = client.invoke_json(system_prompt=system_prompt, user_prompt=query)
 

@@ -9,7 +9,7 @@ import re
 import time
 from pathlib import Path
 
-from graph.budget import clamped_tool_timeout_s, node_may_run
+from graph.budget import calls_remaining, clamped_tool_timeout_s, node_may_run
 from graph.errors import BUDGET_EXCEEDED, CHART_ERROR, MISSING_DATA, MISSING_STEP
 from graph.state import MultiAgentState
 from graph.tools.python_tool import CHART_EXEC_TIMEOUT_SECONDS, run_chart_safe
@@ -89,7 +89,11 @@ def viz_agent_node(state: MultiAgentState) -> MultiAgentState:
                          f"Task: {task}", "started")
     state = {**state, "action_trace": trace}
 
-    client = ModelClient(agent_type="viz", deadline_ts=state.get("deadline_ts"))
+    client = ModelClient(
+        agent_type="viz",
+        deadline_ts=state.get("deadline_ts"),
+        call_budget_remaining=calls_remaining(state.get("llm_calls_used", 0)),
+    )
     error_context = ""
 
     # Nhãn cho đường thất bại — xem nhánh BudgetExceededError bên dưới.

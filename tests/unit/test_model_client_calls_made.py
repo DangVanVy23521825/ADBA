@@ -28,7 +28,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from model.model_client import ModelClient
+from model.model_client import BudgetExceededError, ModelClient
 
 
 def test_one_successful_call_counts_as_one():
@@ -123,11 +123,39 @@ def test_a_budget_exceeded_refusal_makes_no_real_call():
     """`_assert_budget()` chặn TRƯỚC khi bất kỳ lời gọi mạng nào xảy ra —
     calls_made phải là 0, không phải 1, vì không lời gọi thật nào đã xảy
     ra để đếm."""
-    from model.model_client import BudgetExceededError
-
     with patch("model.model_client.ollama.Client"):
         client = ModelClient(agent_type="sql", deadline_ts=900.0, clock=lambda: 1000.0)
         with pytest.raises(BudgetExceededError):
             client.invoke("s", "u")
 
     assert client.calls_made == 0
+
+
+def test_call_budget_blocks_internal_retry_before_next_network_call():
+    """Regression cho ca state đang ở 11/12.
+
+    Trước bản vá, router/node entry cho node chạy vì 11 < 12, nhưng một
+    `client.invoke()` vẫn có thể tự retry Ollama 3 lần bên trong và biến
+    tổng thật thành 14/12 trước khi state được cộng `calls_made`.
+    """
+    with patch("model.model_client.ollama.Client") as fake, \
+         patch("model.model_client.time.sleep"):
+        fake.return_value.chat.side_effect = RuntimeError("Ollama transient")
+        client = ModelClient(agent_type="viz", call_budget_remaining=1)
+
+        with pytest.raises(BudgetExceededError, match="quota"):
+            client.invoke("s", "u")
+
+    assert client.calls_made == 1
+    assert fake.return_value.chat.call_count == 1
+
+
+def test_call_budget_zero_refuses_before_any_network_call():
+    with patch("model.model_client.ollama.Client") as fake:
+        client = ModelClient(agent_type="sql", call_budget_remaining=0)
+
+        with pytest.raises(BudgetExceededError, match="quota"):
+            client.invoke("s", "u")
+
+    assert client.calls_made == 0
+    fake.return_value.chat.assert_not_called()

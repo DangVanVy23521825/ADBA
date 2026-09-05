@@ -17,6 +17,7 @@ from graph.budget import (
     MAX_LLM_CALLS_PER_QUERY,
     MODEL_CALL_ESTIMATE_S,
     calls_exhausted,
+    calls_remaining,
     clamped_tool_timeout_s,
     has_room_for,
     is_expired,
@@ -146,6 +147,12 @@ def test_calls_not_exhausted_below_the_ceiling():
 
 def test_calls_exhausted_at_the_ceiling():
     assert calls_exhausted(12) is True
+
+
+def test_calls_remaining_never_goes_negative():
+    assert calls_remaining(11) == 1
+    assert calls_remaining(12) == 0
+    assert calls_remaining(99) == 0
 
 
 # ── query_id ────────────────────────────────────────────────────────────────

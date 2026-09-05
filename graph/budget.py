@@ -83,6 +83,11 @@ def calls_exhausted(llm_calls_used: int) -> bool:
     return llm_calls_used >= MAX_LLM_CALLS_PER_QUERY
 
 
+def calls_remaining(llm_calls_used: int) -> int:
+    """Số lời gọi model còn được khởi động trong lượt truy vấn này."""
+    return max(0, MAX_LLM_CALLS_PER_QUERY - llm_calls_used)
+
+
 def clamped_tool_timeout_s(
     deadline_ts: float | None,
     configured_s: float,

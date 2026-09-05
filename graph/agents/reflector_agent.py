@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 
-from graph.budget import node_may_run
+from graph.budget import calls_remaining, node_may_run
 from graph.state import MultiAgentState
 from graph.utils import append_trace
 from model.model_client import ModelClient
@@ -89,7 +89,11 @@ def reflector_agent_node(state: MultiAgentState) -> MultiAgentState:
     # Dựng NGOÀI try — cả nhánh thành công lẫn nhánh fallback bên dưới đều
     # hội tụ về CÙNG một return, đọc `client.calls_made` (xem ghi chú ở
     # model/model_client.py::ModelClient.__init__).
-    client = ModelClient(agent_type="reflector", deadline_ts=state.get("deadline_ts"))
+    client = ModelClient(
+        agent_type="reflector",
+        deadline_ts=state.get("deadline_ts"),
+        call_budget_remaining=calls_remaining(state.get("llm_calls_used", 0)),
+    )
     try:
         diagnosis = client.invoke_json(
             system_prompt=system_prompt,

@@ -9,7 +9,7 @@ from pathlib import Path
 from collections import defaultdict, deque
 from typing import Any
 
-from graph.budget import calls_exhausted
+from graph.budget import calls_exhausted, calls_remaining
 from graph.errors import PLANNING_FAILURE
 from graph.state import MultiAgentState
 from graph.utils import append_trace
@@ -126,7 +126,11 @@ def supervisor_node(state: MultiAgentState) -> MultiAgentState:
     trace = append_trace(state, "supervisor", "parse_intent",
                          f"Planning query: {query}", "started")
 
-    client = ModelClient(agent_type="supervisor", deadline_ts=state.get("deadline_ts"))
+    client = ModelClient(
+        agent_type="supervisor",
+        deadline_ts=state.get("deadline_ts"),
+        call_budget_remaining=calls_remaining(state.get("llm_calls_used", 0)),
+    )
     system_prompt = build_system_prompt(schema_context)
     last_exc: Exception | None = None
 

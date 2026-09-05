@@ -94,6 +94,7 @@ class ModelClient:
         enable_openai_fallback: bool | None = None,
         openai_model: str | None = None,
         deadline_ts: float | None = None,
+        call_budget_remaining: int | None = None,
         clock: Clock = time.time,
     ) -> None:
         self.agent_type = agent_type
@@ -164,6 +165,7 @@ class ModelClient:
         self.fallback_agents = {"supervisor", "sql"}
 
         self.deadline_ts = deadline_ts
+        self.call_budget_remaining = call_budget_remaining
         self.clock = clock
 
         # Đếm SỐ LỜI GỌI MẠNG THẬT — không phải số vòng lặp. Cộng dồn cho
@@ -198,6 +200,26 @@ class ModelClient:
     # trả về 0 khi deadline đã cận, và `timeout=0` với httpx nghĩa là hỏng
     # ngay lập tức — biến một lời gọi lẽ ra vẫn kịp thành một lỗi giả.
     _MIN_HTTP_TIMEOUT_S = 1.0
+
+    def _assert_call_budget(self) -> None:
+        """Refuse before the next real network call would exceed the query cap.
+
+        `llm_calls_used` lives in LangGraph state and only updates when a node
+        returns. Internal retries happen inside this object, so the hard cap
+        must also be checked here, immediately before each Ollama/OpenAI
+        request.
+        """
+        if self.call_budget_remaining is None:
+            return
+        if self.calls_made >= self.call_budget_remaining:
+            from graph.budget import MAX_LLM_CALLS_PER_QUERY
+
+            raise BudgetExceededError(
+                f"Không khởi động lời gọi model cho agent '{self.agent_type}': "
+                f"đã dùng hết quota còn lại ({self.calls_made}/"
+                f"{self.call_budget_remaining}) trong trần "
+                f"{MAX_LLM_CALLS_PER_QUERY} lời gọi/câu hỏi."
+            )
 
     def _chat_once_ollama(self, messages: list[dict[str, str]], timeout_s: float) -> str:
         # Client dựng THEO TỪNG LỜI GỌI, với timeout thật đẩy xuống httpx.
@@ -266,6 +288,7 @@ class ModelClient:
             # Cộng dồn NGAY TRƯỚC lời gọi thật, không phải sau khi biết kết
             # quả — một lần thử timeout/lỗi vẫn là MỘT lời gọi mạng đã xảy
             # ra, dù nó không trả về gì dùng được.
+            self._assert_call_budget()
             self.calls_made += 1
             try:
                 out = self._chat_once_ollama(messages, budget)
@@ -307,6 +330,7 @@ class ModelClient:
         # nơi nào đếm nó vào `llm_calls_used`, nên trần 12 lời gọi/câu hỏi
         # (spec 5.4) không tính tới nó dù nó tốn tiền thật và thời gian
         # thật giống hệt một lời gọi Ollama.
+        self._assert_call_budget()
         self.calls_made += 1
         response = client.chat.completions.create(
             model=self.openai_model,
@@ -399,4 +423,3 @@ class ModelClient:
             raise ValueError(
                 f"Failed to parse JSON from model output: {exc}. Raw output: {raw[:300]}"
             ) from exc
-

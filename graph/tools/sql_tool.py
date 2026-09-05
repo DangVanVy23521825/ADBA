@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import uuid
 from typing import Any
 
 import pandas as pd
@@ -20,7 +21,31 @@ from perception.sql_tables import tables_in_sql
 
 logger = logging.getLogger(__name__)
 
-SQL_TIMEOUT_MS = int(os.getenv("SQL_TIMEOUT_MS", "30000"))
+# 10s, không phải 30s: trần này nằm BÊN TRONG ngân sách wall-clock 45s
+# (spec mục 5). Một câu truy vấn chạy quá 10 giây trên schema BI cỡ này
+# gần như luôn là join sai, và để nó chạy tiếp chỉ ăn hết phần thời gian
+# lẽ ra dành cho bước insight.
+SQL_TIMEOUT_MS = int(os.getenv("SQL_TIMEOUT_MS", "10000"))
+
+# Trần dòng nạp về client. statement_timeout không cứu được trường hợp này:
+# Postgres trả dòng đúng hạn, chỗ chết là phía client nạp trọn result set
+# vào RAM. Một SELECT * trên bảng chục triệu dòng làm sập tiến trình trước
+# khi có ai kịp báo lỗi.
+SQL_MAX_ROWS = int(os.getenv("SQL_MAX_ROWS", "50000"))
+
+# Số dòng psycopg2 kéo về mỗi lượt FETCH trên cursor phía server. Đây là
+# đơn vị RAM thật của một lời gọi: bộ nhớ đỉnh xấp xỉ `itersize` dòng, chứ
+# không phải cả result set. 2000 là mặc định của psycopg2 — giữ nguyên,
+# đủ nhỏ để an toàn và đủ lớn để không biến một lần đọc 50k dòng thành 50
+# nghìn vòng round-trip.
+SQL_STREAM_ITERSIZE = int(os.getenv("SQL_STREAM_ITERSIZE", "2000"))
+
+# psycopg2.connect() không có trần thời gian mặc định — một mạng hỏng hay
+# Postgres không phản hồi làm nó treo vô hạn, ngoài tầm với của
+# statement_timeout (cái đó chỉ có hiệu lực SAU khi kết nối đã mở).
+# `connect_timeout` là tham số libpq, đơn vị giây, kiểu int — 0 hoặc âm
+# nghĩa là TẮT trần, nên bên gọi không bao giờ được truyền xuống 0.
+SQL_CONNECT_TIMEOUT_S = int(os.getenv("SQL_CONNECT_TIMEOUT_S", "5"))
 
 # Guards against injection via f-string table-name interpolation.
 _TABLE_NAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
@@ -108,23 +133,68 @@ def execute_sql(
     user: str,
     params: tuple | None = None,
     timeout_ms: int = SQL_TIMEOUT_MS,
+    max_rows: int = SQL_MAX_ROWS,
+    connect_timeout_s: int = SQL_CONNECT_TIMEOUT_S,
 ) -> pd.DataFrame:
     """Chạy một câu SELECT, trả DataFrame.
 
     Kiểm quyền trước khi mở kết nối. Không có tham số nào cho phép bên gọi
     nới rộng tập bảng được chạm (spec tiêu chí 11).
+
+    Kết quả bị cắt ở `max_rows`. Cờ `truncated` đi qua `df.attrs` chứ không
+    qua kiểu trả về: đổi kiểu trả về sẽ buộc sql_agent, app.py và toàn bộ
+    test hiện có phải sửa, đổi lấy một bit thông tin.
+
+    Dòng chảy về qua CURSOR PHÍA SERVER (`conn.cursor(name=...)`), không
+    phải cursor mặc định. Khác biệt không phải chuyện phong cách: cursor
+    mặc định của psycopg2 là client-side, `cur.execute(sql)` kéo TRỌN result
+    set về RAM tiến trình rồi mới trả điều khiển — nên `fetchmany(max_rows
+    + 1)` phía dưới chỉ cắt một thứ đã nằm sẵn trong bộ nhớ. Trần 50k dòng
+    khi đó bảo vệ được DataFrame, nhưng không bảo vệ được cái làm sập tiến
+    trình. Với cursor có tên, Postgres giữ result set ở phía nó và chỉ gửi
+    về từng lô `itersize` dòng, nên `SELECT *` trên bảng chục triệu dòng
+    tốn bộ nhớ theo lô chứ không theo cả bảng.
     """
     assert_tables_permitted(sql, profile, user)
-    conn = psycopg2.connect(profile.dsn)
+    conn = psycopg2.connect(profile.dsn, connect_timeout=connect_timeout_s)
     try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SET LOCAL statement_timeout = %s", (timeout_ms,))
+        # statement_timeout phải đặt trên cursor THƯỜNG: cursor có tên dịch
+        # `execute()` thành `DECLARE ... CURSOR FOR <sql>`, và `SET LOCAL`
+        # không hợp lệ trong ngữ cảnh đó. Cả hai cursor dùng chung một
+        # connection và không có COMMIT nào ở giữa, nên chúng nằm trong
+        # cùng một transaction — đó chính là phạm vi mà `SET LOCAL` có
+        # hiệu lực, và cũng là phạm vi sống của cursor có tên.
+        with conn.cursor() as setup_cur:
+            setup_cur.execute("SET LOCAL statement_timeout = %s", (timeout_ms,))
+
+        # Tên cursor phải duy nhất trong transaction. uuid thay vì một tên
+        # cố định: một tên cố định sẽ va nhau nếu về sau có hai lời gọi
+        # cùng dùng chung connection.
+        cursor_name = f"adba_ro_{uuid.uuid4().hex}"
+        with conn.cursor(
+            name=cursor_name, cursor_factory=psycopg2.extras.RealDictCursor
+        ) as cur:
+            cur.itersize = SQL_STREAM_ITERSIZE
             cur.execute(sql, params)
-            rows = cur.fetchall()
+            # Lấy dư một dòng: đó là cách duy nhất phân biệt "đúng max_rows
+            # dòng" với "còn nữa" mà không phải đếm cả bảng.
+            rows = cur.fetchmany(max_rows + 1)
+            truncated = len(rows) > max_rows
+            if truncated:
+                logger.warning(
+                    "Kết quả bị cắt ở %d dòng — câu truy vấn trả về nhiều hơn thế.", max_rows
+                )
+                rows = rows[:max_rows]
+
             if not rows:
                 columns = [desc[0] for desc in cur.description] if cur.description else []
-                return pd.DataFrame(columns=columns)
-            return pd.DataFrame(rows)
+                df = pd.DataFrame(columns=columns)
+            else:
+                df = pd.DataFrame(rows)
+
+            df.attrs["truncated"] = truncated
+            df.attrs["row_cap"] = max_rows
+            return df
     finally:
         conn.close()
 
@@ -144,17 +214,31 @@ def get_table_sample(
     return execute_sql(query, profile=profile, user=user, params=(limit,))
 
 
-def explain_query_plan(sql: str, profile: ConnectionProfile, user: str) -> dict[str, Any]:
+def explain_query_plan(
+    sql: str,
+    profile: ConnectionProfile,
+    user: str,
+    timeout_ms: int = SQL_TIMEOUT_MS,
+    connect_timeout_s: int = SQL_CONNECT_TIMEOUT_S,
+) -> dict[str, Any]:
     """Run EXPLAIN on a SQL query and return the plan as a dict.
 
     Same guard as execute_sql, same profile-derived DSN — EXPLAIN reveals
     table/index names via the plan text, so it is not exempt from the
     permission check just because it doesn't return rows.
+
+    Trước bản này hàm không có trần thời gian nào — không `connect_timeout`,
+    không `statement_timeout`. Đây chỉ là thông tin phụ cho trace (dòng
+    "cost ~X"), và caller đã bọc lỗi bất kỳ vào `plan={}, cost="?"`, nhưng
+    "lỗi bất kỳ" không cứu được một `psycopg2.connect()` treo vô hạn —
+    ngoại lệ chỉ ném ra SAU khi kết nối xong hoặc thất bại, không phải
+    trong lúc treo.
     """
     assert_tables_permitted(sql, profile, user)
-    conn = psycopg2.connect(profile.dsn)
+    conn = psycopg2.connect(profile.dsn, connect_timeout=connect_timeout_s)
     try:
         with conn.cursor() as cur:
+            cur.execute("SET LOCAL statement_timeout = %s", (timeout_ms,))
             cur.execute("EXPLAIN " + sql)
             rows = cur.fetchall()
             plan_lines = [row[0] for row in rows]

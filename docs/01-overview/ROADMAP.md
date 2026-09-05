@@ -202,21 +202,21 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Commit | Ngày | Tác giả | Nội dung |
 |---|---|---|---|
+| `dfab879` | 2026-09-05 | Đặng Văn Vỹ | fix(budget): enforce LLM call cap inside retries |
+| `e944c52` | 2026-09-05 | Đặng Văn Vỹ | fix(finalize): kết quả SQL bị cắt ở trần dòng không còn được báo "success" |
+| `448a89e` | 2026-09-05 | Đặng Văn Vỹ | fix(budget): đếm lời gọi model bằng số lời gọi mạng thật, không phải biến vòng lặp |
+| `7b8aa23` | 2026-09-05 | Đặng Văn Vỹ | feat(sandbox): cảnh báo runtime — sandbox là partial mitigation, không phải security boundary |
+| `2cfd9ee` | 2026-09-05 | Đặng Văn Vỹ | fix(budget): chặn tool execution vượt deadline sau khi model đã trả lời |
+| `18a1162` | 2026-09-05 | Đặng Văn Vỹ | docs(fix): sửa 2 dòng "10s" lỗi thời + regex generator không parse được default lồng ngoặc |
+| `a0ccf79` | 2026-09-05 | Đặng Văn Vỹ | fix(errors): I5 dùng thật tập nhãn đóng, phát ra budget_exceeded; I7 giữ đủ trace |
+| `a1542ab` | 2026-09-05 | Đặng Văn Vỹ | fix(budget): I4 dự trữ ≥ ước lượng; I6 đếm lời gọi của supervisor; I8 timeout thật |
+| `b07124d` | 2026-09-05 | Đặng Văn Vỹ | fix(sql): I1 dòng chảy qua cursor phía server; I3 nói rõ role chỉ-đọc chưa được nối |
+| `e1eb664` | 2026-09-05 | Đặng Văn Vỹ | fix(review): C1/C2/C3 — lượt bị cắt không còn bị gọi là success |
 | `40c7214` | 2026-09-03 | Đặng Văn Vỹ | docs(eval): kết quả lượt đo tầng 2 đầu tiên, gồm phép quét k |
-| `87bac69` | 2026-09-03 | Đặng Văn Vỹ | feat(eval): cờ --k cho tầng 2, để đo ảnh hưởng của bề rộng context |
-| `a3682b8` | 2026-09-01 | Đặng Văn Vỹ | fix(sql): bỏ cả phần giải thích model viết SAU câu SQL |
-| `ee0c38a` | 2026-09-01 | Đặng Văn Vỹ | fix(sql): bộ bóc SQL cắt nhầm từ chữ 'with' trong văn xuôi |
-| `c43ce64` | 2026-09-01 | Đặng Văn Vỹ | fix(eval): lưu chi tiết từng câu không đạt, kèm SQL đã chạy |
-| `a48fbff` | 2026-09-01 | Đặng Văn Vỹ | fix(sql): bọc nháy định danh mà Postgres sẽ gấp sai, ở đường chạy thật |
-| `eb65083` | 2026-09-01 | Đặng Văn Vỹ | feat(eval): dịch SQL vàng SQLite sang Postgres, mở BIRD cho tầng 2 |
-| `d7783b6` | 2026-09-01 | Đặng Văn Vỹ | feat(eval): tầng 2 — execution accuracy |
-| `6af3233` | 2026-09-01 | Đặng Văn Vỹ | fix: dọn ba lỗ đã park từ review Plan A |
-| `03ab786` | 2026-08-27 | Đặng Văn Vỹ | test(onboard): fixture mật khẩu không còn giống bí mật thật |
-| `4601a03` | 2026-08-27 | Đặng Văn Vỹ | fix(perception): tên cột không mang nghĩa thì luôn low, bất kể model chấm gì |
-| `da433e3` | 2026-08-26 | Đặng Văn Vỹ | fix(perception): chia lô cột cho bảng rộng, annotate có ngân sách riêng |
-| `749bdd7` | 2026-08-23 | Đặng Văn Vỹ | fix(eval): resolve four BIRD loader bugs found against real Postgres |
-| `5433c78` | 2026-08-23 | Đặng Văn Vỹ | chore: ignore profile-noann (mốc đo, không phải nguồn) |
-| `1df5dd6` | 2026-08-23 | Đặng Văn Vỹ | fix(perception): chú giải lẫn chữ Hán bị hạ xuống low, vào hàng đợi duyệt |
+| `d2f7f25` | 2026-09-03 | Đặng Văn Vỹ | feat(ui): hiển thị kết quả một phần và lý do bị cắt |
+| `ddaeb5a` | 2026-09-03 | Đặng Văn Vỹ | feat(trace): query_id + ngân sách trong trace, ghi JSONL; nhãn lỗi một nguồn |
+| `0ba85e1` | 2026-09-03 | Đặng Văn Vỹ | feat(budget): cấp phát theo dự trữ — python/viz bị cắt trước, insight được bảo vệ |
+| `71b19c6` | 2026-09-03 | Đặng Văn Vỹ | feat(graph): mọi đường ra đi qua finalize, không còn END trần |
 
 <!-- AUTO:end id=commit-history -->
 
@@ -224,10 +224,10 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `40c7214` — docs(eval): kết quả lượt đo tầng 2 đầu tiên, gồm phép quét k |
+| Commit nguồn gần nhất | `dfab879` — fix(budget): enforce LLM call cap inside retries |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-09-03 |
-| Số commit nguồn | 106 |
+| Ngày commit | 2026-09-05 |
+| Số commit nguồn | 133 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

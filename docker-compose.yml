@@ -19,3 +19,44 @@ services:
 
 volumes:
   postgres_data:
+
+# Role chỉ-đọc không dựng được bằng biến môi trường của image postgres —
+# nó cần chạy sau khi schema tồn tại. Sau khi container healthy:
+#
+#   docker exec -i -e PGPASSWORD=$POSTGRES_PASSWORD adba-postgres \
+#     psql -v ON_ERROR_STOP=1 -v ro_password="$ADBA_READONLY_PASSWORD" \
+#          -U $POSTGRES_USER -d $POSTGRES_DB < scripts/create_readonly_role.sql
+#
+#   ADBA_READONLY_URL=postgresql://adba_readonly:<pw>@localhost:5432/adba_db
+#
+# adba_user giữ nguyên quyền ghi, và chỉ dùng cho data/seed/seed_data.py.
+#
+# ─────────────────────────────────────────────────────────────────────────
+# GIỚI HẠN ĐÃ BIẾT — ĐỌC TRƯỚC KHI TIN VÀO ADBA_READONLY_URL
+#
+# Đặt ADBA_READONLY_URL KHÔNG làm ứng dụng chạy truy vấn qua role đó.
+# Ngay lúc này biến ấy là TÀI LIỆU cộng với một tham số của test, không
+# phải một công tắc.
+#
+# Vì sao: `graph/tools/sql_tool.py::execute_sql` luôn mở kết nối bằng
+# `profile.dsn`, mà `profile` là một `ConnectionProfile` do tầng
+# `perception/` dựng ra. Không chỗ nào trên đường truy vấn đọc
+# ADBA_READONLY_URL. Nơi duy nhất dùng nó là
+# `tests/integration/test_readonly_role.py`, và test đó kiểm role Ở CẤP
+# DATABASE — nó chứng minh `adba_readonly` thật sự không ghi được (kể cả
+# qua data-modifying CTE), chứ KHÔNG chứng minh ứng dụng đang dùng role
+# đó.
+#
+# Nên hiểu đúng giá trị hiện có: đây là một lớp phòng thủ đã dựng xong và
+# đã kiểm, đang chờ được nối vào. Nó có ích ngay cho người vận hành muốn
+# tự nối, và cho lần rà soát bảo mật tiếp theo. Nó KHÔNG phải lớp bảo vệ
+# đang chạy.
+#
+# VIỆC CÒN LẠI (chủ sở hữu: người phụ trách tầng `perception/`): cho
+# `ConnectionProfile` mang hai DSN — một để ghi (onboarding/seed) và một
+# chỉ-đọc cho đường truy vấn — rồi để `execute_sql` nhận đúng cái thứ
+# hai. Việc đó thuộc `perception/connection_profile.py`; nó CỐ Ý nằm
+# ngoài Plan B (kế hoạch cứng hoá ngân sách + sandbox), và không được vá
+# tạm bên trong `graph/` bằng cách tự đọc biến môi trường: `graph/` nhận
+# profile từ bên gọi, và tự đoán lại xem mình đáng ra phải dùng DSN nào
+# là đúng cái kiểu lách ràng buộc mà spec mục 3.4.1 cấm.

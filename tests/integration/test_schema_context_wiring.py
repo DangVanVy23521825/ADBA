@@ -86,14 +86,17 @@ def test_run_graph_puts_profile_and_user_into_shared_metadata():
 
     supervisor_mock = MagicMock()
     supervisor_mock.invoke_json.return_value = {"plan_summary": "test", "steps": plan}
+    supervisor_mock.calls_made = 1
 
     sql_mock = MagicMock()
     sql_mock.invoke.return_value = (
         "SELECT region, SUM(amount) AS total FROM orders GROUP BY region"
     )
+    sql_mock.calls_made = 1
 
     insight_mock = MagicMock()
     insight_mock.invoke_json.return_value = VALID_INSIGHT
+    insight_mock.calls_made = 1
 
     reflector_mock = MagicMock()  # must not be needed on this happy path
 

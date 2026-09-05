@@ -196,3 +196,192 @@ def test_quoted_camel_case_table_is_still_refused_when_genuinely_not_granted():
     p = _profile({"sales": frozenset({"orders"})}, tables=_CAMEL_TABLES)
     with pytest.raises(sql_tool.TableNotPermittedError, match="lapTimes"):
         sql_tool.assert_tables_permitted('SELECT * FROM "lapTimes"', p, "sales")
+
+
+class TestRowCap:
+    """Trần dòng (spec 4.1 lớp 4). Không chạm DB thật — psycopg2 bị mock."""
+
+    @staticmethod
+    def _profile():
+        from perception.connection_profile import ALL_TABLES, build_profile
+        from tests.fixtures.mini_schema import MINI_TABLES
+
+        return build_profile(
+            dsn="postgresql://u:p@h:5432/d",
+            tables=MINI_TABLES,
+            grants={"u": frozenset({ALL_TABLES})},
+        )
+
+    @staticmethod
+    def _patch_connect(rows):
+        """Mock psycopg2.connect sao cho fetchmany(n) tôn trọng n."""
+        from unittest.mock import MagicMock, patch
+
+        cur = MagicMock()
+        cur.description = [("id",)]
+        cur.fetchmany.side_effect = lambda n: rows[:n]
+        cur.__enter__ = MagicMock(return_value=cur)
+        cur.__exit__ = MagicMock(return_value=False)
+        conn = MagicMock()
+        conn.cursor.return_value = cur
+        return patch("graph.tools.sql_tool.psycopg2.connect", return_value=conn)
+
+    def test_all_rows_come_back_when_under_the_cap(self):
+        from graph.tools.sql_tool import execute_sql
+
+        rows = [{"id": i} for i in range(5)]
+        with self._patch_connect(rows):
+            df = execute_sql("SELECT id FROM orders", self._profile(), "u", max_rows=10)
+        assert len(df) == 5
+        assert df.attrs["truncated"] is False
+
+    def test_rows_are_capped_and_the_flag_is_set(self):
+        from graph.tools.sql_tool import execute_sql
+
+        rows = [{"id": i} for i in range(50)]
+        with self._patch_connect(rows):
+            df = execute_sql("SELECT id FROM orders", self._profile(), "u", max_rows=10)
+        assert len(df) == 10
+        assert df.attrs["truncated"] is True
+
+    def test_the_cap_defaults_to_fifty_thousand(self):
+        import importlib
+
+        import graph.tools.sql_tool as sql_tool
+
+        importlib.reload(sql_tool)
+        assert sql_tool.SQL_MAX_ROWS == 50000
+
+    def test_rows_stream_through_a_server_side_cursor(self):
+        """Trần dòng một mình KHÔNG chặn được nổ RAM phía client.
+
+        Cursor mặc định của psycopg2 là client-side: `cur.execute(sql)` kéo
+        TRỌN result set về RAM rồi mới trả điều khiển, nên `fetchmany()`
+        phía sau chỉ cắt một thứ đã nằm sẵn trong bộ nhớ. Một `SELECT *`
+        trên bảng chục triệu dòng vẫn làm sập tiến trình dù trần là 50k.
+
+        Test này kiểm THIẾT KẾ chứ không kiểm bộ nhớ: nó khẳng định
+        execute_sql xin một cursor CÓ TÊN (server-side) cho câu SELECT, và
+        đặt `itersize`. Hành vi streaming thật chỉ đo được với Postgres
+        thật — mock không mô phỏng được nó, và một test giả vờ đo RAM sẽ
+        tệ hơn là không có test.
+        """
+        from unittest.mock import MagicMock, patch
+
+        from graph.tools.sql_tool import SQL_STREAM_ITERSIZE, execute_sql
+
+        cur = MagicMock()
+        cur.description = [("id",)]
+        cur.fetchmany.side_effect = lambda n: [{"id": 1}][:n]
+        cur.__enter__ = MagicMock(return_value=cur)
+        cur.__exit__ = MagicMock(return_value=False)
+        conn = MagicMock()
+        conn.cursor.return_value = cur
+
+        with patch("graph.tools.sql_tool.psycopg2.connect", return_value=conn):
+            execute_sql("SELECT id FROM orders", self._profile(), "u")
+
+        named_calls = [c for c in conn.cursor.call_args_list if c.kwargs.get("name")]
+        assert named_calls, "câu SELECT phải chạy trên cursor phía server (name=...)"
+        assert cur.itersize == SQL_STREAM_ITERSIZE
+
+    def test_the_statement_timeout_is_set_on_a_plain_cursor(self):
+        """`SET LOCAL` không hợp lệ trên cursor có tên — psycopg2 dịch nó
+        thành `DECLARE ... CURSOR FOR SET LOCAL ...`. Nên nó phải đi trên
+        một cursor thường, cùng connection, cùng transaction (không COMMIT
+        ở giữa) để `LOCAL` còn phủ tới câu SELECT."""
+        from unittest.mock import MagicMock, call, patch
+
+        from graph.tools.sql_tool import execute_sql
+
+        cur = MagicMock()
+        cur.description = [("id",)]
+        cur.fetchmany.side_effect = lambda n: [][:n]
+        cur.__enter__ = MagicMock(return_value=cur)
+        cur.__exit__ = MagicMock(return_value=False)
+        conn = MagicMock()
+        conn.cursor.return_value = cur
+
+        with patch("graph.tools.sql_tool.psycopg2.connect", return_value=conn):
+            execute_sql("SELECT id FROM orders", self._profile(), "u", timeout_ms=1234)
+
+        assert call() in conn.cursor.call_args_list, "cursor thường cho SET LOCAL"
+        timeout_calls = [
+            c for c in cur.execute.call_args_list
+            if "statement_timeout" in str(c.args[0])
+        ]
+        assert timeout_calls, "statement_timeout vẫn phải được đặt"
+        assert timeout_calls[0].args[1] == (1234,)
+        assert not conn.commit.called, "COMMIT giữa chừng sẽ giết cursor có tên"
+
+    def test_connect_carries_a_timeout(self):
+        """`psycopg2.connect()` không có trần mặc định — một mạng hỏng làm
+        nó treo vô hạn, ngoài tầm với của statement_timeout (chỉ có hiệu
+        lực SAU khi kết nối đã mở)."""
+        from unittest.mock import MagicMock, patch
+
+        from graph.tools.sql_tool import execute_sql
+
+        cur = MagicMock()
+        cur.description = [("id",)]
+        cur.fetchmany.side_effect = lambda n: [][:n]
+        cur.__enter__ = MagicMock(return_value=cur)
+        cur.__exit__ = MagicMock(return_value=False)
+        conn = MagicMock()
+        conn.cursor.return_value = cur
+
+        with patch("graph.tools.sql_tool.psycopg2.connect", return_value=conn) as connect:
+            execute_sql("SELECT id FROM orders", self._profile(), "u", connect_timeout_s=3)
+
+        assert connect.call_args.kwargs.get("connect_timeout") == 3
+
+
+class TestExplainQueryPlanTimeout:
+    """`explain_query_plan` chỉ để trang trí trace ("cost ~X") — trước bản
+    này nó không có trần thời gian nào, kể cả `connect_timeout`. Một
+    ngoại lệ bất kỳ đã được caller (sql_agent) nuốt gọn thành `plan={},
+    cost="?"`, nhưng "ngoại lệ bất kỳ" không cứu được một connect() treo
+    vô hạn — nó chỉ ném ra SAU khi có kết quả, không phải trong lúc treo."""
+
+    @staticmethod
+    def _profile():
+        return TestRowCap._profile()
+
+    @staticmethod
+    def _mock_conn():
+        from unittest.mock import MagicMock
+
+        cur = MagicMock()
+        cur.fetchall.return_value = [("Seq Scan on orders  (cost=0.00..1.05 rows=5)",)]
+        cur.__enter__ = MagicMock(return_value=cur)
+        cur.__exit__ = MagicMock(return_value=False)
+        conn = MagicMock()
+        conn.cursor.return_value = cur
+        return conn, cur
+
+    def test_connect_carries_a_timeout(self):
+        from unittest.mock import patch
+
+        from graph.tools.sql_tool import explain_query_plan
+
+        conn, _cur = self._mock_conn()
+        with patch("graph.tools.sql_tool.psycopg2.connect", return_value=conn) as connect:
+            explain_query_plan("SELECT id FROM orders", self._profile(), "u", connect_timeout_s=3)
+
+        assert connect.call_args.kwargs.get("connect_timeout") == 3
+
+    def test_statement_timeout_is_set_before_explain(self):
+        from unittest.mock import patch
+
+        from graph.tools.sql_tool import explain_query_plan
+
+        conn, cur = self._mock_conn()
+        with patch("graph.tools.sql_tool.psycopg2.connect", return_value=conn):
+            explain_query_plan("SELECT id FROM orders", self._profile(), "u", timeout_ms=1234)
+
+        timeout_calls = [
+            c for c in cur.execute.call_args_list
+            if "statement_timeout" in str(c.args[0])
+        ]
+        assert timeout_calls, "statement_timeout phải được đặt trước EXPLAIN"
+        assert timeout_calls[0].args[1] == (1234,)

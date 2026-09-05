@@ -170,7 +170,7 @@ ADBA hiện thực hoá phần **multi-agent collaboration** của khung này.
 | NFR-2 | Worst-case wall clock | ≤ 60 s | ❌ Hiện có thể chạy rất lâu — thiếu deadline toàn cục |
 | NFR-3 | Không có câu lệnh ghi chạm tới DB | 0, kiểm bằng test đối kháng | ⚠️ Chưa có SQL guard nhiều lớp |
 | NFR-4 | Timeout truy vấn ở tầng DB | `SET LOCAL statement_timeout` 30 s | ✅ `graph/tools/sql_tool.py` |
-| NFR-5 | Timeout sandbox Python | 10 s, cưỡng chế bằng process | ✅ `PANDAS_EXEC_TIMEOUT_SECONDS` |
+| NFR-5 | Timeout sandbox Python | 25 s, cưỡng chế bằng process | ✅ `PANDAS_EXEC_TIMEOUT_SECONDS` |
 | NFR-6 | Chạy được offline hoàn toàn | Không gọi mạng ngoài khi tắt fallback | ✅ |
 | NFR-7 | Unit test xanh trên CI mọi PR | 100% | ✅ `.github/workflows/ci-cd.yml` |
 
@@ -204,22 +204,22 @@ Dự án coi là thành công khi đồng thời:
 |---|---|---|---|---|
 | `ADBA_Project_Context_Prompt_v2.md` | 1 | 0 | 851 | — |
 | `README.md` | 1 | 0 | 269 | — |
-| `app.py` | 1 | 1 | 354 | Streamlit UI — điểm vào duy nhất cho người dùng cuối |
+| `app.py` | 1 | 1 | 366 | Streamlit UI — điểm vào duy nhất cho người dùng cuối |
 | `conftest.py` | 1 | 1 | 2 | — |
 | `data` | 16 | 1 | 84.504 | DDL 3 domain, seed, và dataset huấn luyện/đánh giá (JSONL) |
-| `docker-compose.yml` | 1 | 0 | 21 | — |
-| `docs` | 19 | 0 | — | Bộ tài liệu dự án (chính file này) |
+| `docker-compose.yml` | 1 | 0 | 62 | — |
+| `docs` | 20 | 0 | — | Bộ tài liệu dự án (chính file này) |
 | `eval` | 14 | 10 | 3.399 | Runner đo baseline / PEFT và so sánh hai lần chạy |
-| `graph` | 16 | 16 | 2.173 | LangGraph: state, các node agent, và tool thực thi |
-| `model` | 3 | 3 | 374 | ModelClient (Ollama local-first, fallback OpenAI) + tham số theo agent |
+| `graph` | 19 | 19 | 3.181 | LangGraph: state, các node agent, và tool thực thi |
+| `model` | 3 | 3 | 542 | ModelClient (Ollama local-first, fallback OpenAI) + tham số theo agent |
 | `onboard.py` | 1 | 1 | 1.012 | — |
 | `pages` | 1 | 1 | 86 | — |
 | `perception` | 17 | 13 | 5.551 | Perception layer — introspect PostgreSQL sinh `info_box` JSON |
 | `prompts` | 5 | 0 | 514 | System prompt của từng skill, dạng file text tách khỏi code |
 | `requirements.txt` | 1 | 0 | 18 | — |
 | `schemas` | 3 | 3 | 735 | Pydantic contract: ExecutionPlan (Supervisor) và InsightOutput (Insight) |
-| `scripts` | 7 | 3 | 1.644 | Tiện ích vận hành: áp schema, kiểm tra kết nối, sinh tài liệu |
-| `tests` | 41 | 38 | 9.175 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
+| `scripts` | 8 | 3 | 1.687 | Tiện ích vận hành: áp schema, kiểm tra kết nối, sinh tài liệu |
+| `tests` | 52 | 49 | 11.272 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
 | `training` | 13 | 5 | 3.795 | Sinh dữ liệu, LoRA/QLoRA notebook, checkpoint và kết quả |
 | `.cursorrules` | 1 | 0 | 0 | — |
 | `.github` | 1 | 0 | 29 | CI/CD — unit test, build & push image lên GHCR |
@@ -231,10 +231,10 @@ Dự án coi là thành công khi đồng thời:
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `40c7214` — docs(eval): kết quả lượt đo tầng 2 đầu tiên, gồm phép quét k |
+| Commit nguồn gần nhất | `dfab879` — fix(budget): enforce LLM call cap inside retries |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-09-03 |
-| Số commit nguồn | 106 |
+| Ngày commit | 2026-09-05 |
+| Số commit nguồn | 133 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

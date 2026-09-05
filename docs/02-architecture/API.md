@@ -38,6 +38,10 @@ result: MultiAgentState = run_graph(
 |---|---|---|---|
 | `query` | `str` | bắt buộc | Input |
 | `schema_context` | `SchemaContext` | bắt buộc | Input |
+| `query_id` | `str` | bắt buộc | Ngân sách |
+| `deadline_ts` | `float` | bắt buộc | Ngân sách |
+| `llm_calls_used` | `int` | bắt buộc | Ngân sách |
+| `degradation_reason` | `list[str]` | bắt buộc | Ngân sách |
 | `execution_plan` | `list[dict[str, Any]]` | bắt buộc | Supervisor |
 | `dependency_graph` | `NotRequired[dict[str, list[str]]]` | tuỳ chọn | Supervisor |
 | `ready_agents` | `NotRequired[list[str]]` | tuỳ chọn | Supervisor |
@@ -279,10 +283,10 @@ Khi lớp HTTP có thật, thêm vào `scripts/update_docs.py` một khối AUTO
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `40c7214` — docs(eval): kết quả lượt đo tầng 2 đầu tiên, gồm phép quét k |
+| Commit nguồn gần nhất | `dfab879` — fix(budget): enforce LLM call cap inside retries |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-09-03 |
-| Số commit nguồn | 106 |
+| Ngày commit | 2026-09-05 |
+| Số commit nguồn | 133 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

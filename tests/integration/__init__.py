@@ -147,10 +147,12 @@ def setup_simple_mocks(sql_df: pd.DataFrame):
 
     sql_mock = MagicMock()
     sql_mock.invoke.return_value = "SELECT region, SUM(amount) AS total_revenue FROM orders GROUP BY region"
+    sql_mock.calls_made = 1  # đúng một lời gọi mạng thật được mô phỏng
     mocks["sql"] = sql_mock
 
     insight_mock = MagicMock()
     insight_mock.invoke_json.return_value = VALID_INSIGHT
+    insight_mock.calls_made = 1
     mocks["insight"] = insight_mock
 
     exec_mock = MagicMock()
@@ -179,6 +181,7 @@ def setup_complex_mocks():
         "SELECT a.region, a.rev_2024, b.rev_2023 "
         "FROM q4_24 a LEFT JOIN q4_23 b USING (region)"
     )
+    sql_mock.calls_made = 1
     mocks["sql"] = sql_mock
 
     python_mock = MagicMock()
@@ -191,14 +194,17 @@ def setup_complex_mocks():
         "df['is_anomaly'] = ((df['yoy_pct'] < q1 - 1.5*iqr) | (df['yoy_pct'] > q3 + 1.5*iqr))\n"
         "df"
     )
+    python_mock.calls_made = 1
     mocks["python"] = python_mock
 
     viz_mock = MagicMock()
     viz_mock.invoke.return_value = CHART_CODE_BAR
+    viz_mock.calls_made = 1
     mocks["viz"] = viz_mock
 
     insight_mock = MagicMock()
     insight_mock.invoke_json.return_value = VALID_INSIGHT
+    insight_mock.calls_made = 1
     mocks["insight"] = insight_mock
 
     # Tool mocks

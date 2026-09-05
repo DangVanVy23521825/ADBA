@@ -8,9 +8,11 @@ import logging
 import json
 from pathlib import Path
 
+from graph.budget import calls_remaining, node_may_run
+from graph.errors import BUDGET_EXCEEDED, INSIGHT_GENERATION, MISSING_STEP
 from graph.state import MultiAgentState
 from graph.utils import append_trace
-from model.model_client import ModelClient
+from model.model_client import BudgetExceededError, ModelClient
 from schemas.insight_schema import InsightOutput
 
 logger = logging.getLogger(__name__)
@@ -29,11 +31,23 @@ def _find_insight_step(state: MultiAgentState) -> dict | None:
 
 def insight_agent_node(state: MultiAgentState) -> MultiAgentState:
     """Gather all agent outputs → call ModelClient.invoke_json() → validate InsightOutput."""
+    may_run, reason = node_may_run(state, "insight")
+    if not may_run:
+        logger.warning("Insight Agent: %s", reason)
+        return {
+            **state,
+            "current_agent": "insight",
+            "completed_agents": state.get("completed_agents", []) + ["insight"],
+            "degradation_reason": state.get("degradation_reason", []) + [reason],
+            "action_trace": append_trace(state, "insight", "budget_check", reason, "error"),
+            "status": "running",
+        }
+
     step = _find_insight_step(state)
     if step is None:
         logger.error("Insight Agent: no insight step in execution plan")
         return {**state, "status": "failed",
-                "last_error": {"agent": "insight", "error_type": "missing_step"}}
+                "last_error": {"agent": "insight", "error_type": MISSING_STEP}}
 
     query: str = state["query"]
 
@@ -89,8 +103,17 @@ def insight_agent_node(state: MultiAgentState) -> MultiAgentState:
     trace = append_trace(state, "insight", "generate_insight",
                          f"Query: {query}", "started")
 
+    # Dựng NGOÀI try: cả nhánh thành công lẫn nhánh lỗi bên dưới đều đọc
+    # `client.calls_made` (số lời gọi mạng THẬT, xem ghi chú ở
+    # model/model_client.py::ModelClient.__init__) — nếu client chỉ tồn
+    # tại trong try, nhánh except tham chiếu nó sẽ NameError khi client
+    # chưa kịp gán.
+    client = ModelClient(
+        agent_type="insight",
+        deadline_ts=state.get("deadline_ts"),
+        call_budget_remaining=calls_remaining(state.get("llm_calls_used", 0)),
+    )
     try:
-        client = ModelClient(agent_type="insight")
         raw = client.invoke_json(system_prompt=system_prompt, user_prompt=query)
 
         # Pydantic validation
@@ -114,9 +137,20 @@ def insight_agent_node(state: MultiAgentState) -> MultiAgentState:
             },
             "action_trace": trace,
             "status": "success",
+            "llm_calls_used": state.get("llm_calls_used", 0) + client.calls_made,
         }
 
     except Exception as exc:
+        # Phân biệt "hết giờ" với "sinh insight hỏng". BudgetExceededError
+        # kế thừa RuntimeError nên nhánh chung này bắt được nó; nếu không
+        # tách nhãn ra, mọi lượt bị cắt vì ngân sách đều hiện lên log và
+        # trace dưới tên `insight_generation` — tức là đổ lỗi cho bước sinh
+        # insight về một lời gọi model chưa từng khởi động. Kiểm bằng
+        # isinstance thay vì thêm một `except` riêng vì thân khối này dài
+        # và hai nhánh chỉ khác đúng một chuỗi nhãn.
+        error_label = (
+            BUDGET_EXCEEDED if isinstance(exc, BudgetExceededError) else INSIGHT_GENERATION
+        )
         error_msg = f"Insight Agent failed: {exc}"
         logger.error(error_msg)
         trace = append_trace(state, "insight", "generate_insight", error_msg, "error")
@@ -135,9 +169,10 @@ def insight_agent_node(state: MultiAgentState) -> MultiAgentState:
             },
             "last_error": {
                 "agent": "insight",
-                "error_type": "insight_generation_failure",
+                "error_type": error_label,
                 "traceback": error_msg,
             },
             "action_trace": trace,
             "status": "failed",
+            "llm_calls_used": state.get("llm_calls_used", 0) + client.calls_made,
         }

@@ -4,21 +4,17 @@ Viz Agent — generate matplotlib chart code, execute in safe sandbox, return ba
 
 from __future__ import annotations
 
-import base64
-import io
 import logging
 import re
+import time
 from pathlib import Path
 
-import matplotlib
-import matplotlib.pyplot as plt
-
-matplotlib.use("Agg")
-
+from graph.budget import calls_remaining, clamped_tool_timeout_s, node_may_run
+from graph.errors import BUDGET_EXCEEDED, CHART_ERROR, MISSING_DATA, MISSING_STEP
 from graph.state import MultiAgentState
-from graph.tools.python_tool import run_dict_safe
-from graph.utils import append_trace, df_from_state
-from model.model_client import ModelClient
+from graph.tools.python_tool import CHART_EXEC_TIMEOUT_SECONDS, run_chart_safe
+from graph.utils import append_trace, df_from_state, with_routing
+from model.model_client import BudgetExceededError, ModelClient
 
 logger = logging.getLogger(__name__)
 
@@ -53,11 +49,23 @@ def _find_viz_step(state: MultiAgentState) -> dict | None:
 
 def viz_agent_node(state: MultiAgentState) -> MultiAgentState:
     """Generate chart code via LLM → execute → return chart_b64 in state."""
+    may_run, reason = node_may_run(state, "viz")
+    if not may_run:
+        logger.warning("Viz Agent: %s", reason)
+        return {
+            **state,
+            "current_agent": "viz",
+            "completed_agents": state.get("completed_agents", []) + ["viz"],
+            "degradation_reason": state.get("degradation_reason", []) + [reason],
+            "action_trace": append_trace(state, "viz", "budget_check", reason, "error"),
+            "status": "running",
+        }
+
     step = _find_viz_step(state)
     if step is None:
         logger.error("Viz Agent: no viz step in execution plan")
         return {**state, "status": "failed",
-                "last_error": {"agent": "viz", "error_type": "missing_step"}}
+                "last_error": {"agent": "viz", "error_type": MISSING_STEP}}
 
     task: str = step.get("task", "")
 
@@ -65,7 +73,7 @@ def viz_agent_node(state: MultiAgentState) -> MultiAgentState:
     if not df_state:
         logger.error("Viz Agent: no shared_dataframe in state")
         return {**state, "status": "failed",
-                "last_error": {"agent": "viz", "error_type": "missing_data"}}
+                "last_error": {"agent": "viz", "error_type": MISSING_DATA}}
 
     df = df_from_state(df_state)
     import json
@@ -79,9 +87,17 @@ def viz_agent_node(state: MultiAgentState) -> MultiAgentState:
 
     trace = append_trace(state, "viz", "generate_chart",
                          f"Task: {task}", "started")
+    state = {**state, "action_trace": trace}
 
-    client = ModelClient(agent_type="viz")
+    client = ModelClient(
+        agent_type="viz",
+        deadline_ts=state.get("deadline_ts"),
+        call_budget_remaining=calls_remaining(state.get("llm_calls_used", 0)),
+    )
     error_context = ""
+
+    # Nhãn cho đường thất bại — xem nhánh BudgetExceededError bên dưới.
+    error_label: str = CHART_ERROR
 
     for attempt in range(1, MAX_RETRIES + 1):
         user_prompt = f"Task: {task}"
@@ -96,11 +112,35 @@ def viz_agent_node(state: MultiAgentState) -> MultiAgentState:
 
         try:
             raw = client.invoke(system_prompt=system_prompt, user_prompt=user_prompt)
+        except BudgetExceededError as exc:
+            # Trước `except Exception`: BudgetExceededError là RuntimeError,
+            # nên nhánh chung sẽ dán nhãn `chart_error` cho một lượt mà
+            # matplotlib còn chưa được gọi tới.
+            error_label = BUDGET_EXCEEDED
+            error_context = str(exc)
+            logger.warning("Viz Agent attempt %d hết ngân sách: %s", attempt, error_context)
+            continue
         except Exception as exc:
             error_context = f"ModelClient error: {exc}"
             continue
 
         code = _extract_code(raw)
+
+        # Ngân sách còn lại SAU model, TRƯỚC khi vào sandbox — `node_may_run`
+        # ở đầu hàm chỉ gác cửa cho MỘT lời gọi model, không thấy phần chi
+        # tiêu sau đó. Một lượt qua cửa vì còn ~15s cho model vẫn có thể
+        # tốn tới `CHART_EXEC_TIMEOUT_SECONDS` (25s) ở sandbox ngay sau —
+        # cộng lại có thể vượt ngân sách toàn cục dù cửa gác nói "còn giờ".
+        clock = state.get("_clock", time.time)
+        deadline_ts = state.get("deadline_ts")
+        sandbox_timeout_s = clamped_tool_timeout_s(
+            deadline_ts, CHART_EXEC_TIMEOUT_SECONDS, clock=clock
+        )
+        if sandbox_timeout_s <= 0:
+            error_label = BUDGET_EXCEEDED
+            error_context = "Hết ngân sách thời gian sau khi model trả lời — không còn chỗ để vẽ biểu đồ."
+            logger.warning("Viz Agent attempt %d: %s", attempt, error_context)
+            continue
 
         # Try executing the LLM-generated code
         try:
@@ -110,11 +150,7 @@ def viz_agent_node(state: MultiAgentState) -> MultiAgentState:
                 lines[-1] = "result = " + lines[-1]
                 code = "\n".join(lines)
 
-            result = run_dict_safe(
-                code,
-                {"df": df.copy(), "matplotlib": matplotlib,
-                 "plt": plt, "io": io, "base64": base64},
-            )
+            result = run_chart_safe(code, df, timeout_seconds=sandbox_timeout_s)
             if "chart_b64" not in result:
                 raise ValueError("Code did not produce a chart result dict")
 
@@ -123,6 +159,12 @@ def viz_agent_node(state: MultiAgentState) -> MultiAgentState:
             logger.warning("Viz Agent error (attempt %d): %s", attempt, error_context)
             trace = append_trace(state, "viz", "execute_chart",
                                  f"Attempt {attempt}: {error_context}", "error")
+            # Ghi lại vào state: `append_trace` dựng danh sách mới từ
+            # `state["action_trace"]`, nên vòng lặp sau mà vẫn đọc `state`
+            # cũ sẽ dựng lại từ danh sách GỐC và ghi đè mất mục vừa thêm.
+            # Không có dòng này, chỉ mục cuối cùng sống sót và mọi chẩn
+            # đoán của các lần thử trước biến mất khỏi UI lẫn log JSONL.
+            state = {**state, "action_trace": trace}
             continue
 
         # ── Success ───────────────────────────────────
@@ -132,7 +174,7 @@ def viz_agent_node(state: MultiAgentState) -> MultiAgentState:
                              f"OK — {chart_type} chart, "
                              f"{len(chart_b64)//1024} KB base64", "ok")
 
-        return {
+        return with_routing({
             **state,
             "current_agent": "viz",
             "completed_agents": state.get("completed_agents", []) + ["viz"],
@@ -159,7 +201,10 @@ def viz_agent_node(state: MultiAgentState) -> MultiAgentState:
             },
             "action_trace": trace,
             "status": "running",
-        }
+            # `client.calls_made`, không phải `attempt` — xem ghi chú ở
+            # model/model_client.py::ModelClient.__init__.
+            "llm_calls_used": state.get("llm_calls_used", 0) + client.calls_made,
+        })
 
     # ── Exhausted retries ──────────────────────────
     error_summary = f"Viz Agent failed after {MAX_RETRIES} attempts: {error_context}"
@@ -177,8 +222,9 @@ def viz_agent_node(state: MultiAgentState) -> MultiAgentState:
             **state.get("agent_error_counts", {}),
             "viz": state.get("agent_error_counts", {}).get("viz", 0) + 1,
         },
-        "last_error": {"agent": "viz", "error_type": "chart_error",
+        "last_error": {"agent": "viz", "error_type": error_label,
                        "traceback": error_summary},
         "action_trace": trace,
         "status": "running",
+        "llm_calls_used": state.get("llm_calls_used", 0) + client.calls_made,
     }

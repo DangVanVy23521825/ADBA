@@ -2,7 +2,7 @@
 LangGraph multi-agent graph skeleton.
 
 Flow:
-    supervisor → route_next_agent → sql | python | viz | reflector → (loop) → insight → END
+    supervisor → route_next_agent → sql | python | viz | reflector → (loop) → insight → finalize → END
 """
 
 from __future__ import annotations
@@ -18,6 +18,8 @@ from graph.agents.python_agent import python_agent_node
 from graph.agents.viz_agent import viz_agent_node
 from graph.agents.insight_agent import insight_agent_node
 from graph.agents.reflector_agent import reflector_agent_node
+from graph.agents.finalize import finalize_node
+from graph.budget import DEFAULT_BUDGET_S
 from graph.state import MultiAgentState, make_initial_state
 from graph.utils import append_trace
 from perception.connection_profile import ConnectionProfile
@@ -41,41 +43,30 @@ def build_multi_agent_graph() -> CompiledStateGraph:
     builder.add_node("viz", viz_agent_node)
     builder.add_node("insight", insight_agent_node)
     builder.add_node("reflector", reflector_agent_node)
+    builder.add_node("finalize", finalize_node)
 
     # ── Edges ────────────────────────────────────
     builder.set_entry_point("supervisor")
 
+    _ROUTES = {
+        "sql": "sql",
+        "python": "python",
+        "viz": "viz",
+        "insight": "insight",
+        "reflector": "reflector",
+        "finalize": "finalize",
+    }
+
     # After supervisor, route to the next agent in the plan.
-    builder.add_conditional_edges(
-        "supervisor",
-        route_next_agent,
-        {
-            "sql": "sql",
-            "python": "python",
-            "viz": "viz",
-            "insight": "insight",
-            "reflector": "reflector",
-            END: END,
-        },
-    )
+    builder.add_conditional_edges("supervisor", route_next_agent, _ROUTES)
 
     # After each specialist agent, return to routing (check next step).
     for agent in ("sql", "python", "viz"):
-        builder.add_conditional_edges(
-            agent,
-            route_next_agent,
-            {
-                "sql": "sql",
-                "python": "python",
-                "viz": "viz",
-                "insight": "insight",
-                "reflector": "reflector",
-                END: END,
-            },
-        )
+        builder.add_conditional_edges(agent, route_next_agent, _ROUTES)
 
-    # Insight agent always ends the pipeline.
-    builder.add_edge("insight", END)
+    # Insight xong vẫn đi qua finalize — finalize là nơi duy nhất đặt status,
+    # nên không đường nào được vòng qua nó.
+    builder.add_edge("insight", "finalize")
 
     # Reflector returns to the failed agent (or dies if no valid target).
     builder.add_conditional_edges(
@@ -86,9 +77,11 @@ def build_multi_agent_graph() -> CompiledStateGraph:
             "python": "python",
             "viz": "viz",
             "insight": "insight",
-            END: END,
+            "finalize": "finalize",
         },
     )
+
+    builder.add_edge("finalize", END)
 
     return builder.compile()
 
@@ -98,6 +91,7 @@ def run_graph(
     schema_context: SchemaContext,
     profile: ConnectionProfile,
     user: str,
+    budget_s: float = DEFAULT_BUDGET_S,
 ) -> MultiAgentState:
     """Convenience: build the graph and invoke it in one shot.
 
@@ -105,7 +99,7 @@ def run_graph(
     them down to execute_sql — see graph/agents/sql_agent.py.
     """
     graph = build_multi_agent_graph()
-    initial = make_initial_state(query, schema_context)
+    initial = make_initial_state(query, schema_context, budget_s=budget_s)
     initial["shared_metadata"] = {"profile": profile, "user": user}
     return graph.invoke(initial)
 

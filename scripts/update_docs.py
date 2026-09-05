@@ -316,7 +316,11 @@ def gen_tech_stack() -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 GETENV_RE = re.compile(
-    r"""os\.getenv\(\s*["'](?P<name>[A-Z0-9_]+)["']\s*(?:,\s*(?P<default>[^)]*?))?\s*\)""",
+    # `default` chấp một mức ngoặc lồng nhau (vd. `str(OTHER_CONST)`) qua
+    # nhánh `\([^()]*\)`. Không chấp hai mức lồng — os.getenv() trong thực
+    # tế của repo này chưa cần tới đó, và một regex bắt mọi mức lồng là
+    # việc của một parser thật, không phải việc của tài liệu tự sinh.
+    r"""os\.getenv\(\s*["'](?P<name>[A-Z0-9_]+)["']\s*(?:,\s*(?P<default>(?:[^()]|\([^()]*\))*?))?\s*\)""",
     re.DOTALL,
 )
 

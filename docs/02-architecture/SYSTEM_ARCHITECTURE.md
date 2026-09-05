@@ -244,22 +244,22 @@ riêng qua MCP, và egress bị chặn ở tầng mạng. Chi tiết:
 |---|---|---|---|---|
 | `ADBA_Project_Context_Prompt_v2.md` | 1 | 0 | 851 | — |
 | `README.md` | 1 | 0 | 269 | — |
-| `app.py` | 1 | 1 | 354 | Streamlit UI — điểm vào duy nhất cho người dùng cuối |
+| `app.py` | 1 | 1 | 366 | Streamlit UI — điểm vào duy nhất cho người dùng cuối |
 | `conftest.py` | 1 | 1 | 2 | — |
 | `data` | 16 | 1 | 84.504 | DDL 3 domain, seed, và dataset huấn luyện/đánh giá (JSONL) |
-| `docker-compose.yml` | 1 | 0 | 21 | — |
-| `docs` | 19 | 0 | — | Bộ tài liệu dự án (chính file này) |
+| `docker-compose.yml` | 1 | 0 | 62 | — |
+| `docs` | 20 | 0 | — | Bộ tài liệu dự án (chính file này) |
 | `eval` | 14 | 10 | 3.399 | Runner đo baseline / PEFT và so sánh hai lần chạy |
-| `graph` | 16 | 16 | 2.173 | LangGraph: state, các node agent, và tool thực thi |
-| `model` | 3 | 3 | 374 | ModelClient (Ollama local-first, fallback OpenAI) + tham số theo agent |
+| `graph` | 19 | 19 | 3.181 | LangGraph: state, các node agent, và tool thực thi |
+| `model` | 3 | 3 | 542 | ModelClient (Ollama local-first, fallback OpenAI) + tham số theo agent |
 | `onboard.py` | 1 | 1 | 1.012 | — |
 | `pages` | 1 | 1 | 86 | — |
 | `perception` | 17 | 13 | 5.551 | Perception layer — introspect PostgreSQL sinh `info_box` JSON |
 | `prompts` | 5 | 0 | 514 | System prompt của từng skill, dạng file text tách khỏi code |
 | `requirements.txt` | 1 | 0 | 18 | — |
 | `schemas` | 3 | 3 | 735 | Pydantic contract: ExecutionPlan (Supervisor) và InsightOutput (Insight) |
-| `scripts` | 7 | 3 | 1.644 | Tiện ích vận hành: áp schema, kiểm tra kết nối, sinh tài liệu |
-| `tests` | 41 | 38 | 9.175 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
+| `scripts` | 8 | 3 | 1.687 | Tiện ích vận hành: áp schema, kiểm tra kết nối, sinh tài liệu |
+| `tests` | 52 | 49 | 11.272 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
 | `training` | 13 | 5 | 3.795 | Sinh dữ liệu, LoRA/QLoRA notebook, checkpoint và kết quả |
 | `.cursorrules` | 1 | 0 | 0 | — |
 | `.github` | 1 | 0 | 29 | CI/CD — unit test, build & push image lên GHCR |
@@ -276,7 +276,12 @@ kèm giá trị thật; `env.example` là bản mẫu.
 
 | Biến | Mặc định trong code | Có trong `env.example` | Nơi đọc |
 |---|---|---|---|
+| `ADBA_INSIGHT_RESERVE_S` | `"12"` | — | `graph/budget.py` |
+| `ADBA_MAX_LLM_CALLS` | `"12"` | — | `graph/budget.py` |
+| `ADBA_MODEL_CALL_ESTIMATE_S` | `"15"` | — | `graph/budget.py` |
+| `ADBA_QUERY_BUDGET_S` | `"45"` | — | `graph/budget.py` |
 | `BACKUP_MODEL` | `"llama3.1:8b-instruct-q4_K_M"` | — | `model/model_config.py` |
+| `CHART_EXEC_TIMEOUT_SECONDS` | `str(PANDAS_EXEC_TIMEOUT_SECONDS)` | — | `graph/tools/python_tool.py` |
 | `DATABASE_URL` | `"postgresql://adba_user:adba@localhost:5432/adba_db"` | — | `data/seed/seed_data.py`, `perception/extract_info_box.py`, `training/generate_data.py` (+1) |
 | `ENABLE_OPENAI_FALLBACK` | — | — | `model/model_client.py` |
 | `EVAL_MODEL` | `"qwen2.5-coder:7b-instruct-q5_K_M"` | — | `eval/eval_runner.py` |
@@ -285,7 +290,7 @@ kèm giá trị thật; `env.example` là bản mẫu.
 | `OLLAMA_NUM_CTX` | `"4096"` | — | `eval/eval_runner.py`, `model/model_config.py` |
 | `OPENAI_API_KEY` | `""` | — | `model/model_client.py` |
 | `OPENAI_MODEL` | `"gpt-4o-mini"` | — | `model/model_client.py` |
-| `PANDAS_EXEC_TIMEOUT_SECONDS` | `"10"` | — | `graph/tools/python_tool.py` |
+| `PANDAS_EXEC_TIMEOUT_SECONDS` | `"25"` | — | `graph/tools/python_tool.py` |
 | `POSTGRES_DB` | `"adba_db"` | — | `eval/eval_runner.py`, `scripts/test_postgres_connection.py` |
 | `POSTGRES_HOST` | `"localhost"` | — | `eval/eval_runner.py`, `scripts/test_postgres_connection.py` |
 | `POSTGRES_PASSWORD` | `"adba_password"` | — | `eval/eval_runner.py`, `scripts/test_postgres_connection.py` |
@@ -293,7 +298,10 @@ kèm giá trị thật; `env.example` là bản mẫu.
 | `POSTGRES_URL` | `""` | — | `data/seed/seed_data.py`, `eval/eval_runner.py`, `scripts/test_postgres_connection.py` |
 | `POSTGRES_USER` | `"adba_user"` | — | `eval/eval_runner.py`, `scripts/test_postgres_connection.py` |
 | `PRIMARY_MODEL` | `"qwen2.5-coder:7b-instruct-q5_K_M"` | — | `model/model_config.py` |
-| `SQL_TIMEOUT_MS` | `"30000"` | — | `graph/tools/sql_tool.py` |
+| `SQL_CONNECT_TIMEOUT_S` | `"5"` | — | `graph/tools/sql_tool.py` |
+| `SQL_MAX_ROWS` | `"50000"` | — | `graph/tools/sql_tool.py` |
+| `SQL_STREAM_ITERSIZE` | `"2000"` | — | `graph/tools/sql_tool.py` |
+| `SQL_TIMEOUT_MS` | `"10000"` | — | `graph/tools/sql_tool.py` |
 
 <!-- AUTO:end id=env-vars -->
 
@@ -324,10 +332,10 @@ kèm giá trị thật; `env.example` là bản mẫu.
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `40c7214` — docs(eval): kết quả lượt đo tầng 2 đầu tiên, gồm phép quét k |
+| Commit nguồn gần nhất | `dfab879` — fix(budget): enforce LLM call cap inside retries |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-09-03 |
-| Số commit nguồn | 106 |
+| Ngày commit | 2026-09-05 |
+| Số commit nguồn | 133 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

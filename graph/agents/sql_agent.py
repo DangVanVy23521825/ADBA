@@ -6,14 +6,23 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 
 import sqlparse
 from pathlib import Path
 
+from graph.budget import calls_remaining, clamped_tool_timeout_s, node_may_run
+from graph.errors import BUDGET_EXCEEDED, MISSING_STEP, SQL_EXECUTION
 from graph.state import MultiAgentState
-from graph.tools.sql_tool import TableNotPermittedError, execute_sql, explain_query_plan
-from graph.utils import append_trace, df_to_state
-from model.model_client import ModelClient
+from graph.tools.sql_tool import (
+    SQL_CONNECT_TIMEOUT_S,
+    SQL_TIMEOUT_MS,
+    TableNotPermittedError,
+    execute_sql,
+    explain_query_plan,
+)
+from graph.utils import append_trace, df_to_state, with_routing
+from model.model_client import BudgetExceededError, ModelClient
 from perception.schema_context import SchemaContext
 from perception.sql_identifiers import requote_for_tables
 
@@ -23,7 +32,9 @@ _PROMPT_PATH = Path(__file__).resolve().parents[2] / "prompts" / "text_to_sql.tx
 
 SQL_SYSTEM_PROMPT: str = _PROMPT_PATH.read_text(encoding="utf-8")
 
-MAX_RETRIES = 3
+# Một lần sinh + một lần sửa theo error context. Lần thứ ba trước đây chỉ
+# lặp lại cùng một lớp lỗi với giá một lời gọi model (spec 5.4).
+MAX_RETRIES = 2
 
 
 # Ranh giới từ ở CẢ HAI đầu: không có `\b` thì `WITH` khớp cả trong
@@ -65,8 +76,8 @@ def _extract_sql(text: str) -> str:
     2. Ứng viên bắt đầu ở RANH GIỚI TỪ, kiểm bằng `sqlparse.get_type()`.
        Nó phân biệt sạch: `WITH x AS (...) SELECT` ra "SELECT", còn
        "with the highest average" ra "UNKNOWN".
-    3. Không có ứng viên nào hợp lệ thì trả nguyên văn, để lỗi nổ ở tầng
-       thực thi kèm nội dung thật — im lặng trả chuỗi rỗng sẽ khó chẩn hơn.
+    3. Không có ứng viên nào hợp lệ thì fail closed ngay ở tầng
+       sinh SQL, thay vì chuyển văn xuôi xuống tool và gán nhãn lỗi sai.
 
     Còn sót một ca: văn xuôi BẮT ĐẦU bằng "select" ("select the data you
     need") vẫn parse ra "SELECT". Hiếm hơn hẳn ca "with" vì nó đòi câu văn
@@ -88,7 +99,7 @@ def _extract_sql(text: str) -> str:
         parsed = sqlparse.parse(candidate)
         if parsed and parsed[0].get_type() == "SELECT":
             return _cut_trailing_prose(candidate)
-    return body
+    raise ValueError(f"Không trích được SQL từ output của model: {body[:200]!r}")
 
 
 def _cut_trailing_prose(sql: str) -> str:
@@ -177,13 +188,25 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
     Returns state with sql_result, shared_dataframe, and updated trace.
     On fatal failure sets status='failed' and populates last_error.
     """
+    may_run, reason = node_may_run(state, "sql")
+    if not may_run:
+        logger.warning("SQL Agent: %s", reason)
+        return {
+            **state,
+            "current_agent": "sql",
+            "completed_agents": state.get("completed_agents", []) + ["sql"],
+            "degradation_reason": state.get("degradation_reason", []) + [reason],
+            "action_trace": append_trace(state, "sql", "budget_check", reason, "error"),
+            "status": "running",
+        }
+
     step = _find_sql_step(state)
     if step is None:
         logger.error("SQL Agent: no sql step in execution plan")
         return {
             **state,
             "status": "failed",
-            "last_error": {"agent": "sql", "error_type": "missing_step"},
+            "last_error": {"agent": "sql", "error_type": MISSING_STEP},
         }
 
     task: str = step.get("task", "")
@@ -192,9 +215,18 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
 
     trace = append_trace(state, "sql", "generate_sql",
                          f"Task: {task}", "started")
+    state = {**state, "action_trace": trace}
 
-    client = ModelClient(agent_type="sql")
+    client = ModelClient(
+        agent_type="sql",
+        deadline_ts=state.get("deadline_ts"),
+        call_budget_remaining=calls_remaining(state.get("llm_calls_used", 0)),
+    )
     error_context: str = ""
+
+    # Nhãn cho đường thất bại. Mặc định là lỗi thực thi SQL; chỉ đổi khi
+    # nguyên nhân thật sự khác — xem nhánh BudgetExceededError bên dưới.
+    error_label: str = SQL_EXECUTION
 
     for attempt in range(1, MAX_RETRIES + 1):
         user_prompt = f"Task: {task}"
@@ -210,29 +242,72 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
 
         try:
             raw = client.invoke(system_prompt=system_prompt, user_prompt=user_prompt)
+        except BudgetExceededError as exc:
+            # PHẢI đứng trước `except Exception`: BudgetExceededError kế
+            # thừa RuntimeError, nên nhánh chung nuốt nó và lượt chạy hết
+            # giờ bị dán nhãn `sql_execution` — đọc log thì tưởng SQL hỏng,
+            # trong khi thứ hỏng là ngân sách. Đó là lý do nhãn
+            # `budget_exceeded` tồn tại; trước bản này không nơi nào phát ra
+            # nó cả.
+            error_label = BUDGET_EXCEEDED
+            error_context = str(exc)
+            logger.warning("SQL Agent attempt %d hết ngân sách: %s", attempt, error_context)
+            continue
         except Exception as exc:
             error_context = f"ModelClient error: {exc}"
             logger.warning("SQL Agent attempt %d: %s", attempt, error_context)
             continue
 
-        # Bọc nháy định danh TRƯỚC khi log và trước khi chạy: log phải là
-        # đúng câu SQL được thực thi, nếu không thì đọc log đi chẩn lỗi sẽ
-        # thấy một câu khác câu đã hỏng.
-        #
-        # Cần bước này vì `render_schema` in DDL có nháy (`"MailStreet"`)
-        # mà model vẫn viết trần, rồi Postgres gấp thành `mailstreet` và
-        # câu hỏng. Quy tắc 11 của prompt chỉ giảm 6 lỗi xuống 5 trên mẫu 8
-        # câu BIRD — model 7B không tuân thủ ổn định.
-        #
-        # No-op trên schema toàn chữ thường (phần lớn khách hàng): điều
-        # kiện sửa là tên thật có ký tự hoa. Xem perception/sql_identifiers.
-        sql = requote_for_tables(_extract_sql(raw), schema_context.tables)
+        try:
+            # Bọc nháy định danh TRƯỚC khi log và trước khi chạy: log phải là
+            # đúng câu SQL được thực thi. No-op trên schema toàn chữ thường.
+            sql = requote_for_tables(_extract_sql(raw), schema_context.tables)
+        except ValueError as exc:
+            error_context = str(exc)
+            logger.warning("SQL Agent attempt %d: %s", attempt, error_context)
+            trace = append_trace(state, "sql", "generate_sql",
+                                 f"Attempt {attempt}: {error_context}", "error")
+            # Ghi lại vào state: `append_trace` dựng danh sách mới từ
+            # `state["action_trace"]`, nên vòng lặp sau mà vẫn đọc `state`
+            # cũ sẽ dựng lại từ danh sách GỐC và ghi đè mất mục vừa thêm.
+            # Không có dòng này, chỉ mục cuối cùng sống sót và mọi chẩn
+            # đoán của các lần thử trước biến mất khỏi UI lẫn log JSONL.
+            state = {**state, "action_trace": trace}
+            continue
         logger.info("SQL Agent attempt %d:\n%s", attempt, sql)
+
+        # ── Ngân sách còn lại SAU model, TRƯỚC khi chạm DB ─────────
+        #
+        # `node_may_run` ở đầu hàm chỉ gác cửa cho MỘT lời gọi model — nó
+        # không thấy phần chi tiêu sau đó. Một lượt được cho qua vì còn đủ
+        # ~15s cho model vẫn có thể tốn tới `SQL_TIMEOUT_MS` (10s) ở
+        # statement_timeout ngay sau, và cả hai số đó độc lập với deadline
+        # cho tới đây — cộng lại có thể vượt ngân sách toàn cục dù mọi cửa
+        # gác đều nói "còn giờ". Tính lại thời gian còn lại NGAY TRƯỚC khi
+        # chạm DB đóng lỗ đó.
+        clock = state.get("_clock", time.time)
+        deadline_ts = state.get("deadline_ts")
+        sql_timeout_s = clamped_tool_timeout_s(deadline_ts, SQL_TIMEOUT_MS / 1000.0, clock=clock)
+        if sql_timeout_s <= 0:
+            error_label = BUDGET_EXCEEDED
+            error_context = "Hết ngân sách thời gian sau khi model trả lời — không còn chỗ để chạy SQL."
+            logger.warning("SQL Agent attempt %d: %s", attempt, error_context)
+            continue
+        # Sàn 1 giây: `connect_timeout`/`statement_timeout` bằng 0 với
+        # psycopg2/Postgres nghĩa là TẮT trần, ngược hẳn ý định — không bao
+        # giờ được để một clamp hợp lệ (còn dương) làm tròn xuống 0.
+        connect_timeout_s = max(
+            1, round(clamped_tool_timeout_s(deadline_ts, SQL_CONNECT_TIMEOUT_S, clock=clock))
+        )
 
         # ── Execution ────────────────────────────────────────────
         try:
             meta = state.get("shared_metadata", {})
-            df = execute_sql(sql, profile=meta["profile"], user=meta["user"])
+            df = execute_sql(
+                sql, profile=meta["profile"], user=meta["user"],
+                timeout_ms=max(1, int(sql_timeout_s * 1000)),
+                connect_timeout_s=connect_timeout_s,
+            )
         except Exception as exc:
             # Log the full exception (may include internal detail, e.g. the
             # forbidden-table list on TableNotPermittedError) server-side only.
@@ -242,39 +317,88 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
             error_context = _public_error_message(exc)
             trace = append_trace(state, "sql", "execute_sql",
                                  f"Attempt {attempt} error: {error_context}", "error")
+            # Ghi lại vào state: `append_trace` dựng danh sách mới từ
+            # `state["action_trace"]`, nên vòng lặp sau mà vẫn đọc `state`
+            # cũ sẽ dựng lại từ danh sách GỐC và ghi đè mất mục vừa thêm.
+            # Không có dòng này, chỉ mục cuối cùng sống sót và mọi chẩn
+            # đoán của các lần thử trước biến mất khỏi UI lẫn log JSONL.
+            state = {**state, "action_trace": trace}
             continue
 
         # ── Success ───────────────────────────────────────────────
-        try:
-            plan = explain_query_plan(sql, profile=meta["profile"], user=meta["user"])
-            cost = plan.get("total_cost_estimate", "?")
-        except Exception:
-            plan = {}
-            cost = "?"
+        # `explain_query_plan` chỉ để trang trí trace ("cost ~X") — không
+        # đáng đánh đổi lấy thời gian ngân sách. Tính lại thời gian còn lại
+        # (đã trôi thêm kể từ lúc chạy execute_sql ở trên) và BỎ QUA hẳn
+        # nếu không còn chỗ, thay vì truyền timeout=0 xuống Postgres (nghĩa
+        # là TẮT trần, ngược ý định) hay cứ gọi và hy vọng try/except cứu
+        # kịp — connect() có thể treo trước khi có ngoại lệ nào để bắt.
+        plan_timeout_s = clamped_tool_timeout_s(deadline_ts, SQL_TIMEOUT_MS / 1000.0, clock=clock)
+        if plan_timeout_s <= 0:
+            plan, cost = {}, "?"
+        else:
+            plan_connect_timeout_s = max(
+                1, round(clamped_tool_timeout_s(deadline_ts, SQL_CONNECT_TIMEOUT_S, clock=clock))
+            )
+            try:
+                plan = explain_query_plan(
+                    sql, profile=meta["profile"], user=meta["user"],
+                    timeout_ms=max(1, int(plan_timeout_s * 1000)),
+                    connect_timeout_s=plan_connect_timeout_s,
+                )
+                cost = plan.get("total_cost_estimate", "?")
+            except Exception:
+                plan = {}
+                cost = "?"
 
+        truncated = bool(df.attrs.get("truncated"))
+        truncated_note = " (BỊ CẮT ở trần dòng)" if truncated else ""
         trace = append_trace(state, "sql", "execute_sql",
-                             f"OK — {len(df)} rows, cost ~{cost}", "ok")
+                             f"OK — {len(df)} rows{truncated_note}, cost ~{cost}", "ok")
         logger.info("SQL Agent: %d rows returned", len(df))
 
-        return {
+        # Kết quả bị cắt ở trần dòng (df.attrs["truncated"], graph/tools/
+        # sql_tool.py) trước bản này chỉ tới được `action_trace` — một
+        # dòng chữ chôn trong danh sách trace, không phải
+        # `degradation_reason`. `finalize_node` phân loại "success" khi
+        # KHÔNG có lý do suy giảm nào (đúng bản sửa cho lỗi C1 review toàn
+        # nhánh: một lượt bị cắt không được gọi là success) — nhưng nó chỉ
+        # thấy được những gì NẰM TRONG `degradation_reason`. Một câu SELECT
+        # trả về nhiều hơn `SQL_MAX_ROWS` (mặc định 50.000) dòng thì
+        # "thành công" này là giả: người dùng nhận một bảng THIẾU dữ liệu
+        # mà không có banner nào cảnh báo (app.py chỉ hiện banner cho
+        # partial/failed).
+        row_cap = df.attrs.get("row_cap")
+        reasons = state.get("degradation_reason", [])
+        if truncated:
+            reasons = reasons + [
+                f"Kết quả SQL bị cắt ở {row_cap} dòng — câu truy vấn trả về nhiều hơn thế."
+            ]
+
+        return with_routing({
             **state,
             "current_agent": "sql",
             "completed_agents": state.get("completed_agents", []) + ["sql"],
             "agent_outputs": {
                 **state.get("agent_outputs", {}),
-                "sql": {"status": "ok", "sql": sql, "row_count": len(df)},
+                "sql": {"status": "ok", "sql": sql, "row_count": len(df), "truncated": truncated},
             },
             "shared_dataframe": df_to_state(df),
-            "sql_result": {"sql": sql, "row_count": len(df)},
+            "sql_result": {"sql": sql, "row_count": len(df), "truncated": truncated, "row_cap": row_cap},
             "shared_metadata": {
                 **state.get("shared_metadata", {}),
                 "sql_row_count": len(df),
                 "sql_query": sql,
-                "sql_result": {"sql": sql, "row_count": len(df)},
+                "sql_result": {"sql": sql, "row_count": len(df), "truncated": truncated, "row_cap": row_cap},
             },
+            "degradation_reason": reasons,
             "action_trace": trace,
             "status": "running",
-        }
+            # `client.calls_made`, không phải `attempt`: `attempt` chỉ đếm
+            # số vòng lặp NGOÀI của node này, còn ModelClient có thể tự
+            # retry hoặc rơi về OpenAI fallback bên trong MỘT vòng —
+            # xem ghi chú ở model/model_client.py::ModelClient.__init__.
+            "llm_calls_used": state.get("llm_calls_used", 0) + client.calls_made,
+        })
 
     # ── Exhausted retries ─────────────────────────────────────
     error_summary = f"SQL Agent failed after {MAX_RETRIES} attempts. Last error: {error_context}"
@@ -294,9 +418,10 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
         },
         "last_error": {
             "agent": "sql",
-            "error_type": "sql_execution",
+            "error_type": error_label,
             "traceback": error_summary,
         },
         "action_trace": trace,
         "status": "running",
+        "llm_calls_used": state.get("llm_calls_used", 0) + client.calls_made,
     }

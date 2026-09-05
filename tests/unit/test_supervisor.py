@@ -22,8 +22,6 @@ import pytest
 # Project root on sys.path (same pattern used by all scripts in this repo)
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from langgraph.graph import END
-
 from graph.agents.supervisor import build_system_prompt, route_next_agent, supervisor_node
 from graph.state import MultiAgentState, make_initial_state
 from perception.schema_context import SchemaContext
@@ -124,12 +122,12 @@ class TestRouteNextAgent:
     # 7. Plan with all agents completed → END
     def test_all_completed_routes_to_end(self):
         s = _state(PLAN_SIMPLE, completed=["sql", "insight"])
-        assert route_next_agent(s) == END
+        assert route_next_agent(s) == "finalize"
 
     # 8. Failed status → END regardless of plan
     def test_failed_status_routes_to_end(self):
         s = _state(PLAN_COMPLEX, status="failed")
-        assert route_next_agent(s) == END
+        assert route_next_agent(s) == "finalize"
 
     # 9. Agent error count >= 3 → reflector
     def test_error_limit_triggers_reflector(self):
@@ -139,25 +137,24 @@ class TestRouteNextAgent:
     # 10. Empty plan → END
     def test_empty_plan_routes_to_end(self):
         s = _state(plan=[], completed=[])
-        assert route_next_agent(s) == END
+        assert route_next_agent(s) == "finalize"
 
-    # 11. New failure wave after reflector → reflector again (not stuck skip)
-    def test_sql_second_failure_wave_routes_back_to_reflector(self):
-        s = _state(
-            PLAN_SIMPLE,
-            agent_outputs={
-                "reflector": {"status": "ok"},
-                "sql": {"status": "error", "error": "boom"},
-            },
-            error_counts={"sql": 2},
-            shared_metadata={
-                "reflect_error_snapshot": {"sql": 1},
-                "reflect_passes_per_agent": {"sql": 1},
-            },
-        )
-        assert route_next_agent(s) == "reflector"
-
-    # 12. Fresh failure wave but reflector budget exhausted → END (stuck specialist)
+    # 11. Fresh failure wave but reflector budget exhausted → END (stuck specialist)
+    #
+    # Note: under MAX_REFLECTOR_PASSES_PER_AGENT = 1 (task 6), "a second failure
+    # wave arrives while still under the reflector budget" is no longer a
+    # reachable state — reflector_agent.py writes agent_outputs["reflector"]
+    # and increments reflect_passes_per_agent[agent] atomically in the same
+    # state update (graph/agents/reflector_agent.py:102-113), so the moment
+    # agent_outputs["reflector"] exists, passes >= 1 == the cap. A prior
+    # version of this test tried to model "second wave, still under budget"
+    # with a hand-picked fixture (passes=0 while agent_outputs["reflector"]
+    # was already populated) — that fixture doesn't correspond to any state
+    # real execution can produce, and it also failed to exercise the cap
+    # boundary at all (it would pass unchanged for any cap >= 1). Removed;
+    # the two reachable cases are covered by test_error_limit_triggers_reflector
+    # (no reflector pass yet, under budget → reflector) and this test (one
+    # reflector pass already spent, cap reached → blocked/finalize).
     def test_reflector_cap_exceeded_ends_when_sql_stuck(self):
         from graph.agents.supervisor import MAX_REFLECTOR_PASSES_PER_AGENT
 
@@ -173,7 +170,7 @@ class TestRouteNextAgent:
                 "reflect_passes_per_agent": {"sql": MAX_REFLECTOR_PASSES_PER_AGENT},
             },
         )
-        assert route_next_agent(s) == END
+        assert route_next_agent(s) == "finalize"
 
 
 # ── Supervisor node tests ─────────────────────────────────────────────────────
@@ -207,6 +204,66 @@ class TestSupervisorNode:
         assert result["execution_plan"][1]["agent"] == "insight"
         assert "supervisor" in result["completed_agents"]
         assert result["agent_outputs"]["supervisor"]["status"] == "ok"
+
+    @patch("graph.agents.supervisor.ModelClient")
+    def test_the_supervisors_own_model_call_counts_against_the_ceiling(self, MockClient):
+        """Trần MAX_LLM_CALLS_PER_QUERY chỉ có nghĩa khi MỌI lời gọi đều
+        được đếm. Năm node specialist đều đếm; supervisor thì không, nên
+        trần thực tế lỏng hơn quảng cáo — và lỏng đúng ở chỗ tệ nhất, vì
+        supervisor chạy trước tất cả nên phần vượt của nó ăn vào ngân sách
+        của mọi node phía sau."""
+        mock_instance = MagicMock()
+        mock_instance.invoke_json.return_value = self.VALID_PLAN_DICT
+        # `calls_made` là số lời gọi mạng THẬT của ModelClient (xem
+        # model/model_client.py::ModelClient.__init__) — node đọc thuộc
+        # tính này, không phải biến vòng lặp `attempt` của chính nó, nên
+        # mock đứng thay ModelClient phải tự khai đúng số này.
+        mock_instance.calls_made = 1
+        MockClient.return_value = mock_instance
+
+        s = make_initial_state("q", SCHEMA_CONTEXT)
+        s["llm_calls_used"] = 4
+        result = supervisor_node(s)
+
+        assert result["llm_calls_used"] == 5, "một lời gọi lập kế hoạch = một đơn vị trần"
+
+    @patch("graph.agents.supervisor.ModelClient")
+    def test_a_failed_planning_run_still_charges_for_what_it_burned(self, MockClient):
+        """Hỏng hết retry vẫn tiêu đủ MAX_SUPERVISOR_RETRIES lời gọi. Không
+        đếm chúng thì một supervisor hỏng thành lời gọi miễn phí."""
+        from graph.agents.supervisor import MAX_SUPERVISOR_RETRIES
+
+        mock_instance = MagicMock()
+        mock_instance.invoke_json.side_effect = RuntimeError("Ollama down")
+        # Ba lần gọi invoke_json thật (MAX_SUPERVISOR_RETRIES lần, mỗi lần
+        # hỏng) — `calls_made` phải phản ánh đúng ba lần đó, không phải
+        # `MAX_SUPERVISOR_RETRIES` được suy luận từ nơi khác.
+        mock_instance.calls_made = MAX_SUPERVISOR_RETRIES
+        MockClient.return_value = mock_instance
+
+        result = supervisor_node(make_initial_state("q", SCHEMA_CONTEXT))
+
+        assert result["status"] == "failed"
+        assert result["llm_calls_used"] == MAX_SUPERVISOR_RETRIES
+
+    @patch("graph.agents.supervisor.ModelClient")
+    def test_retries_are_charged_individually_not_as_one_call(self, MockClient):
+        """Hỏng lần 1, xong lần 2 → hai lời gọi, tính hai."""
+        mock_instance = MagicMock()
+        mock_instance.invoke_json.side_effect = [
+            RuntimeError("transient"),
+            self.VALID_PLAN_DICT,
+        ]
+        # Hai lần gọi invoke_json thật (lần 1 hỏng, lần 2 xong) — mock phải
+        # tự khai đúng số này qua `calls_made`, không phải để node tự suy
+        # luận từ `attempt`.
+        mock_instance.calls_made = 2
+        MockClient.return_value = mock_instance
+
+        result = supervisor_node(make_initial_state("q", SCHEMA_CONTEXT))
+
+        assert result["status"] == "running"
+        assert result["llm_calls_used"] == 2
 
     @patch("graph.agents.supervisor.ModelClient")
     def test_supervisor_model_error_sets_failed(self, MockClient):

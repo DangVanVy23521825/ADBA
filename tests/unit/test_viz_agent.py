@@ -176,5 +176,43 @@ class TestVizAgentNode:
         assert _extract_code(raw) == "import pandas as pd"
 
 
+class TestBudgetCanRunOutBetweenModelAndSandbox:
+    """Regression: `node_may_run` chỉ gác cửa TRƯỚC lời gọi model — nó
+    không thấy phần chi tiêu SAU đó. Trước bản sửa này, một lượt qua được
+    cửa gác (còn đủ ~15s cho model) vẫn có thể chạy `run_chart_safe` với
+    `CHART_EXEC_TIMEOUT_SECONDS` (25s) độc lập với deadline ngay sau,
+    cộng lại vượt ngân sách toàn cục dù cửa gác nói "còn giờ".
+
+    Cùng kỹ thuật tiêm đồng hồ hai mốc như
+    `test_sql_agent.py::TestBudgetCanRunOutBetweenModelAndTool` — không
+    `time.sleep`.
+    """
+
+    @staticmethod
+    def _state_with_budget_dying_after_the_model_call():
+        s = _state(PLAN_WITH_VIZ)
+        seq = [1000.0, 1050.001]
+
+        def clock() -> float:
+            return seq.pop(0) if len(seq) > 1 else seq[0]
+
+        s["_clock"] = clock
+        s["deadline_ts"] = 1050.0
+        return s
+
+    @patch("graph.agents.viz_agent.run_chart_safe")
+    @patch("graph.agents.viz_agent.ModelClient")
+    def test_run_chart_safe_is_never_called_once_the_budget_is_gone(self, MockClient, mock_run):
+        mock_instance = MagicMock()
+        mock_instance.invoke.return_value = "{'chart_b64': 'x', 'chart_type': 'bar'}"
+        MockClient.return_value = mock_instance
+
+        s = self._state_with_budget_dying_after_the_model_call()
+        result = viz_agent_node(s)
+
+        mock_run.assert_not_called()
+        assert result["last_error"]["error_type"] == "budget_exceeded"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

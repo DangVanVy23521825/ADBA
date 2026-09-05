@@ -7,12 +7,15 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from pathlib import Path
 
+from graph.budget import calls_remaining, clamped_tool_timeout_s, node_may_run
+from graph.errors import BUDGET_EXCEEDED, MISSING_DATA, MISSING_STEP, PYTHON_RUNTIME
 from graph.state import MultiAgentState
-from graph.tools.python_tool import run_pandas_safe
-from graph.utils import append_trace, df_from_state, df_to_state
-from model.model_client import ModelClient
+from graph.tools.python_tool import PANDAS_EXEC_TIMEOUT_SECONDS, run_pandas_safe
+from graph.utils import append_trace, df_from_state, df_to_state, with_routing
+from model.model_client import BudgetExceededError, ModelClient
 
 logger = logging.getLogger(__name__)
 
@@ -50,13 +53,25 @@ def python_agent_node(state: MultiAgentState) -> MultiAgentState:
 
     Reads shared_dataframe from state. On failure retries once with error context.
     """
+    may_run, reason = node_may_run(state, "python")
+    if not may_run:
+        logger.warning("Python Agent: %s", reason)
+        return {
+            **state,
+            "current_agent": "python",
+            "completed_agents": state.get("completed_agents", []) + ["python"],
+            "degradation_reason": state.get("degradation_reason", []) + [reason],
+            "action_trace": append_trace(state, "python", "budget_check", reason, "error"),
+            "status": "running",
+        }
+
     step = _find_python_step(state)
     if step is None:
         logger.error("Python Agent: no python step in execution plan")
         return {
             **state,
             "status": "failed",
-            "last_error": {"agent": "python", "error_type": "missing_step"},
+            "last_error": {"agent": "python", "error_type": MISSING_STEP},
         }
 
     task: str = step.get("task", "")
@@ -70,7 +85,7 @@ def python_agent_node(state: MultiAgentState) -> MultiAgentState:
             "status": "failed",
             "last_error": {
                 "agent": "python",
-                "error_type": "missing_data",
+                "error_type": MISSING_DATA,
                 "traceback": "shared_dataframe is empty — sql agent must run first",
             },
         }
@@ -83,9 +98,17 @@ def python_agent_node(state: MultiAgentState) -> MultiAgentState:
 
     trace = append_trace(state, "python", "generate_code",
                          f"Task: {task} | cols: {columns}", "started")
+    state = {**state, "action_trace": trace}
 
-    client = ModelClient(agent_type="python")
+    client = ModelClient(
+        agent_type="python",
+        deadline_ts=state.get("deadline_ts"),
+        call_budget_remaining=calls_remaining(state.get("llm_calls_used", 0)),
+    )
     error_context: str = ""
+
+    # Nhãn cho đường thất bại — xem nhánh BudgetExceededError bên dưới.
+    error_label: str = PYTHON_RUNTIME
 
     for attempt in range(1, MAX_RETRIES + 1):
         user_prompt = f"Task: {task}"
@@ -101,6 +124,15 @@ def python_agent_node(state: MultiAgentState) -> MultiAgentState:
 
         try:
             raw = client.invoke(system_prompt=system_prompt, user_prompt=user_prompt)
+        except BudgetExceededError as exc:
+            # Trước `except Exception`: BudgetExceededError là RuntimeError,
+            # nên nhánh chung sẽ nuốt nó và dán nhãn `python_runtime` —
+            # tức là "code của model hỏng", trong khi thật ra chưa có dòng
+            # code nào chạy.
+            error_label = BUDGET_EXCEEDED
+            error_context = str(exc)
+            logger.warning("Python Agent attempt %d hết ngân sách: %s", attempt, error_context)
+            continue
         except Exception as exc:
             error_context = f"ModelClient error: {exc}"
             logger.warning("Python Agent attempt %d: %s", attempt, error_context)
@@ -109,13 +141,35 @@ def python_agent_node(state: MultiAgentState) -> MultiAgentState:
         code = _extract_code(raw)
         logger.info("Python Agent attempt %d code preview:\n%s", attempt, code[:300])
 
+        # Ngân sách còn lại SAU model, TRƯỚC khi vào sandbox — `node_may_run`
+        # ở đầu hàm chỉ gác cửa cho MỘT lời gọi model, không thấy phần chi
+        # tiêu sau đó. Một lượt qua cửa vì còn ~15s cho model vẫn có thể
+        # tốn tới `PANDAS_EXEC_TIMEOUT_SECONDS` (25s) ở sandbox ngay sau —
+        # cộng lại có thể vượt ngân sách toàn cục dù cửa gác nói "còn giờ".
+        clock = state.get("_clock", time.time)
+        deadline_ts = state.get("deadline_ts")
+        sandbox_timeout_s = clamped_tool_timeout_s(
+            deadline_ts, PANDAS_EXEC_TIMEOUT_SECONDS, clock=clock
+        )
+        if sandbox_timeout_s <= 0:
+            error_label = BUDGET_EXCEEDED
+            error_context = "Hết ngân sách thời gian sau khi model trả lời — không còn chỗ để chạy code."
+            logger.warning("Python Agent attempt %d: %s", attempt, error_context)
+            continue
+
         try:
-            df_out = run_pandas_safe(code, df_in)
+            df_out = run_pandas_safe(code, df_in, timeout_seconds=sandbox_timeout_s)
         except Exception as exc:
             error_context = str(exc)
             logger.warning("Python Agent execution error (attempt %d): %s", attempt, error_context)
             trace = append_trace(state, "python", "execute_code",
                                  f"Attempt {attempt} error: {error_context}", "error")
+            # Ghi lại vào state: `append_trace` dựng danh sách mới từ
+            # `state["action_trace"]`, nên vòng lặp sau mà vẫn đọc `state`
+            # cũ sẽ dựng lại từ danh sách GỐC và ghi đè mất mục vừa thêm.
+            # Không có dòng này, chỉ mục cuối cùng sống sót và mọi chẩn
+            # đoán của các lần thử trước biến mất khỏi UI lẫn log JSONL.
+            state = {**state, "action_trace": trace}
             continue
 
         # ── Success ───────────────────────────────────────────────
@@ -130,7 +184,7 @@ def python_agent_node(state: MultiAgentState) -> MultiAgentState:
         logger.info("Python Agent: %d rows output, %d new columns",
                     len(df_out), len(stats["new_columns"]))
 
-        return {
+        return with_routing({
             **state,
             "current_agent": "python",
             "completed_agents": state.get("completed_agents", []) + ["python"],
@@ -148,7 +202,10 @@ def python_agent_node(state: MultiAgentState) -> MultiAgentState:
             },
             "action_trace": trace,
             "status": "running",
-        }
+            # `client.calls_made`, không phải `attempt` — xem ghi chú ở
+            # model/model_client.py::ModelClient.__init__.
+            "llm_calls_used": state.get("llm_calls_used", 0) + client.calls_made,
+        })
 
     # ── Exhausted retries ─────────────────────────────────────
     error_summary = f"Python Agent failed after {MAX_RETRIES} attempts. Last error: {error_context}"
@@ -168,9 +225,10 @@ def python_agent_node(state: MultiAgentState) -> MultiAgentState:
         },
         "last_error": {
             "agent": "python",
-            "error_type": "python_runtime",
+            "error_type": error_label,
             "traceback": error_summary,
         },
         "action_trace": trace,
         "status": "running",
+        "llm_calls_used": state.get("llm_calls_used", 0) + client.calls_made,
     }

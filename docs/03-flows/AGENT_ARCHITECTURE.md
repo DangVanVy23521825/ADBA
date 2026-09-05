@@ -34,10 +34,11 @@ flowchart LR
 
 | Agent | Node LangGraph | Prompt | Retry nội bộ | Temperature | Max tokens | Timeout (s) |
 |---|---|---|---|---|---|---|
+| `finalize` | `finalize_node()` | inline (trong file agent) | — | — | — | — |
 | `insight` | `insight_agent_node()` | `prompts/insight_generation.txt` | — | 0.2 | 512 | 200 |
 | `python` | `python_agent_node()` | `prompts/data_analysis.txt` | 2 | 0.1 | 1024 | 200 |
 | `reflector` | `reflector_agent_node()` | inline (trong file agent) | — | 0.1 | 512 | 120 |
-| `sql` | `sql_agent_node()` | `prompts/text_to_sql.txt` | 3 | 0.0 | 1024 | 200 |
+| `sql` | `sql_agent_node()` | `prompts/text_to_sql.txt` | 2 | 0.0 | 1024 | 200 |
 | `supervisor` | `supervisor_node()` | `prompts/supervisor_routing.txt` | — | 0.1 | 800 | 300 |
 | `viz` | `viz_agent_node()` | `prompts/viz_generation.txt` | 2 | 0.2 | 1024 | 150 |
 
@@ -269,42 +270,53 @@ Ba điều đáng đọc kỹ:
 | File | Số test |
 |---|---|
 | `tests/fixtures/mini_schema.py` | 0 |
+| `tests/integration/test_budget_end_to_end.py` | 5 |
 | `tests/integration/test_complex_queries.py` | 10 |
 | `tests/integration/test_onboard_flow.py` | 3 |
+| `tests/integration/test_readonly_role.py` | 7 |
 | `tests/integration/test_schema_context_wiring.py` | 6 |
 | `tests/integration/test_simple_queries.py` | 10 |
 | `tests/integration/test_tier2_executor.py` | 10 |
 | `tests/unit/test_annotate.py` | 38 |
 | `tests/unit/test_annotations.py` | 32 |
+| `tests/unit/test_budget.py` | 30 |
+| `tests/unit/test_budget_gating.py` | 11 |
 | `tests/unit/test_connection_profile.py` | 16 |
 | `tests/unit/test_describe_dataset.py` | 6 |
 | `tests/unit/test_egress_boundary.py` | 13 |
+| `tests/unit/test_errors.py` | 5 |
 | `tests/unit/test_fetch_dataset.py` | 25 |
+| `tests/unit/test_finalize.py` | 22 |
 | `tests/unit/test_insight_agent.py` | 7 |
 | `tests/unit/test_introspect.py` | 16 |
 | `tests/unit/test_load_sqlite_to_postgres.py` | 46 |
+| `tests/unit/test_model_client_calls_made.py` | 8 |
+| `tests/unit/test_model_client_deadline.py` | 12 |
 | `tests/unit/test_onboard_cli.py` | 45 |
 | `tests/unit/test_onboard_refresh.py` | 5 |
 | `tests/unit/test_onboard_verify.py` | 20 |
 | `tests/unit/test_profile_store.py` | 24 |
 | `tests/unit/test_prompts_are_schema_agnostic.py` | 6 |
-| `tests/unit/test_python_agent.py` | 14 |
+| `tests/unit/test_python_agent.py` | 15 |
+| `tests/unit/test_python_sandbox_isolation.py` | 7 |
 | `tests/unit/test_reflector.py` | 3 |
 | `tests/unit/test_render_schema.py` | 29 |
 | `tests/unit/test_retrieval.py` | 20 |
 | `tests/unit/test_review_state.py` | 21 |
+| `tests/unit/test_routing_is_pure.py` | 8 |
 | `tests/unit/test_schema_context.py` | 12 |
 | `tests/unit/test_schema_model.py` | 7 |
-| `tests/unit/test_sql_agent.py` | 18 |
+| `tests/unit/test_sql_agent.py` | 27 |
 | `tests/unit/test_sql_identifiers.py` | 12 |
 | `tests/unit/test_sql_tables.py` | 21 |
-| `tests/unit/test_sql_tool_guard.py` | 19 |
+| `tests/unit/test_sql_tool_guard.py` | 27 |
 | `tests/unit/test_sqlite_dialect.py` | 18 |
-| `tests/unit/test_supervisor.py` | 16 |
+| `tests/unit/test_supervisor.py` | 18 |
 | `tests/unit/test_tier1_recall.py` | 9 |
 | `tests/unit/test_tier2_execution.py` | 37 |
-| `tests/unit/test_viz_agent.py` | 11 |
-| **Tổng** | **605** |
+| `tests/unit/test_trace_jsonl.py` | 10 |
+| `tests/unit/test_viz_agent.py` | 12 |
+| **Tổng** | **751** |
 
 <!-- AUTO:end id=tests -->
 
@@ -329,10 +341,10 @@ Ba điều đáng đọc kỹ:
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `40c7214` — docs(eval): kết quả lượt đo tầng 2 đầu tiên, gồm phép quét k |
+| Commit nguồn gần nhất | `dfab879` — fix(budget): enforce LLM call cap inside retries |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-09-03 |
-| Số commit nguồn | 106 |
+| Ngày commit | 2026-09-05 |
+| Số commit nguồn | 133 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

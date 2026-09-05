@@ -4,8 +4,10 @@ MultiAgentState — shared TypedDict for the LangGraph multi-agent pipeline.
 
 from __future__ import annotations
 
+import time
 from typing import Any, NotRequired, TypedDict
 
+from graph.budget import DEFAULT_BUDGET_S, Clock, make_deadline, new_query_id
 from perception.schema_context import SchemaContext
 
 
@@ -14,6 +16,12 @@ class MultiAgentState(TypedDict):
     # ── Input ──────────────────────────────────────────────
     query: str
     schema_context: SchemaContext
+
+    # ── Ngân sách ──────────────────────────────────────────
+    query_id: str
+    deadline_ts: float
+    llm_calls_used: int
+    degradation_reason: list[str]
 
     # ── Supervisor ─────────────────────────────────────────
     execution_plan: list[dict[str, Any]]
@@ -44,11 +52,25 @@ class MultiAgentState(TypedDict):
     status: str
 
 
-def make_initial_state(query: str, schema_context: SchemaContext) -> MultiAgentState:
-    """Return a fresh state dict for a new query."""
+def make_initial_state(
+    query: str,
+    schema_context: SchemaContext,
+    budget_s: float = DEFAULT_BUDGET_S,
+    clock: Clock = time.time,
+) -> MultiAgentState:
+    """Return a fresh state dict for a new query.
+
+    `budget_s` và `clock` đều có mặc định, nên mọi lời gọi hai tham số
+    hiện có vẫn chạy nguyên. `clock` tồn tại để test deadline không phải
+    sleep.
+    """
     return MultiAgentState(
         query=query,
         schema_context=schema_context,
+        query_id=new_query_id(),
+        deadline_ts=make_deadline(budget_s, clock),
+        llm_calls_used=0,
+        degradation_reason=[],
         execution_plan=[],
         dependency_graph={},
         ready_agents=[],

@@ -166,6 +166,34 @@ class ModelClient:
         self.deadline_ts = deadline_ts
         self.clock = clock
 
+        # Đếm SỐ LỜI GỌI MẠNG THẬT — không phải số vòng lặp. Cộng dồn cho
+        # TRỌN VÒNG ĐỜI của instance này, KHÔNG reset mỗi lần invoke(): mọi
+        # node dựng client MỘT LẦN trước vòng lặp ngoài của nó rồi gọi
+        # invoke() nhiều lần trên CÙNG instance (đã kiểm cả 6 file agent),
+        # nên đọc `calls_made` một lần ở cuối hàm cho ra đúng tổng thật của
+        # cả node, bất kể vòng lặp ngoài chạy mấy lượt.
+        #
+        # Trước bản này, mỗi node tự ước lượng số lời gọi bằng biến vòng
+        # lặp NGOÀI của chính nó (`attempt`, hay `MAX_RETRIES` khi hết
+        # lượt) — con số đó KHÔNG PHẢI số lời gọi HTTP thật, vì hai lý do
+        # độc lập:
+        #   1. `_invoke_ollama` có vòng lặp retry RIÊNG, ẩn hoàn toàn với
+        #      caller — một `client.invoke()` có thể tốn tới
+        #      `MODEL_MAX_RETRIES` (3) lời gọi Ollama thật. Supervisor với
+        #      `MAX_SUPERVISOR_RETRIES=3` vòng ngoài × 3 vòng trong = tới 9
+        #      lời gọi thật, báo cáo thành 3.
+        #   2. Fallback OpenAI (`_invoke_openai`) là MỘT lời gọi mạng thật
+        #      nữa, tới một backend khác — không nơi nào đếm nó.
+        # `MAX_LLM_CALLS_PER_QUERY` là tuyến phòng thủ CUỐI khi đồng hồ vì
+        # lý do nào đó không cứu được (spec 5.4) — một trần đếm sai số thật
+        # thì không còn là trần nữa. Sửa tận gốc: đếm Ở NƠI lời gọi mạng
+        # THẬT sự xảy ra (`_chat_once_ollama`, `_invoke_openai`'s request),
+        # không phải suy luận từ biến vòng lặp ở một lớp khác.
+        #
+        # Mọi node phải cộng `client.calls_made` vào `llm_calls_used` khi
+        # trả về — KHÔNG PHẢI `attempt`/`MAX_RETRIES`/hằng số `1` nữa.
+        self.calls_made: int = 0
+
     # Sàn cho timeout đẩy xuống HTTP client. `effective_timeout_s()` có thể
     # trả về 0 khi deadline đã cận, và `timeout=0` với httpx nghĩa là hỏng
     # ngay lập tức — biến một lời gọi lẽ ra vẫn kịp thành một lỗi giả.
@@ -235,6 +263,10 @@ class ModelClient:
             # lần thử thứ hai một ngân sách đã tiêu mất rồi.
             budget = self.effective_timeout_s()
             start = time.time()
+            # Cộng dồn NGAY TRƯỚC lời gọi thật, không phải sau khi biết kết
+            # quả — một lần thử timeout/lỗi vẫn là MỘT lời gọi mạng đã xảy
+            # ra, dù nó không trả về gì dùng được.
+            self.calls_made += 1
             try:
                 out = self._chat_once_ollama(messages, budget)
                 elapsed = time.time() - start
@@ -269,6 +301,13 @@ class ModelClient:
             ) from exc
 
         client = OpenAI(api_key=api_key)
+        # Cùng nguyên tắc với _invoke_ollama: cộng NGAY TRƯỚC lời gọi mạng
+        # thật, không phải sau khi biết kết quả. Đây là lời gọi tới MỘT
+        # BACKEND KHÁC (OpenAI, không phải Ollama) — trước bản này không
+        # nơi nào đếm nó vào `llm_calls_used`, nên trần 12 lời gọi/câu hỏi
+        # (spec 5.4) không tính tới nó dù nó tốn tiền thật và thời gian
+        # thật giống hệt một lời gọi Ollama.
+        self.calls_made += 1
         response = client.chat.completions.create(
             model=self.openai_model,
             messages=[

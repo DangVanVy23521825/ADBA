@@ -103,8 +103,13 @@ def insight_agent_node(state: MultiAgentState) -> MultiAgentState:
     trace = append_trace(state, "insight", "generate_insight",
                          f"Query: {query}", "started")
 
+    # Dựng NGOÀI try: cả nhánh thành công lẫn nhánh lỗi bên dưới đều đọc
+    # `client.calls_made` (số lời gọi mạng THẬT, xem ghi chú ở
+    # model/model_client.py::ModelClient.__init__) — nếu client chỉ tồn
+    # tại trong try, nhánh except tham chiếu nó sẽ NameError khi client
+    # chưa kịp gán.
+    client = ModelClient(agent_type="insight", deadline_ts=state.get("deadline_ts"))
     try:
-        client = ModelClient(agent_type="insight", deadline_ts=state.get("deadline_ts"))
         raw = client.invoke_json(system_prompt=system_prompt, user_prompt=query)
 
         # Pydantic validation
@@ -128,7 +133,7 @@ def insight_agent_node(state: MultiAgentState) -> MultiAgentState:
             },
             "action_trace": trace,
             "status": "success",
-            "llm_calls_used": state.get("llm_calls_used", 0) + 1,
+            "llm_calls_used": state.get("llm_calls_used", 0) + client.calls_made,
         }
 
     except Exception as exc:
@@ -165,5 +170,5 @@ def insight_agent_node(state: MultiAgentState) -> MultiAgentState:
             },
             "action_trace": trace,
             "status": "failed",
-            "llm_calls_used": state.get("llm_calls_used", 0) + 1,
+            "llm_calls_used": state.get("llm_calls_used", 0) + client.calls_made,
         }

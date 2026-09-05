@@ -298,7 +298,11 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
             },
             "action_trace": trace,
             "status": "running",
-            "llm_calls_used": state.get("llm_calls_used", 0) + attempt,
+            # `client.calls_made`, không phải `attempt`: `attempt` chỉ đếm
+            # số vòng lặp NGOÀI của node này, còn ModelClient có thể tự
+            # retry hoặc rơi về OpenAI fallback bên trong MỘT vòng —
+            # xem ghi chú ở model/model_client.py::ModelClient.__init__.
+            "llm_calls_used": state.get("llm_calls_used", 0) + client.calls_made,
         })
 
     # ── Exhausted retries ─────────────────────────────────────
@@ -324,5 +328,5 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
         },
         "action_trace": trace,
         "status": "running",
-        "llm_calls_used": state.get("llm_calls_used", 0) + MAX_RETRIES,
+        "llm_calls_used": state.get("llm_calls_used", 0) + client.calls_made,
     }

@@ -214,6 +214,11 @@ class TestSupervisorNode:
         của mọi node phía sau."""
         mock_instance = MagicMock()
         mock_instance.invoke_json.return_value = self.VALID_PLAN_DICT
+        # `calls_made` là số lời gọi mạng THẬT của ModelClient (xem
+        # model/model_client.py::ModelClient.__init__) — node đọc thuộc
+        # tính này, không phải biến vòng lặp `attempt` của chính nó, nên
+        # mock đứng thay ModelClient phải tự khai đúng số này.
+        mock_instance.calls_made = 1
         MockClient.return_value = mock_instance
 
         s = make_initial_state("q", SCHEMA_CONTEXT)
@@ -230,6 +235,10 @@ class TestSupervisorNode:
 
         mock_instance = MagicMock()
         mock_instance.invoke_json.side_effect = RuntimeError("Ollama down")
+        # Ba lần gọi invoke_json thật (MAX_SUPERVISOR_RETRIES lần, mỗi lần
+        # hỏng) — `calls_made` phải phản ánh đúng ba lần đó, không phải
+        # `MAX_SUPERVISOR_RETRIES` được suy luận từ nơi khác.
+        mock_instance.calls_made = MAX_SUPERVISOR_RETRIES
         MockClient.return_value = mock_instance
 
         result = supervisor_node(make_initial_state("q", SCHEMA_CONTEXT))
@@ -245,6 +254,10 @@ class TestSupervisorNode:
             RuntimeError("transient"),
             self.VALID_PLAN_DICT,
         ]
+        # Hai lần gọi invoke_json thật (lần 1 hỏng, lần 2 xong) — mock phải
+        # tự khai đúng số này qua `calls_made`, không phải để node tự suy
+        # luận từ `attempt`.
+        mock_instance.calls_made = 2
         MockClient.return_value = mock_instance
 
         result = supervisor_node(make_initial_state("q", SCHEMA_CONTEXT))

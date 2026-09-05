@@ -65,6 +65,7 @@ def _initial(budget_s: float = DEFAULT_BUDGET_S, llm_calls_used: int = 0):
 def _supervisor_mock() -> MagicMock:
     m = MagicMock()
     m.invoke_json.return_value = PLAN_JSON
+    m.calls_made = 1
     return m
 
 

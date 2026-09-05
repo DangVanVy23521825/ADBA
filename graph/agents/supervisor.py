@@ -181,8 +181,11 @@ def supervisor_node(state: MultiAgentState) -> MultiAgentState:
                 },
                 "action_trace": trace,
                 "status": "failed",
-                # Đường thất bại đã đốt trọn MAX_SUPERVISOR_RETRIES lời gọi.
-                "llm_calls_used": state.get("llm_calls_used", 0) + MAX_SUPERVISOR_RETRIES,
+                # `client.calls_made`, không phải `MAX_SUPERVISOR_RETRIES`:
+                # ModelClient tự retry và có thể rơi về OpenAI fallback bên
+                # trong MỘT vòng ngoài — xem ghi chú ở
+                # model/model_client.py::ModelClient.__init__.
+                "llm_calls_used": state.get("llm_calls_used", 0) + client.calls_made,
             }
 
     if last_exc is not None and "validated" not in locals():
@@ -210,14 +213,15 @@ def supervisor_node(state: MultiAgentState) -> MultiAgentState:
         },
         "action_trace": trace,
         "status": "running",
-        # Lời gọi của CHÍNH supervisor cũng phải tính vào trần. Trước bản
-        # này thì không, nên trần "12 lời gọi mỗi câu hỏi" thực tế lỏng hơn
-        # quảng cáo tới MAX_SUPERVISOR_RETRIES lời gọi không ai đếm — và
-        # đếm sót ở đây còn tệ hơn ở chỗ khác, vì supervisor chạy TRƯỚC mọi
-        # node khác, nên phần vượt của nó ăn vào ngân sách của tất cả.
-        # `attempt` là số lần đã thử tính cả lần thành công, khớp với cách
-        # sql/python/viz đếm trên đường thành công của chúng.
-        "llm_calls_used": state.get("llm_calls_used", 0) + attempt,
+        # Lời gọi của CHÍNH supervisor cũng phải tính vào trần — supervisor
+        # chạy TRƯỚC mọi node khác, nên phần đếm sót ở đây ăn vào ngân sách
+        # của tất cả. `client.calls_made`, không phải `attempt`: `attempt`
+        # chỉ đếm số vòng lặp NGOÀI, còn ModelClient tự retry (tới
+        # MODEL_MAX_RETRIES lần) và có thể rơi về OpenAI fallback bên
+        # trong MỘT vòng — cả hai đều là lời gọi mạng thật mà `attempt`
+        # không thấy. Xem ghi chú ở
+        # model/model_client.py::ModelClient.__init__.
+        "llm_calls_used": state.get("llm_calls_used", 0) + client.calls_made,
     }
 
 

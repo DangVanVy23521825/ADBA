@@ -86,8 +86,11 @@ def reflector_agent_node(state: MultiAgentState) -> MultiAgentState:
     trace = append_trace(state, "reflector", "diagnose_error",
                          f"Diagnosing {failed_agent}: {error_message[:100]}", "started")
 
+    # Dựng NGOÀI try — cả nhánh thành công lẫn nhánh fallback bên dưới đều
+    # hội tụ về CÙNG một return, đọc `client.calls_made` (xem ghi chú ở
+    # model/model_client.py::ModelClient.__init__).
+    client = ModelClient(agent_type="reflector", deadline_ts=state.get("deadline_ts"))
     try:
-        client = ModelClient(agent_type="reflector", deadline_ts=state.get("deadline_ts"))
         diagnosis = client.invoke_json(
             system_prompt=system_prompt,
             user_prompt=error_message,
@@ -128,5 +131,5 @@ def reflector_agent_node(state: MultiAgentState) -> MultiAgentState:
         "shared_metadata": meta,
         "action_trace": trace,
         "status": "running",
-        "llm_calls_used": state.get("llm_calls_used", 0) + 1,
+        "llm_calls_used": state.get("llm_calls_used", 0) + client.calls_made,
     }

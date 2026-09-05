@@ -48,6 +48,20 @@ PYTHON_CODE_YOY = (
 def _supervisor_mock(plan):
     m = MagicMock()
     m.invoke_json.return_value = {"plan_summary": "test", "steps": plan}
+    m.calls_made = 1
+    return m
+
+
+def _client_mock(**kwargs) -> MagicMock:
+    """`MagicMock` đứng thay `ModelClient`, luôn mang `calls_made` — kể từ
+    khi ModelClient tự đếm số lời gọi mạng THẬT (xem
+    model/model_client.py::ModelClient.__init__), mọi node đọc
+    `client.calls_made` thay vì suy luận từ biến vòng lặp của chính nó.
+    Một MagicMock trần không có thuộc tính đó, nên phép cộng
+    `state["llm_calls_used"] + client.calls_made` sẽ cộng với một
+    MagicMock khác thay vì một số nguyên."""
+    m = MagicMock(**kwargs)
+    m.calls_made = 1
     return m
 
 
@@ -80,16 +94,16 @@ def _all_patches(plan, sql_txt, exec_df, py_code, py_df, viz_code, insight_json=
     return (
         patch("graph.agents.supervisor.ModelClient", return_value=_supervisor_mock(plan)),
         patch("graph.agents.insight_agent.ModelClient",
-              return_value=MagicMock(invoke_json=MagicMock(return_value=insight_json))),
+              return_value=_client_mock(invoke_json=MagicMock(return_value=insight_json))),
         patch("graph.agents.viz_agent.ModelClient",
-              return_value=MagicMock(invoke=MagicMock(return_value=viz_code))),
+              return_value=_client_mock(invoke=MagicMock(return_value=viz_code))),
         patch("graph.agents.python_agent.run_pandas_safe", return_value=py_df),
         patch("graph.agents.python_agent.ModelClient",
-              return_value=MagicMock(invoke=MagicMock(return_value=py_code))),
+              return_value=_client_mock(invoke=MagicMock(return_value=py_code))),
         patch("graph.agents.sql_agent.explain_query_plan", return_value={}),
         patch("graph.agents.sql_agent.execute_sql", return_value=exec_df),
         patch("graph.agents.sql_agent.ModelClient",
-              return_value=MagicMock(invoke=MagicMock(return_value=sql_txt))),
+              return_value=_client_mock(invoke=MagicMock(return_value=sql_txt))),
     )
 
 
@@ -107,16 +121,16 @@ class TestComplexQueries:
 
         with patch("graph.agents.supervisor.ModelClient", return_value=_supervisor_mock(plan)), \
              patch("graph.agents.insight_agent.ModelClient",
-                   return_value=MagicMock(invoke_json=MagicMock(return_value=VALID_INSIGHT))), \
+                   return_value=_client_mock(invoke_json=MagicMock(return_value=VALID_INSIGHT))), \
               patch("graph.agents.viz_agent.ModelClient",
-                    return_value=MagicMock(invoke=MagicMock(return_value=CHART_CODE_BAR))), \
+                    return_value=_client_mock(invoke=MagicMock(return_value=CHART_CODE_BAR))), \
              patch("graph.agents.python_agent.run_pandas_safe", return_value=DF_PYTHON_OUTPUT), \
              patch("graph.agents.python_agent.ModelClient",
-                   return_value=MagicMock(invoke=MagicMock(return_value=PYTHON_CODE_YOY))), \
+                   return_value=_client_mock(invoke=MagicMock(return_value=PYTHON_CODE_YOY))), \
              patch("graph.agents.sql_agent.explain_query_plan", return_value={}), \
              patch("graph.agents.sql_agent.execute_sql", return_value=DF_Q4_COMPARISON), \
              patch("graph.agents.sql_agent.ModelClient",
-                   return_value=MagicMock(invoke=MagicMock(return_value=sql))):
+                   return_value=_client_mock(invoke=MagicMock(return_value=sql))):
             graph = build_multi_agent_graph()
             result = graph.invoke(_state(plan))
 
@@ -157,16 +171,16 @@ class TestComplexQueries:
 
         with patch("graph.agents.supervisor.ModelClient", return_value=_supervisor_mock(plan)), \
              patch("graph.agents.insight_agent.ModelClient",
-                   return_value=MagicMock(invoke_json=MagicMock(return_value=VALID_INSIGHT))), \
+                   return_value=_client_mock(invoke_json=MagicMock(return_value=VALID_INSIGHT))), \
              patch("graph.agents.viz_agent.ModelClient",
-                   return_value=MagicMock(invoke=MagicMock(return_value=chart_code))), \
+                   return_value=_client_mock(invoke=MagicMock(return_value=chart_code))), \
              patch("graph.agents.python_agent.run_pandas_safe", return_value=py_out), \
              patch("graph.agents.python_agent.ModelClient",
-                   return_value=MagicMock(invoke=MagicMock(return_value=py))), \
+                   return_value=_client_mock(invoke=MagicMock(return_value=py))), \
              patch("graph.agents.sql_agent.explain_query_plan", return_value={}), \
              patch("graph.agents.sql_agent.execute_sql", return_value=DF_REVENUE_BY_REGION), \
              patch("graph.agents.sql_agent.ModelClient",
-                   return_value=MagicMock(invoke=MagicMock(return_value=sql))):
+                   return_value=_client_mock(invoke=MagicMock(return_value=sql))):
             graph = build_multi_agent_graph()
             result = graph.invoke(_state(plan))
 
@@ -190,16 +204,16 @@ class TestComplexQueries:
 
         with patch("graph.agents.supervisor.ModelClient", return_value=_supervisor_mock(plan)), \
              patch("graph.agents.insight_agent.ModelClient",
-                   return_value=MagicMock(invoke_json=MagicMock(return_value=VALID_INSIGHT))), \
+                   return_value=_client_mock(invoke_json=MagicMock(return_value=VALID_INSIGHT))), \
              patch("graph.agents.viz_agent.ModelClient",
-                   return_value=MagicMock(invoke=MagicMock(return_value=CHART_CODE_GENERIC))), \
+                   return_value=_client_mock(invoke=MagicMock(return_value=CHART_CODE_GENERIC))), \
              patch("graph.agents.python_agent.run_pandas_safe", return_value=py_out), \
              patch("graph.agents.python_agent.ModelClient",
-                   return_value=MagicMock(invoke=MagicMock(return_value=py))), \
+                   return_value=_client_mock(invoke=MagicMock(return_value=py))), \
              patch("graph.agents.sql_agent.explain_query_plan", return_value={}), \
              patch("graph.agents.sql_agent.execute_sql", return_value=df), \
              patch("graph.agents.sql_agent.ModelClient",
-                   return_value=MagicMock(invoke=MagicMock(return_value=sql))):
+                   return_value=_client_mock(invoke=MagicMock(return_value=sql))):
             graph = build_multi_agent_graph()
             result = graph.invoke(_state(plan))
 
@@ -218,16 +232,16 @@ class TestComplexQueries:
 
         with patch("graph.agents.supervisor.ModelClient", return_value=_supervisor_mock(plan)), \
              patch("graph.agents.insight_agent.ModelClient",
-                   return_value=MagicMock(invoke_json=MagicMock(return_value=VALID_INSIGHT))), \
+                   return_value=_client_mock(invoke_json=MagicMock(return_value=VALID_INSIGHT))), \
              patch("graph.agents.viz_agent.ModelClient",
-                   return_value=MagicMock(invoke=MagicMock(return_value=CHART_CODE_GENERIC))), \
+                   return_value=_client_mock(invoke=MagicMock(return_value=CHART_CODE_GENERIC))), \
              patch("graph.agents.python_agent.run_pandas_safe", return_value=py_out), \
              patch("graph.agents.python_agent.ModelClient",
-                   return_value=MagicMock(invoke=MagicMock(return_value=py))), \
+                   return_value=_client_mock(invoke=MagicMock(return_value=py))), \
              patch("graph.agents.sql_agent.explain_query_plan", return_value={}), \
              patch("graph.agents.sql_agent.execute_sql", return_value=DF_SALARY_DIST), \
              patch("graph.agents.sql_agent.ModelClient",
-                   return_value=MagicMock(invoke=MagicMock(return_value=sql))):
+                   return_value=_client_mock(invoke=MagicMock(return_value=sql))):
             graph = build_multi_agent_graph()
             result = graph.invoke(_state(plan))
 
@@ -247,16 +261,16 @@ class TestComplexQueries:
 
         with patch("graph.agents.supervisor.ModelClient", return_value=_supervisor_mock(plan)), \
              patch("graph.agents.insight_agent.ModelClient",
-                   return_value=MagicMock(invoke_json=MagicMock(return_value=VALID_INSIGHT))), \
+                   return_value=_client_mock(invoke_json=MagicMock(return_value=VALID_INSIGHT))), \
              patch("graph.agents.viz_agent.ModelClient",
-                   return_value=MagicMock(invoke=MagicMock(return_value=CHART_CODE_GENERIC))), \
+                   return_value=_client_mock(invoke=MagicMock(return_value=CHART_CODE_GENERIC))), \
              patch("graph.agents.python_agent.run_pandas_safe", return_value=py_out), \
              patch("graph.agents.python_agent.ModelClient",
-                   return_value=MagicMock(invoke=MagicMock(return_value=py))), \
+                   return_value=_client_mock(invoke=MagicMock(return_value=py))), \
              patch("graph.agents.sql_agent.explain_query_plan", return_value={}), \
              patch("graph.agents.sql_agent.execute_sql", return_value=df), \
              patch("graph.agents.sql_agent.ModelClient",
-                   return_value=MagicMock(invoke=MagicMock(return_value=sql))):
+                   return_value=_client_mock(invoke=MagicMock(return_value=sql))):
             graph = build_multi_agent_graph()
             result = graph.invoke(_state(plan))
 
@@ -276,16 +290,16 @@ class TestComplexQueries:
 
         with patch("graph.agents.supervisor.ModelClient", return_value=_supervisor_mock(plan)), \
              patch("graph.agents.insight_agent.ModelClient",
-                   return_value=MagicMock(invoke_json=MagicMock(return_value=VALID_INSIGHT))), \
+                   return_value=_client_mock(invoke_json=MagicMock(return_value=VALID_INSIGHT))), \
              patch("graph.agents.viz_agent.ModelClient",
-                   return_value=MagicMock(invoke=MagicMock(return_value=CHART_CODE_GENERIC))), \
+                   return_value=_client_mock(invoke=MagicMock(return_value=CHART_CODE_GENERIC))), \
              patch("graph.agents.python_agent.run_pandas_safe", return_value=py_out), \
              patch("graph.agents.python_agent.ModelClient",
-                   return_value=MagicMock(invoke=MagicMock(return_value=py))), \
+                   return_value=_client_mock(invoke=MagicMock(return_value=py))), \
              patch("graph.agents.sql_agent.explain_query_plan", return_value={}), \
              patch("graph.agents.sql_agent.execute_sql", return_value=df), \
              patch("graph.agents.sql_agent.ModelClient",
-                   return_value=MagicMock(invoke=MagicMock(return_value=sql))):
+                   return_value=_client_mock(invoke=MagicMock(return_value=sql))):
             graph = build_multi_agent_graph()
             result = graph.invoke(_state(plan))
 
@@ -319,16 +333,16 @@ class TestComplexQueries:
 
         with patch("graph.agents.supervisor.ModelClient", return_value=_supervisor_mock(plan)), \
              patch("graph.agents.insight_agent.ModelClient",
-                   return_value=MagicMock(invoke_json=MagicMock(return_value=VALID_INSIGHT))), \
+                   return_value=_client_mock(invoke_json=MagicMock(return_value=VALID_INSIGHT))), \
              patch("graph.agents.viz_agent.ModelClient",
-                    return_value=MagicMock(invoke=MagicMock(return_value=chart))), \
+                    return_value=_client_mock(invoke=MagicMock(return_value=chart))), \
              patch("graph.agents.python_agent.run_pandas_safe", return_value=py_out), \
              patch("graph.agents.python_agent.ModelClient",
-                    return_value=MagicMock(invoke=MagicMock(return_value=py))), \
+                    return_value=_client_mock(invoke=MagicMock(return_value=py))), \
              patch("graph.agents.sql_agent.explain_query_plan", return_value={}), \
              patch("graph.agents.sql_agent.execute_sql", return_value=qdf), \
              patch("graph.agents.sql_agent.ModelClient",
-                   return_value=MagicMock(invoke=MagicMock(return_value=sql))):
+                   return_value=_client_mock(invoke=MagicMock(return_value=sql))):
             graph = build_multi_agent_graph()
             result = graph.invoke(_state(plan))
 
@@ -349,16 +363,16 @@ class TestComplexQueries:
 
         with patch("graph.agents.supervisor.ModelClient", return_value=_supervisor_mock(plan)), \
              patch("graph.agents.insight_agent.ModelClient",
-                   return_value=MagicMock(invoke_json=MagicMock(return_value=VALID_INSIGHT))), \
+                   return_value=_client_mock(invoke_json=MagicMock(return_value=VALID_INSIGHT))), \
              patch("graph.agents.viz_agent.ModelClient",
-                   return_value=MagicMock(invoke=MagicMock(return_value=CHART_CODE_GENERIC))), \
+                   return_value=_client_mock(invoke=MagicMock(return_value=CHART_CODE_GENERIC))), \
              patch("graph.agents.python_agent.run_pandas_safe", return_value=py_out), \
              patch("graph.agents.python_agent.ModelClient",
-                   return_value=MagicMock(invoke=MagicMock(return_value=py))), \
+                   return_value=_client_mock(invoke=MagicMock(return_value=py))), \
              patch("graph.agents.sql_agent.explain_query_plan", return_value={}), \
              patch("graph.agents.sql_agent.execute_sql", return_value=df), \
              patch("graph.agents.sql_agent.ModelClient",
-                   return_value=MagicMock(invoke=MagicMock(return_value=sql))):
+                   return_value=_client_mock(invoke=MagicMock(return_value=sql))):
             graph = build_multi_agent_graph()
             result = graph.invoke(_state(plan))
 
@@ -380,16 +394,16 @@ class TestComplexQueries:
 
         with patch("graph.agents.supervisor.ModelClient", return_value=_supervisor_mock(plan)), \
              patch("graph.agents.insight_agent.ModelClient",
-                   return_value=MagicMock(invoke_json=MagicMock(return_value=VALID_INSIGHT))), \
+                   return_value=_client_mock(invoke_json=MagicMock(return_value=VALID_INSIGHT))), \
              patch("graph.agents.viz_agent.ModelClient",
-                   return_value=MagicMock(invoke=MagicMock(return_value=CHART_CODE_GENERIC))), \
+                   return_value=_client_mock(invoke=MagicMock(return_value=CHART_CODE_GENERIC))), \
              patch("graph.agents.python_agent.run_pandas_safe", return_value=py_out), \
              patch("graph.agents.python_agent.ModelClient",
-                   return_value=MagicMock(invoke=MagicMock(return_value=py))), \
+                   return_value=_client_mock(invoke=MagicMock(return_value=py))), \
              patch("graph.agents.sql_agent.explain_query_plan", return_value={}), \
              patch("graph.agents.sql_agent.execute_sql", return_value=df), \
              patch("graph.agents.sql_agent.ModelClient",
-                   return_value=MagicMock(invoke=MagicMock(return_value=sql))):
+                   return_value=_client_mock(invoke=MagicMock(return_value=sql))):
             graph = build_multi_agent_graph()
             result = graph.invoke(_state(plan))
 
@@ -424,16 +438,16 @@ class TestComplexQueries:
 
         with patch("graph.agents.supervisor.ModelClient", return_value=_supervisor_mock(plan)), \
              patch("graph.agents.insight_agent.ModelClient",
-                   return_value=MagicMock(invoke_json=MagicMock(return_value=VALID_INSIGHT))), \
+                   return_value=_client_mock(invoke_json=MagicMock(return_value=VALID_INSIGHT))), \
              patch("graph.agents.viz_agent.ModelClient",
-                   return_value=MagicMock(invoke=MagicMock(return_value=CHART_CODE_GENERIC))), \
+                   return_value=_client_mock(invoke=MagicMock(return_value=CHART_CODE_GENERIC))), \
              patch("graph.agents.python_agent.run_pandas_safe", return_value=py_out), \
              patch("graph.agents.python_agent.ModelClient",
-                   return_value=MagicMock(invoke=MagicMock(return_value=py))), \
+                   return_value=_client_mock(invoke=MagicMock(return_value=py))), \
              patch("graph.agents.sql_agent.explain_query_plan", return_value={}), \
              patch("graph.agents.sql_agent.execute_sql", return_value=df), \
              patch("graph.agents.sql_agent.ModelClient",
-                   return_value=MagicMock(invoke=MagicMock(return_value=sql))):
+                   return_value=_client_mock(invoke=MagicMock(return_value=sql))):
             graph = build_multi_agent_graph()
             result = graph.invoke(_state(plan))
 

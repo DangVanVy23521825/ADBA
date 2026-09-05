@@ -198,7 +198,9 @@ def python_agent_node(state: MultiAgentState) -> MultiAgentState:
             },
             "action_trace": trace,
             "status": "running",
-            "llm_calls_used": state.get("llm_calls_used", 0) + attempt,
+            # `client.calls_made`, không phải `attempt` — xem ghi chú ở
+            # model/model_client.py::ModelClient.__init__.
+            "llm_calls_used": state.get("llm_calls_used", 0) + client.calls_made,
         })
 
     # ── Exhausted retries ─────────────────────────────────────
@@ -224,5 +226,5 @@ def python_agent_node(state: MultiAgentState) -> MultiAgentState:
         },
         "action_trace": trace,
         "status": "running",
-        "llm_calls_used": state.get("llm_calls_used", 0) + MAX_RETRIES,
+        "llm_calls_used": state.get("llm_calls_used", 0) + client.calls_made,
     }

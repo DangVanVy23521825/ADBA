@@ -45,18 +45,21 @@ def _supervisor_mock(plan: list[dict]) -> MagicMock:
         "plan_summary": "test",
         "steps": plan,
     }
+    m.calls_made = 1
     return m
 
 
 def _sql_mock(sql_text: str) -> MagicMock:
     m = MagicMock()
     m.invoke.return_value = sql_text
+    m.calls_made = 1
     return m
 
 
 def _insight_mock() -> MagicMock:
     m = MagicMock()
     m.invoke_json.return_value = VALID_INSIGHT
+    m.calls_made = 1
     return m
 
 

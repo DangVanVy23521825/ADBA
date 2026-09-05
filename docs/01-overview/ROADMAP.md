@@ -202,6 +202,7 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Commit | Ngày | Tác giả | Nội dung |
 |---|---|---|---|
+| `e1eb664` | 2026-09-05 | Đặng Văn Vỹ | fix(review): C1/C2/C3 — lượt bị cắt không còn bị gọi là success |
 | `d2f7f25` | 2026-09-03 | Đặng Văn Vỹ | feat(ui): hiển thị kết quả một phần và lý do bị cắt |
 | `ddaeb5a` | 2026-09-03 | Đặng Văn Vỹ | feat(trace): query_id + ngân sách trong trace, ghi JSONL; nhãn lỗi một nguồn |
 | `0ba85e1` | 2026-09-03 | Đặng Văn Vỹ | feat(budget): cấp phát theo dự trữ — python/viz bị cắt trước, insight được bảo vệ |
@@ -216,7 +217,6 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 | `45b7b5d` | 2026-09-01 | Đặng Văn Vỹ | feat(budget): deadline_ts mang trong state, clock tiêm được |
 | `0120aaa` | 2026-09-01 | Đặng Văn Vỹ | feat(db): role adba_readonly — lớp bảo đảm chỉ-đọc ở tầng Postgres |
 | `05b24f0` | 2026-09-01 | Đặng Văn Vỹ | fix(sql): fail closed, statement_timeout 30s→10s, trần 50k dòng |
-| `55aba8e` | 2026-09-01 | Đặng Văn Vỹ | fix(sandbox): spawn + env rỗng — ranh giới là tiến trình, không phải namespace |
 
 <!-- AUTO:end id=commit-history -->
 
@@ -224,10 +224,10 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `d2f7f25` — feat(ui): hiển thị kết quả một phần và lý do bị cắt |
+| Commit nguồn gần nhất | `e1eb664` — fix(review): C1/C2/C3 — lượt bị cắt không còn bị gọi là success |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-09-03 |
-| Số commit nguồn | 115 |
+| Ngày commit | 2026-09-05 |
+| Số commit nguồn | 116 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

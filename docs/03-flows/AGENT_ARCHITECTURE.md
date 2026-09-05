@@ -270,7 +270,7 @@ Ba điều đáng đọc kỹ:
 | File | Số test |
 |---|---|
 | `tests/fixtures/mini_schema.py` | 0 |
-| `tests/integration/test_budget_end_to_end.py` | 3 |
+| `tests/integration/test_budget_end_to_end.py` | 5 |
 | `tests/integration/test_complex_queries.py` | 10 |
 | `tests/integration/test_onboard_flow.py` | 3 |
 | `tests/integration/test_readonly_role.py` | 7 |
@@ -284,7 +284,7 @@ Ba điều đáng đọc kỹ:
 | `tests/unit/test_describe_dataset.py` | 6 |
 | `tests/unit/test_egress_boundary.py` | 13 |
 | `tests/unit/test_fetch_dataset.py` | 25 |
-| `tests/unit/test_finalize.py` | 19 |
+| `tests/unit/test_finalize.py` | 21 |
 | `tests/unit/test_insight_agent.py` | 7 |
 | `tests/unit/test_introspect.py` | 16 |
 | `tests/unit/test_load_sqlite_to_postgres.py` | 46 |
@@ -295,7 +295,7 @@ Ba điều đáng đọc kỹ:
 | `tests/unit/test_profile_store.py` | 24 |
 | `tests/unit/test_prompts_are_schema_agnostic.py` | 6 |
 | `tests/unit/test_python_agent.py` | 14 |
-| `tests/unit/test_python_sandbox_isolation.py` | 6 |
+| `tests/unit/test_python_sandbox_isolation.py` | 7 |
 | `tests/unit/test_reflector.py` | 3 |
 | `tests/unit/test_render_schema.py` | 29 |
 | `tests/unit/test_retrieval.py` | 20 |
@@ -310,7 +310,7 @@ Ba điều đáng đọc kỹ:
 | `tests/unit/test_tier1_recall.py` | 9 |
 | `tests/unit/test_trace_jsonl.py` | 10 |
 | `tests/unit/test_viz_agent.py` | 11 |
-| **Tổng** | **621** |
+| **Tổng** | **626** |
 
 <!-- AUTO:end id=tests -->
 
@@ -335,10 +335,10 @@ Ba điều đáng đọc kỹ:
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `d2f7f25` — feat(ui): hiển thị kết quả một phần và lý do bị cắt |
+| Commit nguồn gần nhất | `e1eb664` — fix(review): C1/C2/C3 — lượt bị cắt không còn bị gọi là success |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-09-03 |
-| Số commit nguồn | 115 |
+| Ngày commit | 2026-09-05 |
+| Số commit nguồn | 116 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

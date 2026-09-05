@@ -250,7 +250,7 @@ riêng qua MCP, và egress bị chặn ở tầng mạng. Chi tiết:
 | `docker-compose.yml` | 1 | 0 | 33 | — |
 | `docs` | 19 | 0 | — | Bộ tài liệu dự án (chính file này) |
 | `eval` | 12 | 8 | 2.719 | Runner đo baseline / PEFT và so sánh hai lần chạy |
-| `graph` | 19 | 19 | 2.632 | LangGraph: state, các node agent, và tool thực thi |
+| `graph` | 19 | 19 | 2.741 | LangGraph: state, các node agent, và tool thực thi |
 | `model` | 3 | 3 | 428 | ModelClient (Ollama local-first, fallback OpenAI) + tham số theo agent |
 | `onboard.py` | 1 | 1 | 1.012 | — |
 | `pages` | 1 | 1 | 86 | — |
@@ -259,7 +259,7 @@ riêng qua MCP, và egress bị chặn ở tầng mạng. Chi tiết:
 | `requirements.txt` | 1 | 0 | 18 | — |
 | `schemas` | 3 | 3 | 735 | Pydantic contract: ExecutionPlan (Supervisor) và InsightOutput (Insight) |
 | `scripts` | 8 | 3 | 1.683 | Tiện ích vận hành: áp schema, kiểm tra kết nối, sinh tài liệu |
-| `tests` | 46 | 43 | 9.260 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
+| `tests` | 46 | 43 | 9.453 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
 | `training` | 13 | 5 | 3.795 | Sinh dữ liệu, LoRA/QLoRA notebook, checkpoint và kết quả |
 | `.cursorrules` | 1 | 0 | 0 | — |
 | `.github` | 1 | 0 | 29 | CI/CD — unit test, build & push image lên GHCR |
@@ -281,6 +281,7 @@ kèm giá trị thật; `env.example` là bản mẫu.
 | `ADBA_MODEL_CALL_ESTIMATE_S` | `"15"` | — | `graph/budget.py` |
 | `ADBA_QUERY_BUDGET_S` | `"45"` | — | `graph/budget.py` |
 | `BACKUP_MODEL` | `"llama3.1:8b-instruct-q4_K_M"` | — | `model/model_config.py` |
+| `CHART_EXEC_TIMEOUT_SECONDS` | `str(PANDAS_EXEC_TIMEOUT_SECONDS` | — | `graph/tools/python_tool.py` |
 | `DATABASE_URL` | `"postgresql://adba_user:adba@localhost:5432/adba_db"` | — | `data/seed/seed_data.py`, `perception/extract_info_box.py`, `training/generate_data.py` (+1) |
 | `ENABLE_OPENAI_FALLBACK` | — | — | `model/model_client.py` |
 | `EVAL_MODEL` | `"qwen2.5-coder:7b-instruct-q5_K_M"` | — | `eval/eval_runner.py` |
@@ -289,7 +290,7 @@ kèm giá trị thật; `env.example` là bản mẫu.
 | `OLLAMA_NUM_CTX` | `"4096"` | — | `eval/eval_runner.py`, `model/model_config.py` |
 | `OPENAI_API_KEY` | `""` | — | `model/model_client.py` |
 | `OPENAI_MODEL` | `"gpt-4o-mini"` | — | `model/model_client.py` |
-| `PANDAS_EXEC_TIMEOUT_SECONDS` | `"10"` | — | `graph/tools/python_tool.py` |
+| `PANDAS_EXEC_TIMEOUT_SECONDS` | `"25"` | — | `graph/tools/python_tool.py` |
 | `POSTGRES_DB` | `"adba_db"` | — | `eval/eval_runner.py`, `scripts/test_postgres_connection.py` |
 | `POSTGRES_HOST` | `"localhost"` | — | `eval/eval_runner.py`, `scripts/test_postgres_connection.py` |
 | `POSTGRES_PASSWORD` | `"adba_password"` | — | `eval/eval_runner.py`, `scripts/test_postgres_connection.py` |
@@ -329,10 +330,10 @@ kèm giá trị thật; `env.example` là bản mẫu.
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `d2f7f25` — feat(ui): hiển thị kết quả một phần và lý do bị cắt |
+| Commit nguồn gần nhất | `e1eb664` — fix(review): C1/C2/C3 — lượt bị cắt không còn bị gọi là success |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-09-03 |
-| Số commit nguồn | 115 |
+| Ngày commit | 2026-09-05 |
+| Số commit nguồn | 116 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

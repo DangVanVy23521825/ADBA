@@ -118,6 +118,7 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 **Sửa lỗi**
 
+- C1/C2/C3 — lượt bị cắt không còn bị gọi là success — `e1eb664` (2026-09-05, Đặng Văn Vỹ)
 - đóng 2 lỗ hổng present-but-wrong-shape còn sót trong finalize — `eaceedf` (2026-09-01, Đặng Văn Vỹ)
 - finalize_node chịu được state None/sai kiểu, không ném lỗi — `ac65f33` (2026-09-01, Đặng Văn Vỹ)
 - remove unreachable fixture in test_supervisor.py (task 6 review) — `3e982da` (2026-09-01, Đặng Văn Vỹ)
@@ -246,10 +247,10 @@ Cập nhật `PRIMARY_MODEL` trong `.env`, `ollama pull <model>`, rồi chạy l
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `d2f7f25` — feat(ui): hiển thị kết quả một phần và lý do bị cắt |
+| Commit nguồn gần nhất | `e1eb664` — fix(review): C1/C2/C3 — lượt bị cắt không còn bị gọi là success |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-09-03 |
-| Số commit nguồn | 115 |
+| Ngày commit | 2026-09-05 |
+| Số commit nguồn | 116 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

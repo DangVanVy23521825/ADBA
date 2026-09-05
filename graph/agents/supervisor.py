@@ -181,6 +181,8 @@ def supervisor_node(state: MultiAgentState) -> MultiAgentState:
                 },
                 "action_trace": trace,
                 "status": "failed",
+                # Đường thất bại đã đốt trọn MAX_SUPERVISOR_RETRIES lời gọi.
+                "llm_calls_used": state.get("llm_calls_used", 0) + MAX_SUPERVISOR_RETRIES,
             }
 
     if last_exc is not None and "validated" not in locals():
@@ -208,6 +210,14 @@ def supervisor_node(state: MultiAgentState) -> MultiAgentState:
         },
         "action_trace": trace,
         "status": "running",
+        # Lời gọi của CHÍNH supervisor cũng phải tính vào trần. Trước bản
+        # này thì không, nên trần "12 lời gọi mỗi câu hỏi" thực tế lỏng hơn
+        # quảng cáo tới MAX_SUPERVISOR_RETRIES lời gọi không ai đếm — và
+        # đếm sót ở đây còn tệ hơn ở chỗ khác, vì supervisor chạy TRƯỚC mọi
+        # node khác, nên phần vượt của nó ăn vào ngân sách của tất cả.
+        # `attempt` là số lần đã thử tính cả lần thành công, khớp với cách
+        # sql/python/viz đếm trên đường thành công của chúng.
+        "llm_calls_used": state.get("llm_calls_used", 0) + attempt,
     }
 
 

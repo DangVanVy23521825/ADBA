@@ -23,10 +23,6 @@ Clock = Callable[[], float]
 # ADBA_QUERY_BUDGET_S=400, production giữ 45.
 DEFAULT_BUDGET_S = float(os.getenv("ADBA_QUERY_BUDGET_S", "45"))
 
-# Phần cuối ngân sách giữ riêng cho bước insight. Chia đều sẽ bỏ đói bước
-# cuối, mà bước cuối lại là thứ người dùng thực sự đọc (spec 5.2).
-INSIGHT_RESERVE_S = float(os.getenv("ADBA_INSIGHT_RESERVE_S", "12"))
-
 # Trần cứng, độc lập với thời gian. Deadline ép SLO; trần này chặn vòng
 # lặp vô hạn khi đồng hồ vì lý do nào đó không cứu được (spec 5.4).
 MAX_LLM_CALLS_PER_QUERY = int(os.getenv("ADBA_MAX_LLM_CALLS", "12"))
@@ -36,6 +32,22 @@ MAX_LLM_CALLS_PER_QUERY = int(os.getenv("ADBA_MAX_LLM_CALLS", "12"))
 # lời gọi chắc chắn không kịp về, vì lời gọi đó vẫn tiêu hết phần thời
 # gian còn lại rồi mới thất bại.
 MODEL_CALL_ESTIMATE_S = float(os.getenv("ADBA_MODEL_CALL_ESTIMATE_S", "15"))
+
+# Phần cuối ngân sách giữ riêng cho bước insight. Chia đều sẽ bỏ đói bước
+# cuối, mà bước cuối lại là thứ người dùng thực sự đọc (spec 5.2).
+#
+# DẪN RA TỪ `MODEL_CALL_ESTIMATE_S`, không phải một số độc lập. Bản trước
+# viết cứng 12 trong khi ước lượng một lời gọi model là 15 — tức phần "dự
+# trữ cho insight" nhỏ hơn chính thứ nó phải chừa chỗ. Hệ quả: node
+# python/viz bị cắt đúng lúc còn 12..15s, nhưng insight — thứ vừa được
+# "bảo vệ" — cũng không chạy nổi trong 12s đó, nên lời hứa "SQL xong thì
+# luôn có nhận xét" không đứng vững về mặt cấu trúc. `max` giữ cho nó
+# không bao giờ nhỏ hơn thứ nó bảo vệ, kể cả khi ai đó chỉnh ước lượng
+# lên qua biến môi trường.
+INSIGHT_RESERVE_S = max(
+    float(os.getenv("ADBA_INSIGHT_RESERVE_S", "12")),
+    MODEL_CALL_ESTIMATE_S,
+)
 
 
 def new_query_id() -> str:

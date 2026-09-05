@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from graph.budget import (
     INSIGHT_RESERVE_S,
     MAX_LLM_CALLS_PER_QUERY,
+    MODEL_CALL_ESTIMATE_S,
     calls_exhausted,
     has_room_for,
     is_expired,
@@ -82,8 +83,22 @@ def test_without_a_reserve_the_same_call_has_room():
     assert has_room_for(1040.0, needed_s=15, clock=fake_clock(1000.0)) is True
 
 
-def test_insight_reserve_defaults_to_twelve_seconds():
-    assert INSIGHT_RESERVE_S == 12
+def test_the_insight_reserve_is_never_smaller_than_what_it_protects():
+    """Đây là BẤT BIẾN, không phải một con số.
+
+    Phần dự trữ tồn tại để bước insight còn chỗ chạy một lời gọi model.
+    Một dự trữ nhỏ hơn `MODEL_CALL_ESTIMATE_S` không bảo vệ được gì: nó
+    vẫn cắt python/viz đúng lúc, nhưng chỗ nó chừa lại không đủ cho chính
+    insight, nên lời hứa "SQL xong thì luôn có nhận xét" sụp về mặt cấu
+    trúc. Bản trước viết cứng 12 trong khi ước lượng là 15 — đúng cái ca
+    đó. Khẳng định quan hệ, đừng khẳng định con số, để việc chỉnh ước
+    lượng qua env không lặng lẽ mở lại lỗ hổng."""
+    assert INSIGHT_RESERVE_S >= MODEL_CALL_ESTIMATE_S
+
+
+def test_the_insight_reserve_does_not_shrink_below_its_historical_floor():
+    """12s là sàn cũ. Dẫn ra từ ước lượng chỉ được phép làm nó TO ra."""
+    assert INSIGHT_RESERVE_S >= 12
 
 
 # ── trần cứng số lời gọi ────────────────────────────────────────────────────

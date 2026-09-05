@@ -206,6 +206,53 @@ class TestSupervisorNode:
         assert result["agent_outputs"]["supervisor"]["status"] == "ok"
 
     @patch("graph.agents.supervisor.ModelClient")
+    def test_the_supervisors_own_model_call_counts_against_the_ceiling(self, MockClient):
+        """Trần MAX_LLM_CALLS_PER_QUERY chỉ có nghĩa khi MỌI lời gọi đều
+        được đếm. Năm node specialist đều đếm; supervisor thì không, nên
+        trần thực tế lỏng hơn quảng cáo — và lỏng đúng ở chỗ tệ nhất, vì
+        supervisor chạy trước tất cả nên phần vượt của nó ăn vào ngân sách
+        của mọi node phía sau."""
+        mock_instance = MagicMock()
+        mock_instance.invoke_json.return_value = self.VALID_PLAN_DICT
+        MockClient.return_value = mock_instance
+
+        s = make_initial_state("q", SCHEMA_CONTEXT)
+        s["llm_calls_used"] = 4
+        result = supervisor_node(s)
+
+        assert result["llm_calls_used"] == 5, "một lời gọi lập kế hoạch = một đơn vị trần"
+
+    @patch("graph.agents.supervisor.ModelClient")
+    def test_a_failed_planning_run_still_charges_for_what_it_burned(self, MockClient):
+        """Hỏng hết retry vẫn tiêu đủ MAX_SUPERVISOR_RETRIES lời gọi. Không
+        đếm chúng thì một supervisor hỏng thành lời gọi miễn phí."""
+        from graph.agents.supervisor import MAX_SUPERVISOR_RETRIES
+
+        mock_instance = MagicMock()
+        mock_instance.invoke_json.side_effect = RuntimeError("Ollama down")
+        MockClient.return_value = mock_instance
+
+        result = supervisor_node(make_initial_state("q", SCHEMA_CONTEXT))
+
+        assert result["status"] == "failed"
+        assert result["llm_calls_used"] == MAX_SUPERVISOR_RETRIES
+
+    @patch("graph.agents.supervisor.ModelClient")
+    def test_retries_are_charged_individually_not_as_one_call(self, MockClient):
+        """Hỏng lần 1, xong lần 2 → hai lời gọi, tính hai."""
+        mock_instance = MagicMock()
+        mock_instance.invoke_json.side_effect = [
+            RuntimeError("transient"),
+            self.VALID_PLAN_DICT,
+        ]
+        MockClient.return_value = mock_instance
+
+        result = supervisor_node(make_initial_state("q", SCHEMA_CONTEXT))
+
+        assert result["status"] == "running"
+        assert result["llm_calls_used"] == 2
+
+    @patch("graph.agents.supervisor.ModelClient")
     def test_supervisor_model_error_sets_failed(self, MockClient):
         """ModelClient raises → state.status='failed', last_error populated."""
         mock_instance = MagicMock()

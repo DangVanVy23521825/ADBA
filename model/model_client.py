@@ -107,6 +107,11 @@ class ModelClient:
         self.temperature = AGENT_TEMPERATURES.get(agent_type, 0.1)
         self.max_tokens = AGENT_MAX_TOKENS.get(agent_type, 1024)
 
+        # Giữ lại cho tương thích ngược (nơi gọi bên ngoài và test hiện có
+        # chạm tới thuộc tính này). Đường gọi THẬT không dùng nó nữa —
+        # `_chat_once_ollama` dựng client riêng mỗi lần với timeout đúng
+        # bằng thời gian còn lại; client này không có timeout nên không
+        # ngắt được gì.
         self.ollama_client = ollama.Client(host=OLLAMA_BASE_URL)
 
         # Fallback ra OpenAI được quyết bởi HAI lớp, và lớp ngoài thắng.
@@ -161,8 +166,31 @@ class ModelClient:
         self.deadline_ts = deadline_ts
         self.clock = clock
 
-    def _chat_once_ollama(self, messages: list[dict[str, str]]) -> str:
-        response = self.ollama_client.chat(
+    # Sàn cho timeout đẩy xuống HTTP client. `effective_timeout_s()` có thể
+    # trả về 0 khi deadline đã cận, và `timeout=0` với httpx nghĩa là hỏng
+    # ngay lập tức — biến một lời gọi lẽ ra vẫn kịp thành một lỗi giả.
+    _MIN_HTTP_TIMEOUT_S = 1.0
+
+    def _chat_once_ollama(self, messages: list[dict[str, str]], timeout_s: float) -> str:
+        # Client dựng THEO TỪNG LỜI GỌI, với timeout thật đẩy xuống httpx.
+        #
+        # `self.ollama_client` dựng ở __init__ không có timeout nào cả, nên
+        # trước bản này KHÔNG gì ngắt được một lời gọi đang treo: deadline
+        # chỉ được đối chiếu SAU khi `.chat()` trả về, tức là nó đo chứ
+        # không ngăn. Một lời gọi treo vì thế vượt ngân sách của cả lượt
+        # tới trọn AGENT_TIMEOUT_S (200s với agent `sql`) rồi mới bị phát
+        # hiện là đã quá hạn.
+        #
+        # Timeout phải nằm ở đây chứ không ở __init__: thời gian còn lại
+        # co dần trong suốt một lượt, nên con số đúng chỉ biết được ngay
+        # trước lời gọi. `ollama.Client(host=..., **kwargs)` chuyển kwargs
+        # thẳng xuống `httpx.Client`, nên `timeout` được httpx cưỡng chế
+        # thật (đã kiểm với ollama đang cài).
+        client = ollama.Client(
+            host=OLLAMA_BASE_URL,
+            timeout=max(timeout_s, self._MIN_HTTP_TIMEOUT_S),
+        )
+        response = client.chat(
             model=self.model_name,
             messages=messages,
             options={
@@ -173,6 +201,27 @@ class ModelClient:
         )
         return response["message"]["content"].strip()
 
+    def _sleep_before_retry(self, attempt: int) -> None:
+        """Backoff mũ, nhưng không bao giờ ngủ xuyên qua deadline.
+
+        `time.sleep(2 ** (attempt - 1))` trần trụi tiêu thời gian mà không
+        làm được việc gì — và nếu nó ngủ quá mốc deadline thì lần thử tiếp
+        theo chắc chắn bị `_assert_budget` chặn, nên giấc ngủ đó đổi phần
+        ngân sách cuối cùng lấy đúng một lỗi. Cắt nó theo phần thời gian
+        thật sự còn lại.
+        """
+        backoff = float(2 ** (attempt - 1))
+        if self.deadline_ts is None:
+            time.sleep(backoff)
+            return
+
+        from graph.budget import time_left
+
+        remaining = time_left(self.deadline_ts, self.clock)
+        if remaining <= 0:
+            return
+        time.sleep(min(backoff, remaining))
+
     def _invoke_ollama(self, system_prompt: str, user_prompt: str) -> str:
         messages = [
             {"role": "system", "content": system_prompt},
@@ -180,11 +229,14 @@ class ModelClient:
         ]
 
         last_error: Exception | None = None
-        budget = self.effective_timeout_s()
         for attempt in range(1, self.max_retries + 1):
+            # Tính lại mỗi lần thử: thời gian còn lại co đi sau mỗi lần
+            # hỏng cộng mỗi lần backoff. Lấy một lần trước vòng lặp sẽ cho
+            # lần thử thứ hai một ngân sách đã tiêu mất rồi.
+            budget = self.effective_timeout_s()
             start = time.time()
             try:
-                out = self._chat_once_ollama(messages)
+                out = self._chat_once_ollama(messages, budget)
                 elapsed = time.time() - start
                 if elapsed > budget:
                     raise TimeoutError(
@@ -197,7 +249,7 @@ class ModelClient:
                 last_error = exc
                 if attempt >= self.max_retries:
                     break
-                time.sleep(2 ** (attempt - 1))
+                self._sleep_before_retry(attempt)
 
         raise RuntimeError(
             f"Ollama invocation failed after {self.max_retries} attempts for agent "

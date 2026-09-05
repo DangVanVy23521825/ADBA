@@ -197,7 +197,7 @@ vì thành phần sửa lỗi.
 | `tests/unit/test_egress_boundary.py` | 13 |
 | `tests/unit/test_errors.py` | 5 |
 | `tests/unit/test_fetch_dataset.py` | 25 |
-| `tests/unit/test_finalize.py` | 21 |
+| `tests/unit/test_finalize.py` | 22 |
 | `tests/unit/test_insight_agent.py` | 7 |
 | `tests/unit/test_introspect.py` | 16 |
 | `tests/unit/test_load_sqlite_to_postgres.py` | 46 |
@@ -217,14 +217,14 @@ vì thành phần sửa lỗi.
 | `tests/unit/test_routing_is_pure.py` | 8 |
 | `tests/unit/test_schema_context.py` | 12 |
 | `tests/unit/test_schema_model.py` | 7 |
-| `tests/unit/test_sql_agent.py` | 19 |
+| `tests/unit/test_sql_agent.py` | 20 |
 | `tests/unit/test_sql_tables.py` | 21 |
 | `tests/unit/test_sql_tool_guard.py` | 27 |
 | `tests/unit/test_supervisor.py` | 18 |
 | `tests/unit/test_tier1_recall.py` | 9 |
 | `tests/unit/test_trace_jsonl.py` | 10 |
 | `tests/unit/test_viz_agent.py` | 12 |
-| **Tổng** | **662** |
+| **Tổng** | **664** |
 
 <!-- AUTO:end id=tests -->
 
@@ -241,10 +241,10 @@ PYTHONPATH=. pytest tests/unit/ -v       # không cần DB và Ollama
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `448a89e` — fix(budget): đếm lời gọi model bằng số lời gọi mạng thật, không phải biến vòng lặp |
+| Commit nguồn gần nhất | `e944c52` — fix(finalize): kết quả SQL bị cắt ở trần dòng không còn được báo "success" |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-05 |
-| Số commit nguồn | 123 |
+| Số commit nguồn | 124 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

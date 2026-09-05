@@ -380,10 +380,10 @@ giữa các lần chạy. Không dùng làm bản sao lưu production.
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `448a89e` — fix(budget): đếm lời gọi model bằng số lời gọi mạng thật, không phải biến vòng lặp |
+| Commit nguồn gần nhất | `e944c52` — fix(finalize): kết quả SQL bị cắt ở trần dòng không còn được báo "success" |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-05 |
-| Số commit nguồn | 123 |
+| Số commit nguồn | 124 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

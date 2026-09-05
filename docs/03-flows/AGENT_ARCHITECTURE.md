@@ -278,7 +278,7 @@ Ba điều đáng đọc kỹ:
 | `tests/integration/test_simple_queries.py` | 10 |
 | `tests/unit/test_annotate.py` | 38 |
 | `tests/unit/test_annotations.py` | 32 |
-| `tests/unit/test_budget.py` | 29 |
+| `tests/unit/test_budget.py` | 30 |
 | `tests/unit/test_budget_gating.py` | 11 |
 | `tests/unit/test_connection_profile.py` | 16 |
 | `tests/unit/test_describe_dataset.py` | 6 |
@@ -289,7 +289,7 @@ Ba điều đáng đọc kỹ:
 | `tests/unit/test_insight_agent.py` | 7 |
 | `tests/unit/test_introspect.py` | 16 |
 | `tests/unit/test_load_sqlite_to_postgres.py` | 46 |
-| `tests/unit/test_model_client_calls_made.py` | 6 |
+| `tests/unit/test_model_client_calls_made.py` | 8 |
 | `tests/unit/test_model_client_deadline.py` | 12 |
 | `tests/unit/test_onboard_cli.py` | 45 |
 | `tests/unit/test_onboard_refresh.py` | 5 |
@@ -312,7 +312,7 @@ Ba điều đáng đọc kỹ:
 | `tests/unit/test_tier1_recall.py` | 9 |
 | `tests/unit/test_trace_jsonl.py` | 10 |
 | `tests/unit/test_viz_agent.py` | 12 |
-| **Tổng** | **664** |
+| **Tổng** | **667** |
 
 <!-- AUTO:end id=tests -->
 
@@ -337,10 +337,10 @@ Ba điều đáng đọc kỹ:
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `e944c52` — fix(finalize): kết quả SQL bị cắt ở trần dòng không còn được báo "success" |
+| Commit nguồn gần nhất | `dfab879` — fix(budget): enforce LLM call cap inside retries |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-05 |
-| Số commit nguồn | 124 |
+| Số commit nguồn | 125 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

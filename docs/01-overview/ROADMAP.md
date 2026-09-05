@@ -202,6 +202,7 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Commit | Ngày | Tác giả | Nội dung |
 |---|---|---|---|
+| `dfab879` | 2026-09-05 | Đặng Văn Vỹ | fix(budget): enforce LLM call cap inside retries |
 | `e944c52` | 2026-09-05 | Đặng Văn Vỹ | fix(finalize): kết quả SQL bị cắt ở trần dòng không còn được báo "success" |
 | `448a89e` | 2026-09-05 | Đặng Văn Vỹ | fix(budget): đếm lời gọi model bằng số lời gọi mạng thật, không phải biến vòng lặp |
 | `7b8aa23` | 2026-09-05 | Đặng Văn Vỹ | feat(sandbox): cảnh báo runtime — sandbox là partial mitigation, không phải security boundary |
@@ -216,7 +217,6 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 | `0ba85e1` | 2026-09-03 | Đặng Văn Vỹ | feat(budget): cấp phát theo dự trữ — python/viz bị cắt trước, insight được bảo vệ |
 | `71b19c6` | 2026-09-03 | Đặng Văn Vỹ | feat(graph): mọi đường ra đi qua finalize, không còn END trần |
 | `eaceedf` | 2026-09-01 | Đặng Văn Vỹ | fix(graph): đóng 2 lỗ hổng present-but-wrong-shape còn sót trong finalize |
-| `ac65f33` | 2026-09-01 | Đặng Văn Vỹ | fix(graph): finalize_node chịu được state None/sai kiểu, không ném lỗi |
 
 <!-- AUTO:end id=commit-history -->
 
@@ -224,10 +224,10 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `e944c52` — fix(finalize): kết quả SQL bị cắt ở trần dòng không còn được báo "success" |
+| Commit nguồn gần nhất | `dfab879` — fix(budget): enforce LLM call cap inside retries |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-05 |
-| Số commit nguồn | 124 |
+| Số commit nguồn | 125 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

@@ -16,6 +16,10 @@ executable SQL query that answers the given task.
 9. Columns marked GENERATED are read-only — never write to them.
 10. When filtering by a part of a date, use EXTRACT(...) unless the schema
     already declares a dedicated column for that part.
+11. Copy identifiers EXACTLY as the schema writes them, including the double
+    quotes. If the schema says "MailStreet", write "MailStreet" — writing
+    MailStreet without quotes makes PostgreSQL fold it to mailstreet, which
+    does not exist, and the query fails.
 
 ## EXAMPLES
 {few_shots}

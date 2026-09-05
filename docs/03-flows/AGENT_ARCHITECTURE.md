@@ -39,6 +39,8 @@ flowchart LR
 | `python` | `python_agent_node()` | `prompts/data_analysis.txt` | 2 | 0.1 | 1024 | 200 |
 | `reflector` | `reflector_agent_node()` | inline (trong file agent) | — | 0.1 | 512 | 120 |
 | `sql` | `sql_agent_node()` | `prompts/text_to_sql.txt` | 2 | 0.0 | 1024 | 200 |
+| `sql` | `sql_agent_node()` | `prompts/text_to_sql.txt` | 2 | 0.0 | 1024 | 200 |
+| `sql` | `sql_agent_node()` | `prompts/text_to_sql.txt` | 2 | 0.0 | 1024 | 200 |
 | `supervisor` | `supervisor_node()` | `prompts/supervisor_routing.txt` | — | 0.1 | 800 | 300 |
 | `viz` | `viz_agent_node()` | `prompts/viz_generation.txt` | 2 | 0.2 | 1024 | 150 |
 
@@ -78,7 +80,7 @@ Cả năm file prompt theo cùng một khung, và thứ tự các mục là có 
 | `prompts/data_analysis.txt` | 108 | 3.3 KB | `{columns}`, `{sample}`, `{task}` |
 | `prompts/insight_generation.txt` | 143 | 5.4 KB | `{anomalies}`, `{chart_description}`, `{query}`, `{sql}`, `{stats}` |
 | `prompts/supervisor_routing.txt` | 150 | 5.2 KB | `{query}`, `{schema}` |
-| `prompts/text_to_sql.txt` | 31 | 1.1 KB | `{few_shots}`, `{schema}`, `{task}` |
+| `prompts/text_to_sql.txt` | 35 | 1.4 KB | `{few_shots}`, `{schema}`, `{task}` |
 | `prompts/viz_generation.txt` | 82 | 2.7 KB | `{columns}`, `{sample}`, `{task}` |
 
 <!-- AUTO:end id=prompts -->
@@ -276,6 +278,7 @@ Ba điều đáng đọc kỹ:
 | `tests/integration/test_readonly_role.py` | 7 |
 | `tests/integration/test_schema_context_wiring.py` | 6 |
 | `tests/integration/test_simple_queries.py` | 10 |
+| `tests/integration/test_tier2_executor.py` | 10 |
 | `tests/unit/test_annotate.py` | 38 |
 | `tests/unit/test_annotations.py` | 32 |
 | `tests/unit/test_budget.py` | 30 |
@@ -305,14 +308,17 @@ Ba điều đáng đọc kỹ:
 | `tests/unit/test_routing_is_pure.py` | 8 |
 | `tests/unit/test_schema_context.py` | 12 |
 | `tests/unit/test_schema_model.py` | 7 |
-| `tests/unit/test_sql_agent.py` | 20 |
+| `tests/unit/test_sql_agent.py` | 27 |
+| `tests/unit/test_sql_identifiers.py` | 12 |
 | `tests/unit/test_sql_tables.py` | 21 |
 | `tests/unit/test_sql_tool_guard.py` | 27 |
+| `tests/unit/test_sqlite_dialect.py` | 18 |
 | `tests/unit/test_supervisor.py` | 18 |
 | `tests/unit/test_tier1_recall.py` | 9 |
+| `tests/unit/test_tier2_execution.py` | 37 |
 | `tests/unit/test_trace_jsonl.py` | 10 |
 | `tests/unit/test_viz_agent.py` | 12 |
-| **Tổng** | **667** |
+| **Tổng** | **751** |
 
 <!-- AUTO:end id=tests -->
 

@@ -188,6 +188,7 @@ vì thành phần sửa lỗi.
 | `tests/integration/test_readonly_role.py` | 7 |
 | `tests/integration/test_schema_context_wiring.py` | 6 |
 | `tests/integration/test_simple_queries.py` | 10 |
+| `tests/integration/test_tier2_executor.py` | 10 |
 | `tests/unit/test_annotate.py` | 38 |
 | `tests/unit/test_annotations.py` | 32 |
 | `tests/unit/test_budget.py` | 30 |
@@ -217,14 +218,17 @@ vì thành phần sửa lỗi.
 | `tests/unit/test_routing_is_pure.py` | 8 |
 | `tests/unit/test_schema_context.py` | 12 |
 | `tests/unit/test_schema_model.py` | 7 |
-| `tests/unit/test_sql_agent.py` | 20 |
+| `tests/unit/test_sql_agent.py` | 27 |
+| `tests/unit/test_sql_identifiers.py` | 12 |
 | `tests/unit/test_sql_tables.py` | 21 |
 | `tests/unit/test_sql_tool_guard.py` | 27 |
+| `tests/unit/test_sqlite_dialect.py` | 18 |
 | `tests/unit/test_supervisor.py` | 18 |
 | `tests/unit/test_tier1_recall.py` | 9 |
+| `tests/unit/test_tier2_execution.py` | 37 |
 | `tests/unit/test_trace_jsonl.py` | 10 |
 | `tests/unit/test_viz_agent.py` | 12 |
-| **Tổng** | **667** |
+| **Tổng** | **751** |
 
 <!-- AUTO:end id=tests -->
 

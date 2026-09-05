@@ -7,6 +7,8 @@ from __future__ import annotations
 import logging
 import re
 import time
+
+import sqlparse
 from pathlib import Path
 
 from graph.budget import calls_remaining, clamped_tool_timeout_s, node_may_run
@@ -22,6 +24,7 @@ from graph.tools.sql_tool import (
 from graph.utils import append_trace, df_to_state, with_routing
 from model.model_client import BudgetExceededError, ModelClient
 from perception.schema_context import SchemaContext
+from perception.sql_identifiers import requote_for_tables
 
 logger = logging.getLogger(__name__)
 
@@ -34,29 +37,96 @@ SQL_SYSTEM_PROMPT: str = _PROMPT_PATH.read_text(encoding="utf-8")
 MAX_RETRIES = 2
 
 
-_SQL_KEYWORDS = ("SELECT", "WITH", "select", "with")
+# Ranh giới từ ở CẢ HAI đầu: không có `\b` thì `WITH` khớp cả trong
+# "GROUP BY WITHIN", và `SELECT` khớp trong "SELECTED".
+_SQL_START = re.compile(r"\b(?:SELECT|WITH)\b", re.IGNORECASE)
+# Hình dạng bắt buộc của một mệnh đề WITH thật: `WITH [RECURSIVE] <tên>
+# [(cột,...)] AS (`. Văn xuôi "with a CTE:" không khớp.
+# Từ khoá có thể mở đầu phần TIẾP THEO của một truy vấn sau dòng trống.
+# Thấy một trong số này thì dòng trống chỉ là định dạng, không phải ranh
+# giới giữa SQL và lời giải thích.
+_SQL_CONTINUES = re.compile(
+    r"\b(?:SELECT|FROM|WHERE|GROUP|ORDER|HAVING|LIMIT|OFFSET|FETCH|JOIN|"
+    r"LEFT|RIGHT|INNER|OUTER|FULL|CROSS|UNION|INTERSECT|EXCEPT|AND|OR|ON|"
+    r"USING|WITH|WINDOW|QUALIFY)\b",
+    re.IGNORECASE,
+)
+_CTE_HEAD = re.compile(
+    r'WITH\s+(?:RECURSIVE\s+)?[\w"]+\s*(?:\([^)]*\))?\s*AS\s*\(',
+    re.IGNORECASE,
+)
 
 
 def _extract_sql(text: str) -> str:
-    """Strip markdown fences and extract the SQL query from model output.
+    """Bóc câu SQL ra khỏi đầu ra của model.
 
-    Fail closed: khi không tìm thấy SELECT/WITH, RAISE thay vì trả nguyên
-    văn output của model. Bản trước trả nguyên văn, và chuỗi đó đi thẳng
-    tới `execute_sql`. Guard sqlparse ở tầng tool vẫn chặn được nó, nhưng
-    lỗi hiện ra khi đó là "không parse được tên bảng" — sai lớp. Reflector
-    chẩn đoán theo nhãn lỗi, nên nhãn sai dẫn tới `corrected_context` sai,
-    và lần thử lại hỏng đúng như lần đầu.
+    Bản cũ tìm chuỗi con `"with"` bằng `str.find`, nên nó khớp chữ **with**
+    trong văn xuôi tiếng Anh. Model viết "To find the school with the
+    highest average score... you can use:" rồi mới tới SQL, và bộ bóc cắt
+    ngay từ chữ "with" giữa câu văn, trả về một mớ không phải SQL.
+
+    Đo trên 50 câu BIRD: 8 trong 18 ca SQL-sinh-lỗi (44%) là do đúng lỗi
+    này, KHÔNG phải do model viết SQL sai. Prompt cấm văn xuôi (quy tắc 1
+    và 3) nhưng model 7B không phải lúc nào cũng nghe.
+
+    Ba lớp, theo thứ tự tin cậy giảm dần:
+
+    1. Nội dung trong hàng rào ```sql — tín hiệu mạnh nhất, model đánh dấu
+       sẵn đâu là code.
+    2. Ứng viên bắt đầu ở RANH GIỚI TỪ, kiểm bằng `sqlparse.get_type()`.
+       Nó phân biệt sạch: `WITH x AS (...) SELECT` ra "SELECT", còn
+       "with the highest average" ra "UNKNOWN".
+    3. Không có ứng viên nào hợp lệ thì fail closed ngay ở tầng
+       sinh SQL, thay vì chuyển văn xuôi xuống tool và gán nhãn lỗi sai.
+
+    Còn sót một ca: văn xuôi BẮT ĐẦU bằng "select" ("select the data you
+    need") vẫn parse ra "SELECT". Hiếm hơn hẳn ca "with" vì nó đòi câu văn
+    mở đầu bằng đúng từ đó, và chưa gặp lần nào trên 50 câu đã đo.
     """
-    text = re.sub(r"```(?:sql)?\s*|\s*```", "", text).strip()
-    # Scan for the earliest SQL keyword (WITH may start before SELECT inside a CTE)
-    earliest = len(text)
-    for kw in _SQL_KEYWORDS:
-        idx = text.find(kw)
-        if 0 <= idx < earliest:
-            earliest = idx
-    if earliest < len(text):
-        return text[earliest:].strip()
-    raise ValueError(f"Không trích được SQL từ output của model: {text[:200]!r}")
+    fenced = re.search(r"```(?:sql)?\s*(.+?)```", text, re.S | re.I)
+    body = fenced.group(1) if fenced else re.sub(r"```(?:sql)?\s*|\s*```", "", text)
+    body = body.strip()
+
+    for match in _SQL_START.finditer(body):
+        candidate = body[match.start():].strip()
+        if candidate[:4].upper() == "WITH" and not _CTE_HEAD.match(candidate):
+            # `get_type()` một mình KHÔNG đủ ở đây: với "with a CTE:\nWITH
+            # cte AS (...) SELECT ..." nó vẫn trả "SELECT", vì nó quét tới
+            # khi gặp SELECT ở phía sau và không quan tâm phần đầu là văn
+            # xuôi. Một mệnh đề WITH thật luôn có hình dạng
+            # `WITH <tên> AS (`, nên kiểm hình dạng đó mới loại được.
+            continue
+        parsed = sqlparse.parse(candidate)
+        if parsed and parsed[0].get_type() == "SELECT":
+            return _cut_trailing_prose(candidate)
+    raise ValueError(f"Không trích được SQL từ output của model: {body[:200]!r}")
+
+
+def _cut_trailing_prose(sql: str) -> str:
+    """Bỏ phần giải thích model viết SAU câu SQL.
+
+    Sửa chỗ bắt đầu thôi chưa đủ: model hay viết xong SQL rồi giải thích
+    tiếp, và lấy tới hết chuỗi thì nuốt cả đoạn văn. Đo trên 50 câu BIRD,
+    8 ca lỗi cú pháp đều là dạng này — thông điệp đổi từ `near "highest"`
+    (văn xuôi ĐẦU) sang `near "This"` (văn xuôi ĐUÔI) sau khi sửa nửa
+    trước.
+
+    Hai đường cắt, khớp đúng hai hình dạng đã quan sát được:
+
+    1. Có dấu `;` — 7/8 ca. `sqlparse.split` cắt sạch ở câu lệnh đầu.
+    2. Không có `;` — 1/8 ca. Cắt ở DÒNG TRỐNG, nhưng chỉ khi phần sau
+       không mở đầu bằng từ khoá SQL. Không có điều kiện đó thì một truy
+       vấn có dòng trống giữa các mệnh đề sẽ bị cắt cụt, và đó là hỏng
+       nặng hơn hẳn thứ đang sửa.
+    """
+    parts = sqlparse.split(sql)
+    if len(parts) > 1:
+        return parts[0].strip()
+
+    chunks = re.split(r"\n\s*\n", sql, maxsplit=1)
+    if len(chunks) == 2 and not _SQL_CONTINUES.match(chunks[1].lstrip()):
+        return chunks[0].strip()
+    return sql.strip()
 
 
 def build_system_prompt(schema_context: SchemaContext) -> str:
@@ -189,7 +259,9 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
             continue
 
         try:
-            sql = _extract_sql(raw)
+            # Bọc nháy định danh TRƯỚC khi log và trước khi chạy: log phải là
+            # đúng câu SQL được thực thi. No-op trên schema toàn chữ thường.
+            sql = requote_for_tables(_extract_sql(raw), schema_context.tables)
         except ValueError as exc:
             error_context = str(exc)
             logger.warning("SQL Agent attempt %d: %s", attempt, error_context)
@@ -202,7 +274,6 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
             # đoán của các lần thử trước biến mất khỏi UI lẫn log JSONL.
             state = {**state, "action_trace": trace}
             continue
-
         logger.info("SQL Agent attempt %d:\n%s", attempt, sql)
 
         # ── Ngân sách còn lại SAU model, TRƯỚC khi chạm DB ─────────

@@ -275,10 +275,29 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
                 plan = {}
                 cost = "?"
 
-        truncated_note = " (BỊ CẮT ở trần dòng)" if df.attrs.get("truncated") else ""
+        truncated = bool(df.attrs.get("truncated"))
+        truncated_note = " (BỊ CẮT ở trần dòng)" if truncated else ""
         trace = append_trace(state, "sql", "execute_sql",
                              f"OK — {len(df)} rows{truncated_note}, cost ~{cost}", "ok")
         logger.info("SQL Agent: %d rows returned", len(df))
+
+        # Kết quả bị cắt ở trần dòng (df.attrs["truncated"], graph/tools/
+        # sql_tool.py) trước bản này chỉ tới được `action_trace` — một
+        # dòng chữ chôn trong danh sách trace, không phải
+        # `degradation_reason`. `finalize_node` phân loại "success" khi
+        # KHÔNG có lý do suy giảm nào (đúng bản sửa cho lỗi C1 review toàn
+        # nhánh: một lượt bị cắt không được gọi là success) — nhưng nó chỉ
+        # thấy được những gì NẰM TRONG `degradation_reason`. Một câu SELECT
+        # trả về nhiều hơn `SQL_MAX_ROWS` (mặc định 50.000) dòng thì
+        # "thành công" này là giả: người dùng nhận một bảng THIẾU dữ liệu
+        # mà không có banner nào cảnh báo (app.py chỉ hiện banner cho
+        # partial/failed).
+        row_cap = df.attrs.get("row_cap")
+        reasons = state.get("degradation_reason", [])
+        if truncated:
+            reasons = reasons + [
+                f"Kết quả SQL bị cắt ở {row_cap} dòng — câu truy vấn trả về nhiều hơn thế."
+            ]
 
         return with_routing({
             **state,
@@ -286,16 +305,17 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
             "completed_agents": state.get("completed_agents", []) + ["sql"],
             "agent_outputs": {
                 **state.get("agent_outputs", {}),
-                "sql": {"status": "ok", "sql": sql, "row_count": len(df)},
+                "sql": {"status": "ok", "sql": sql, "row_count": len(df), "truncated": truncated},
             },
             "shared_dataframe": df_to_state(df),
-            "sql_result": {"sql": sql, "row_count": len(df)},
+            "sql_result": {"sql": sql, "row_count": len(df), "truncated": truncated, "row_cap": row_cap},
             "shared_metadata": {
                 **state.get("shared_metadata", {}),
                 "sql_row_count": len(df),
                 "sql_query": sql,
-                "sql_result": {"sql": sql, "row_count": len(df)},
+                "sql_result": {"sql": sql, "row_count": len(df), "truncated": truncated, "row_cap": row_cap},
             },
+            "degradation_reason": reasons,
             "action_trace": trace,
             "status": "running",
             # `client.calls_made`, không phải `attempt`: `attempt` chỉ đếm

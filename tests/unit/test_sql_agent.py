@@ -106,6 +106,42 @@ class TestSqlAgentNode:
         assert result["sql_result"]["row_count"] == 2
         assert result["shared_dataframe"]["shape"] == [2, 2]
         assert result["shared_metadata"]["sql_row_count"] == 2
+        assert result["sql_result"]["truncated"] is False
+        assert result["degradation_reason"] == []
+
+    @patch("graph.agents.sql_agent.explain_query_plan")
+    @patch("graph.agents.sql_agent.execute_sql")
+    @patch("graph.agents.sql_agent.ModelClient")
+    def test_a_truncated_result_is_named_in_degradation_reason(
+        self, MockClient, mock_execute, mock_explain
+    ):
+        """`execute_sql` cắt kết quả ở `SQL_MAX_ROWS` qua `df.attrs["truncated"]`
+        (graph/tools/sql_tool.py) — trước bản này, cờ đó chỉ tới được
+        `action_trace` (một dòng chữ chôn trong danh sách trace), không
+        phải `degradation_reason`. `finalize_node` phân loại "success" khi
+        không có lý do suy giảm nào — nên một câu SELECT trả về nhiều hơn
+        trần dòng vẫn được báo "success", và người dùng nhận một bảng
+        THIẾU dữ liệu mà không có banner nào cảnh báo."""
+        mock_explain.return_value = {"total_cost_estimate": 99.0}
+
+        mock_instance = MagicMock()
+        mock_instance.invoke.return_value = "SELECT * FROM orders"
+        MockClient.return_value = mock_instance
+
+        df = pd.DataFrame({"id": range(50000)})
+        df.attrs["truncated"] = True
+        df.attrs["row_cap"] = 50000
+        mock_execute.return_value = df
+
+        s = _state(PLAN_SQL_INSIGHT)
+        result = sql_agent_node(s)
+
+        assert result["status"] == "running"
+        assert result["sql_result"]["truncated"] is True
+        assert result["sql_result"]["row_cap"] == 50000
+        assert result["agent_outputs"]["sql"]["truncated"] is True
+        assert result["degradation_reason"], "kết quả bị cắt phải được ghi thành lý do suy giảm"
+        assert any("50000" in r for r in result["degradation_reason"])
 
     @patch("graph.agents.sql_agent.explain_query_plan")
     @patch("graph.agents.sql_agent.execute_sql")

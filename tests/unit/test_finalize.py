@@ -119,6 +119,26 @@ def test_a_budget_cut_step_is_partial_even_though_it_marked_itself_completed():
     assert any("insight" in r for r in out["degradation_reason"])
 
 
+def test_a_truncated_sql_result_alone_blocks_the_success_label():
+    """`sql_agent_node` ghi lý do "bị cắt ở N dòng" vào `degradation_reason`
+    khi `execute_sql` cắt kết quả ở `SQL_MAX_ROWS` (graph/agents/
+    sql_agent.py, xem test tương ứng ở tests/unit/test_sql_agent.py).
+    finalize_node phải thấy được lý do đó — mọi bước khác chạy xong bình
+    thường không được che đi việc kết quả SQL thiếu dữ liệu."""
+    s = _state(
+        completed_agents=["supervisor", "sql", "viz", "insight"],
+        sql_result={"sql": "SELECT * FROM orders", "row_count": 50000,
+                    "truncated": True, "row_cap": 50000},
+        degradation_reason=[
+            "Kết quả SQL bị cắt ở 50000 dòng — câu truy vấn trả về nhiều hơn thế.",
+        ],
+    )
+    out = finalize_node(s)
+    assert out["status"] == "partial", "kết quả bị cắt không được gọi là success"
+    assert out["degradation_reason"]
+    assert any("cắt" in r for r in out["degradation_reason"])
+
+
 def test_an_expired_deadline_alone_blocks_the_success_label():
     """Kể cả khi mọi bước đều nằm trong completed_agents: deadline đã hết
     là một lý do suy giảm có thật, nên không thể là "success"."""

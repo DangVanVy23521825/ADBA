@@ -283,10 +283,10 @@ Khi lớp HTTP có thật, thêm vào `scripts/update_docs.py` một khối AUTO
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `a0ccf79` — fix(errors): I5 dùng thật tập nhãn đóng, phát ra budget_exceeded; I7 giữ đủ trace |
+| Commit nguồn gần nhất | `18a1162` — docs(fix): sửa 2 dòng "10s" lỗi thời + regex generator không parse được default lồng ngoặc |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-05 |
-| Số commit nguồn | 119 |
+| Số commit nguồn | 120 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

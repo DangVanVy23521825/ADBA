@@ -168,6 +168,7 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 **Tài liệu**
 
+- sửa 2 dòng "10s" lỗi thời + regex generator không parse được default lồng ngoặc — `18a1162` (2026-09-05, Đặng Văn Vỹ)
 - cập nhật Plan B theo main hậu-merge Plan A — `8809e94` (2026-09-01, Đặng Văn Vỹ)
 - sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO — `0e1f02d` (2026-08-19, Đặng Văn Vỹ)
 - Plan B — cứng hóa ngân sách thời gian và cô lập sandbox, 12 task — `70dba92` (2026-08-17, Đặng Văn Vỹ)
@@ -250,10 +251,10 @@ Cập nhật `PRIMARY_MODEL` trong `.env`, `ollama pull <model>`, rồi chạy l
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `a0ccf79` — fix(errors): I5 dùng thật tập nhãn đóng, phát ra budget_exceeded; I7 giữ đủ trace |
+| Commit nguồn gần nhất | `18a1162` — docs(fix): sửa 2 dòng "10s" lỗi thời + regex generator không parse được default lồng ngoặc |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-05 |
-| Số commit nguồn | 119 |
+| Số commit nguồn | 120 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

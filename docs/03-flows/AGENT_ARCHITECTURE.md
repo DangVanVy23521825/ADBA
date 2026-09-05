@@ -77,7 +77,7 @@ Cả năm file prompt theo cùng một khung, và thứ tự các mục là có 
 | `prompts/data_analysis.txt` | 108 | 3.3 KB | `{columns}`, `{sample}`, `{task}` |
 | `prompts/insight_generation.txt` | 143 | 5.4 KB | `{anomalies}`, `{chart_description}`, `{query}`, `{sql}`, `{stats}` |
 | `prompts/supervisor_routing.txt` | 150 | 5.2 KB | `{query}`, `{schema}` |
-| `prompts/text_to_sql.txt` | 31 | 1.1 KB | `{few_shots}`, `{schema}`, `{task}` |
+| `prompts/text_to_sql.txt` | 35 | 1.4 KB | `{few_shots}`, `{schema}`, `{task}` |
 | `prompts/viz_generation.txt` | 82 | 2.7 KB | `{columns}`, `{sample}`, `{task}` |
 
 <!-- AUTO:end id=prompts -->
@@ -273,6 +273,7 @@ Ba điều đáng đọc kỹ:
 | `tests/integration/test_onboard_flow.py` | 3 |
 | `tests/integration/test_schema_context_wiring.py` | 6 |
 | `tests/integration/test_simple_queries.py` | 10 |
+| `tests/integration/test_tier2_executor.py` | 10 |
 | `tests/unit/test_annotate.py` | 38 |
 | `tests/unit/test_annotations.py` | 32 |
 | `tests/unit/test_connection_profile.py` | 16 |
@@ -294,13 +295,16 @@ Ba điều đáng đọc kỹ:
 | `tests/unit/test_review_state.py` | 21 |
 | `tests/unit/test_schema_context.py` | 12 |
 | `tests/unit/test_schema_model.py` | 7 |
-| `tests/unit/test_sql_agent.py` | 11 |
+| `tests/unit/test_sql_agent.py` | 18 |
+| `tests/unit/test_sql_identifiers.py` | 12 |
 | `tests/unit/test_sql_tables.py` | 21 |
 | `tests/unit/test_sql_tool_guard.py` | 19 |
+| `tests/unit/test_sqlite_dialect.py` | 18 |
 | `tests/unit/test_supervisor.py` | 16 |
 | `tests/unit/test_tier1_recall.py` | 9 |
+| `tests/unit/test_tier2_execution.py` | 37 |
 | `tests/unit/test_viz_agent.py` | 11 |
-| **Tổng** | **521** |
+| **Tổng** | **605** |
 
 <!-- AUTO:end id=tests -->
 
@@ -325,10 +329,10 @@ Ba điều đáng đọc kỹ:
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `6af3233` — fix: dọn ba lỗ đã park từ review Plan A |
+| Commit nguồn gần nhất | `40c7214` — docs(eval): kết quả lượt đo tầng 2 đầu tiên, gồm phép quét k |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-09-01 |
-| Số commit nguồn | 98 |
+| Ngày commit | 2026-09-03 |
+| Số commit nguồn | 106 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

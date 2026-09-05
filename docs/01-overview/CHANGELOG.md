@@ -78,6 +78,9 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 **Tính năng mới**
 
+- cờ --k cho tầng 2, để đo ảnh hưởng của bề rộng context — `87bac69` (2026-09-03, Đặng Văn Vỹ)
+- dịch SQL vàng SQLite sang Postgres, mở BIRD cho tầng 2 — `eb65083` (2026-09-01, Đặng Văn Vỹ)
+- tầng 2 — execution accuracy — `d7783b6` (2026-09-01, Đặng Văn Vỹ)
 - Chinook làm schema demo phát hành lại được — `ff31b35` (2026-08-23, Đặng Văn Vỹ)
 - --threshold-tokens chốt chế độ schema tại build — `42ece63` (2026-08-23, Đặng Văn Vỹ)
 - bridge BIRD SQLite databases into Postgres for onboarding evals — `3116622` (2026-08-22, Đặng Văn Vỹ)
@@ -109,6 +112,10 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 **Sửa lỗi**
 
+- bỏ cả phần giải thích model viết SAU câu SQL — `a3682b8` (2026-09-01, Đặng Văn Vỹ)
+- bộ bóc SQL cắt nhầm từ chữ 'with' trong văn xuôi — `ee0c38a` (2026-09-01, Đặng Văn Vỹ)
+- lưu chi tiết từng câu không đạt, kèm SQL đã chạy — `c43ce64` (2026-09-01, Đặng Văn Vỹ)
+- bọc nháy định danh mà Postgres sẽ gấp sai, ở đường chạy thật — `a48fbff` (2026-09-01, Đặng Văn Vỹ)
 - dọn ba lỗ đã park từ review Plan A — `6af3233` (2026-09-01, Đặng Văn Vỹ)
 - tên cột không mang nghĩa thì luôn low, bất kể model chấm gì — `4601a03` (2026-08-27, Đặng Văn Vỹ)
 - chia lô cột cho bảng rộng, annotate có ngân sách riêng — `da433e3` (2026-08-26, Đặng Văn Vỹ)
@@ -149,6 +156,7 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 **Tài liệu**
 
+- kết quả lượt đo tầng 2 đầu tiên, gồm phép quét k — `40c7214` (2026-09-03, Đặng Văn Vỹ)
 - sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO — `0e1f02d` (2026-08-19, Đặng Văn Vỹ)
 - Plan A — đường onboarding, 12 task — `4fd4557` (2026-08-16, Đặng Văn Vỹ)
 - lộ trình tới bản đóng gói giao khách — `f8fa0cb` (2026-08-16, Đặng Văn Vỹ)
@@ -229,10 +237,10 @@ Cập nhật `PRIMARY_MODEL` trong `.env`, `ollama pull <model>`, rồi chạy l
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `6af3233` — fix: dọn ba lỗ đã park từ review Plan A |
+| Commit nguồn gần nhất | `40c7214` — docs(eval): kết quả lượt đo tầng 2 đầu tiên, gồm phép quét k |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-09-01 |
-| Số commit nguồn | 98 |
+| Ngày commit | 2026-09-03 |
+| Số commit nguồn | 106 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

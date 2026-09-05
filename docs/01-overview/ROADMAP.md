@@ -202,6 +202,14 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Commit | Ngày | Tác giả | Nội dung |
 |---|---|---|---|
+| `40c7214` | 2026-09-03 | Đặng Văn Vỹ | docs(eval): kết quả lượt đo tầng 2 đầu tiên, gồm phép quét k |
+| `87bac69` | 2026-09-03 | Đặng Văn Vỹ | feat(eval): cờ --k cho tầng 2, để đo ảnh hưởng của bề rộng context |
+| `a3682b8` | 2026-09-01 | Đặng Văn Vỹ | fix(sql): bỏ cả phần giải thích model viết SAU câu SQL |
+| `ee0c38a` | 2026-09-01 | Đặng Văn Vỹ | fix(sql): bộ bóc SQL cắt nhầm từ chữ 'with' trong văn xuôi |
+| `c43ce64` | 2026-09-01 | Đặng Văn Vỹ | fix(eval): lưu chi tiết từng câu không đạt, kèm SQL đã chạy |
+| `a48fbff` | 2026-09-01 | Đặng Văn Vỹ | fix(sql): bọc nháy định danh mà Postgres sẽ gấp sai, ở đường chạy thật |
+| `eb65083` | 2026-09-01 | Đặng Văn Vỹ | feat(eval): dịch SQL vàng SQLite sang Postgres, mở BIRD cho tầng 2 |
+| `d7783b6` | 2026-09-01 | Đặng Văn Vỹ | feat(eval): tầng 2 — execution accuracy |
 | `6af3233` | 2026-09-01 | Đặng Văn Vỹ | fix: dọn ba lỗ đã park từ review Plan A |
 | `03ab786` | 2026-08-27 | Đặng Văn Vỹ | test(onboard): fixture mật khẩu không còn giống bí mật thật |
 | `4601a03` | 2026-08-27 | Đặng Văn Vỹ | fix(perception): tên cột không mang nghĩa thì luôn low, bất kể model chấm gì |
@@ -209,14 +217,6 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 | `749bdd7` | 2026-08-23 | Đặng Văn Vỹ | fix(eval): resolve four BIRD loader bugs found against real Postgres |
 | `5433c78` | 2026-08-23 | Đặng Văn Vỹ | chore: ignore profile-noann (mốc đo, không phải nguồn) |
 | `1df5dd6` | 2026-08-23 | Đặng Văn Vỹ | fix(perception): chú giải lẫn chữ Hán bị hạ xuống low, vào hàng đợi duyệt |
-| `ff31b35` | 2026-08-23 | Đặng Văn Vỹ | feat(demo): Chinook làm schema demo phát hành lại được |
-| `42ece63` | 2026-08-23 | Đặng Văn Vỹ | feat(onboard): --threshold-tokens chốt chế độ schema tại build |
-| `5337fd2` | 2026-08-22 | Đặng Văn Vỹ | fix(perception): gấp định danh SQL đúng quy tắc Postgres, không hạ hết về chữ thường |
-| `7cd8480` | 2026-08-22 | Đặng Văn Vỹ | fix(eval): khoá ngoại lùi về NOT VALID khi dữ liệu nguồn vi phạm |
-| `7cfa6ee` | 2026-08-22 | Đặng Văn Vỹ | chore(eval): ghim sha256 của BIRD dev.zip |
-| `3116622` | 2026-08-22 | Đặng Văn Vỹ | feat(eval): bridge BIRD SQLite databases into Postgres for onboarding evals |
-| `0e1f02d` | 2026-08-19 | Đặng Văn Vỹ | docs: sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO |
-| `0e4c5bc` | 2026-08-19 | Đặng Văn Vỹ | feat(model): chế độ triển khai chặn egress, mặc định on-prem |
 
 <!-- AUTO:end id=commit-history -->
 
@@ -224,10 +224,10 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `6af3233` — fix: dọn ba lỗ đã park từ review Plan A |
+| Commit nguồn gần nhất | `40c7214` — docs(eval): kết quả lượt đo tầng 2 đầu tiên, gồm phép quét k |
 | Tác giả | Đặng Văn Vỹ |
-| Ngày commit | 2026-09-01 |
-| Số commit nguồn | 98 |
+| Ngày commit | 2026-09-03 |
+| Số commit nguồn | 106 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

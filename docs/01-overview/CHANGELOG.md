@@ -118,6 +118,7 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 **Sửa lỗi**
 
+- I1 dòng chảy qua cursor phía server; I3 nói rõ role chỉ-đọc chưa được nối — `b07124d` (2026-09-05, Đặng Văn Vỹ)
 - C1/C2/C3 — lượt bị cắt không còn bị gọi là success — `e1eb664` (2026-09-05, Đặng Văn Vỹ)
 - đóng 2 lỗ hổng present-but-wrong-shape còn sót trong finalize — `eaceedf` (2026-09-01, Đặng Văn Vỹ)
 - finalize_node chịu được state None/sai kiểu, không ném lỗi — `ac65f33` (2026-09-01, Đặng Văn Vỹ)
@@ -247,10 +248,10 @@ Cập nhật `PRIMARY_MODEL` trong `.env`, `ollama pull <model>`, rồi chạy l
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `e1eb664` — fix(review): C1/C2/C3 — lượt bị cắt không còn bị gọi là success |
+| Commit nguồn gần nhất | `b07124d` — fix(sql): I1 dòng chảy qua cursor phía server; I3 nói rõ role chỉ-đọc chưa được nối |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-05 |
-| Số commit nguồn | 116 |
+| Số commit nguồn | 117 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

@@ -190,8 +190,8 @@ vì thành phần sửa lỗi.
 | `tests/integration/test_simple_queries.py` | 10 |
 | `tests/unit/test_annotate.py` | 38 |
 | `tests/unit/test_annotations.py` | 32 |
-| `tests/unit/test_budget.py` | 23 |
-| `tests/unit/test_budget_gating.py` | 10 |
+| `tests/unit/test_budget.py` | 24 |
+| `tests/unit/test_budget_gating.py` | 11 |
 | `tests/unit/test_connection_profile.py` | 16 |
 | `tests/unit/test_describe_dataset.py` | 6 |
 | `tests/unit/test_egress_boundary.py` | 13 |
@@ -200,7 +200,7 @@ vì thành phần sửa lỗi.
 | `tests/unit/test_insight_agent.py` | 7 |
 | `tests/unit/test_introspect.py` | 16 |
 | `tests/unit/test_load_sqlite_to_postgres.py` | 46 |
-| `tests/unit/test_model_client_deadline.py` | 7 |
+| `tests/unit/test_model_client_deadline.py` | 12 |
 | `tests/unit/test_onboard_cli.py` | 45 |
 | `tests/unit/test_onboard_refresh.py` | 5 |
 | `tests/unit/test_onboard_verify.py` | 20 |
@@ -215,14 +215,14 @@ vì thành phần sửa lỗi.
 | `tests/unit/test_routing_is_pure.py` | 8 |
 | `tests/unit/test_schema_context.py` | 12 |
 | `tests/unit/test_schema_model.py` | 7 |
-| `tests/unit/test_sql_agent.py` | 16 |
+| `tests/unit/test_sql_agent.py` | 17 |
 | `tests/unit/test_sql_tables.py` | 21 |
-| `tests/unit/test_sql_tool_guard.py` | 22 |
-| `tests/unit/test_supervisor.py` | 15 |
+| `tests/unit/test_sql_tool_guard.py` | 24 |
+| `tests/unit/test_supervisor.py` | 18 |
 | `tests/unit/test_tier1_recall.py` | 9 |
 | `tests/unit/test_trace_jsonl.py` | 10 |
 | `tests/unit/test_viz_agent.py` | 11 |
-| **Tổng** | **626** |
+| **Tổng** | **639** |
 
 <!-- AUTO:end id=tests -->
 
@@ -239,10 +239,10 @@ PYTHONPATH=. pytest tests/unit/ -v       # không cần DB và Ollama
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `e1eb664` — fix(review): C1/C2/C3 — lượt bị cắt không còn bị gọi là success |
+| Commit nguồn gần nhất | `b07124d` — fix(sql): I1 dòng chảy qua cursor phía server; I3 nói rõ role chỉ-đọc chưa được nối |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-05 |
-| Số commit nguồn | 116 |
+| Số commit nguồn | 117 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

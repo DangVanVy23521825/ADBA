@@ -259,7 +259,7 @@ riêng qua MCP, và egress bị chặn ở tầng mạng. Chi tiết:
 | `requirements.txt` | 1 | 0 | 18 | — |
 | `schemas` | 3 | 3 | 735 | Pydantic contract: ExecutionPlan (Supervisor) và InsightOutput (Insight) |
 | `scripts` | 8 | 3 | 1.683 | Tiện ích vận hành: áp schema, kiểm tra kết nối, sinh tài liệu |
-| `tests` | 46 | 43 | 9.706 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
+| `tests` | 47 | 44 | 9.817 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
 | `training` | 13 | 5 | 3.795 | Sinh dữ liệu, LoRA/QLoRA notebook, checkpoint và kết quả |
 | `.cursorrules` | 1 | 0 | 0 | — |
 | `.github` | 1 | 0 | 29 | CI/CD — unit test, build & push image lên GHCR |
@@ -331,10 +331,10 @@ kèm giá trị thật; `env.example` là bản mẫu.
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `a1542ab` — fix(budget): I4 dự trữ ≥ ước lượng; I6 đếm lời gọi của supervisor; I8 timeout thật |
+| Commit nguồn gần nhất | `a0ccf79` — fix(errors): I5 dùng thật tập nhãn đóng, phát ra budget_exceeded; I7 giữ đủ trace |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-05 |
-| Số commit nguồn | 118 |
+| Số commit nguồn | 119 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

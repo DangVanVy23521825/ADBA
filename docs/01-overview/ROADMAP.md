@@ -202,6 +202,7 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Commit | Ngày | Tác giả | Nội dung |
 |---|---|---|---|
+| `a0ccf79` | 2026-09-05 | Đặng Văn Vỹ | fix(errors): I5 dùng thật tập nhãn đóng, phát ra budget_exceeded; I7 giữ đủ trace |
 | `a1542ab` | 2026-09-05 | Đặng Văn Vỹ | fix(budget): I4 dự trữ ≥ ước lượng; I6 đếm lời gọi của supervisor; I8 timeout thật |
 | `b07124d` | 2026-09-05 | Đặng Văn Vỹ | fix(sql): I1 dòng chảy qua cursor phía server; I3 nói rõ role chỉ-đọc chưa được nối |
 | `e1eb664` | 2026-09-05 | Đặng Văn Vỹ | fix(review): C1/C2/C3 — lượt bị cắt không còn bị gọi là success |
@@ -216,7 +217,6 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 | `3e982da` | 2026-09-01 | Đặng Văn Vỹ | fix(test): remove unreachable fixture in test_supervisor.py (task 6 review) |
 | `2cf725e` | 2026-09-01 | Đặng Văn Vỹ | feat(budget): trần cứng thay đếm retry — reflector 8→1, sql retry 3→2, trần 12 call |
 | `6abe0cb` | 2026-09-01 | Đặng Văn Vỹ | fix(routing): conditional edge thành hàm thuần; node giữ việc ghi state (spec 5.5) |
-| `45b7b5d` | 2026-09-01 | Đặng Văn Vỹ | feat(budget): deadline_ts mang trong state, clock tiêm được |
 
 <!-- AUTO:end id=commit-history -->
 
@@ -224,10 +224,10 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `a1542ab` — fix(budget): I4 dự trữ ≥ ước lượng; I6 đếm lời gọi của supervisor; I8 timeout thật |
+| Commit nguồn gần nhất | `a0ccf79` — fix(errors): I5 dùng thật tập nhãn đóng, phát ra budget_exceeded; I7 giữ đủ trace |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-05 |
-| Số commit nguồn | 118 |
+| Số commit nguồn | 119 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

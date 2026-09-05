@@ -283,6 +283,7 @@ Ba điều đáng đọc kỹ:
 | `tests/unit/test_connection_profile.py` | 16 |
 | `tests/unit/test_describe_dataset.py` | 6 |
 | `tests/unit/test_egress_boundary.py` | 13 |
+| `tests/unit/test_errors.py` | 5 |
 | `tests/unit/test_fetch_dataset.py` | 25 |
 | `tests/unit/test_finalize.py` | 21 |
 | `tests/unit/test_insight_agent.py` | 7 |
@@ -310,7 +311,7 @@ Ba điều đáng đọc kỹ:
 | `tests/unit/test_tier1_recall.py` | 9 |
 | `tests/unit/test_trace_jsonl.py` | 10 |
 | `tests/unit/test_viz_agent.py` | 11 |
-| **Tổng** | **639** |
+| **Tổng** | **644** |
 
 <!-- AUTO:end id=tests -->
 
@@ -335,10 +336,10 @@ Ba điều đáng đọc kỹ:
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `a1542ab` — fix(budget): I4 dự trữ ≥ ước lượng; I6 đếm lời gọi của supervisor; I8 timeout thật |
+| Commit nguồn gần nhất | `a0ccf79` — fix(errors): I5 dùng thật tập nhãn đóng, phát ra budget_exceeded; I7 giữ đủ trace |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-05 |
-| Số commit nguồn | 118 |
+| Số commit nguồn | 119 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

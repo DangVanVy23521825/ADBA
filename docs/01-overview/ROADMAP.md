@@ -212,11 +212,11 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 | `a1542ab` | 2026-09-05 | Đặng Văn Vỹ | fix(budget): I4 dự trữ ≥ ước lượng; I6 đếm lời gọi của supervisor; I8 timeout thật |
 | `b07124d` | 2026-09-05 | Đặng Văn Vỹ | fix(sql): I1 dòng chảy qua cursor phía server; I3 nói rõ role chỉ-đọc chưa được nối |
 | `e1eb664` | 2026-09-05 | Đặng Văn Vỹ | fix(review): C1/C2/C3 — lượt bị cắt không còn bị gọi là success |
+| `40c7214` | 2026-09-03 | Đặng Văn Vỹ | docs(eval): kết quả lượt đo tầng 2 đầu tiên, gồm phép quét k |
 | `d2f7f25` | 2026-09-03 | Đặng Văn Vỹ | feat(ui): hiển thị kết quả một phần và lý do bị cắt |
 | `ddaeb5a` | 2026-09-03 | Đặng Văn Vỹ | feat(trace): query_id + ngân sách trong trace, ghi JSONL; nhãn lỗi một nguồn |
 | `0ba85e1` | 2026-09-03 | Đặng Văn Vỹ | feat(budget): cấp phát theo dự trữ — python/viz bị cắt trước, insight được bảo vệ |
 | `71b19c6` | 2026-09-03 | Đặng Văn Vỹ | feat(graph): mọi đường ra đi qua finalize, không còn END trần |
-| `eaceedf` | 2026-09-01 | Đặng Văn Vỹ | fix(graph): đóng 2 lỗ hổng present-but-wrong-shape còn sót trong finalize |
 
 <!-- AUTO:end id=commit-history -->
 
@@ -227,7 +227,7 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 | Commit nguồn gần nhất | `dfab879` — fix(budget): enforce LLM call cap inside retries |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-05 |
-| Số commit nguồn | 125 |
+| Số commit nguồn | 133 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

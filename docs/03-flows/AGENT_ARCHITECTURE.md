@@ -39,8 +39,6 @@ flowchart LR
 | `python` | `python_agent_node()` | `prompts/data_analysis.txt` | 2 | 0.1 | 1024 | 200 |
 | `reflector` | `reflector_agent_node()` | inline (trong file agent) | — | 0.1 | 512 | 120 |
 | `sql` | `sql_agent_node()` | `prompts/text_to_sql.txt` | 2 | 0.0 | 1024 | 200 |
-| `sql` | `sql_agent_node()` | `prompts/text_to_sql.txt` | 2 | 0.0 | 1024 | 200 |
-| `sql` | `sql_agent_node()` | `prompts/text_to_sql.txt` | 2 | 0.0 | 1024 | 200 |
 | `supervisor` | `supervisor_node()` | `prompts/supervisor_routing.txt` | — | 0.1 | 800 | 300 |
 | `viz` | `viz_agent_node()` | `prompts/viz_generation.txt` | 2 | 0.2 | 1024 | 150 |
 
@@ -346,7 +344,7 @@ Ba điều đáng đọc kỹ:
 | Commit nguồn gần nhất | `dfab879` — fix(budget): enforce LLM call cap inside retries |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-05 |
-| Số commit nguồn | 125 |
+| Số commit nguồn | 133 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

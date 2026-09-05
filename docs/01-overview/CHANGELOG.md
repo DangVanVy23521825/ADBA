@@ -83,11 +83,14 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 - query_id + ngân sách trong trace, ghi JSONL; nhãn lỗi một nguồn — `ddaeb5a` (2026-09-03, Đặng Văn Vỹ)
 - cấp phát theo dự trữ — python/viz bị cắt trước, insight được bảo vệ — `0ba85e1` (2026-09-03, Đặng Văn Vỹ)
 - mọi đường ra đi qua finalize, không còn END trần — `71b19c6` (2026-09-03, Đặng Văn Vỹ)
+- cờ --k cho tầng 2, để đo ảnh hưởng của bề rộng context — `87bac69` (2026-09-03, Đặng Văn Vỹ)
 - node finalize — thang success/partial/failed có lý do — `fc69ccb` (2026-09-01, Đặng Văn Vỹ)
 - ModelClient từ chối khởi động lời gọi không kịp deadline — `3c96a2c` (2026-09-01, Đặng Văn Vỹ)
 - trần cứng thay đếm retry — reflector 8→1, sql retry 3→2, trần 12 call — `2cf725e` (2026-09-01, Đặng Văn Vỹ)
 - deadline_ts mang trong state, clock tiêm được — `45b7b5d` (2026-09-01, Đặng Văn Vỹ)
 - role adba_readonly — lớp bảo đảm chỉ-đọc ở tầng Postgres — `0120aaa` (2026-09-01, Đặng Văn Vỹ)
+- dịch SQL vàng SQLite sang Postgres, mở BIRD cho tầng 2 — `eb65083` (2026-09-01, Đặng Văn Vỹ)
+- tầng 2 — execution accuracy — `d7783b6` (2026-09-01, Đặng Văn Vỹ)
 - Chinook làm schema demo phát hành lại được — `ff31b35` (2026-08-23, Đặng Văn Vỹ)
 - --threshold-tokens chốt chế độ schema tại build — `42ece63` (2026-08-23, Đặng Văn Vỹ)
 - bridge BIRD SQLite databases into Postgres for onboarding evals — `3116622` (2026-08-22, Đặng Văn Vỹ)
@@ -129,10 +132,14 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 - C1/C2/C3 — lượt bị cắt không còn bị gọi là success — `e1eb664` (2026-09-05, Đặng Văn Vỹ)
 - đóng 2 lỗ hổng present-but-wrong-shape còn sót trong finalize — `eaceedf` (2026-09-01, Đặng Văn Vỹ)
 - finalize_node chịu được state None/sai kiểu, không ném lỗi — `ac65f33` (2026-09-01, Đặng Văn Vỹ)
+- bỏ cả phần giải thích model viết SAU câu SQL — `a3682b8` (2026-09-01, Đặng Văn Vỹ)
 - remove unreachable fixture in test_supervisor.py (task 6 review) — `3e982da` (2026-09-01, Đặng Văn Vỹ)
+- bộ bóc SQL cắt nhầm từ chữ 'with' trong văn xuôi — `ee0c38a` (2026-09-01, Đặng Văn Vỹ)
 - conditional edge thành hàm thuần; node giữ việc ghi state (spec 5.5) — `6abe0cb` (2026-09-01, Đặng Văn Vỹ)
+- lưu chi tiết từng câu không đạt, kèm SQL đã chạy — `c43ce64` (2026-09-01, Đặng Văn Vỹ)
 - fail closed, statement_timeout 30s→10s, trần 50k dòng — `05b24f0` (2026-09-01, Đặng Văn Vỹ)
 - spawn + env rỗng — ranh giới là tiến trình, không phải namespace — `55aba8e` (2026-09-01, Đặng Văn Vỹ)
+- bọc nháy định danh mà Postgres sẽ gấp sai, ở đường chạy thật — `a48fbff` (2026-09-01, Đặng Văn Vỹ)
 - dọn ba lỗ đã park từ review Plan A — `6af3233` (2026-09-01, Đặng Văn Vỹ)
 - tên cột không mang nghĩa thì luôn low, bất kể model chấm gì — `4601a03` (2026-08-27, Đặng Văn Vỹ)
 - chia lô cột cho bảng rộng, annotate có ngân sách riêng — `da433e3` (2026-08-26, Đặng Văn Vỹ)
@@ -174,6 +181,7 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 **Tài liệu**
 
 - sửa 2 dòng "10s" lỗi thời + regex generator không parse được default lồng ngoặc — `18a1162` (2026-09-05, Đặng Văn Vỹ)
+- kết quả lượt đo tầng 2 đầu tiên, gồm phép quét k — `40c7214` (2026-09-03, Đặng Văn Vỹ)
 - cập nhật Plan B theo main hậu-merge Plan A — `8809e94` (2026-09-01, Đặng Văn Vỹ)
 - sửa mô tả openai ở NGUỒN sinh, không sửa trong khối AUTO — `0e1f02d` (2026-08-19, Đặng Văn Vỹ)
 - Plan B — cứng hóa ngân sách thời gian và cô lập sandbox, 12 task — `70dba92` (2026-08-17, Đặng Văn Vỹ)
@@ -259,7 +267,7 @@ Cập nhật `PRIMARY_MODEL` trong `.env`, `ollama pull <model>`, rồi chạy l
 | Commit nguồn gần nhất | `dfab879` — fix(budget): enforce LLM call cap inside retries |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-05 |
-| Số commit nguồn | 125 |
+| Số commit nguồn | 133 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

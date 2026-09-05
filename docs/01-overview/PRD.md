@@ -208,9 +208,9 @@ Dự án coi là thành công khi đồng thời:
 | `conftest.py` | 1 | 1 | 2 | — |
 | `data` | 16 | 1 | 84.504 | DDL 3 domain, seed, và dataset huấn luyện/đánh giá (JSONL) |
 | `docker-compose.yml` | 1 | 0 | 62 | — |
-| `docs` | 42 | 0 | — | Bộ tài liệu dự án (chính file này) |
+| `docs` | 20 | 0 | — | Bộ tài liệu dự án (chính file này) |
 | `eval` | 14 | 10 | 3.399 | Runner đo baseline / PEFT và so sánh hai lần chạy |
-| `graph` | 21 | 21 | 4.035 | LangGraph: state, các node agent, và tool thực thi |
+| `graph` | 19 | 19 | 3.181 | LangGraph: state, các node agent, và tool thực thi |
 | `model` | 3 | 3 | 542 | ModelClient (Ollama local-first, fallback OpenAI) + tham số theo agent |
 | `onboard.py` | 1 | 1 | 1.012 | — |
 | `pages` | 1 | 1 | 86 | — |
@@ -234,7 +234,7 @@ Dự án coi là thành công khi đồng thời:
 | Commit nguồn gần nhất | `dfab879` — fix(budget): enforce LLM call cap inside retries |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-05 |
-| Số commit nguồn | 125 |
+| Số commit nguồn | 133 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

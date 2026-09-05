@@ -248,7 +248,7 @@ PYTHONPATH=. pytest tests/unit/ -v       # không cần DB và Ollama
 | Commit nguồn gần nhất | `dfab879` — fix(budget): enforce LLM call cap inside retries |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-05 |
-| Số commit nguồn | 125 |
+| Số commit nguồn | 133 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

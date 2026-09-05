@@ -16,6 +16,30 @@ nhau:
      mà `fork` không cho: code của model chạy trong một môi trường rỗng,
      nên dù thoát khỏi namespace nó cũng không còn `DATABASE_URL` để đọc.
 
+ĐIỀU HAI ĐIỀU TRÊN *KHÔNG* BẢO ĐẢM — đọc kỹ trước khi trích dẫn module
+này như một bảo đảm cô lập:
+
+  * Chúng xoá **environment dict của chính child**. Đó là lỗ hổng cụ thể,
+    có thật, mà bản `fork` trước đây để hở, và bịt nó là một cải thiện
+    thật — nhưng phạm vi của nó chỉ đến đó.
+  * Trên **Linux** (môi trường khách hàng thật; máy dev macOS không có
+    `/proc` nên không thấy điều này), code trong sandbox vẫn lấy được
+    module `os` thật qua `pd.io.common.os`, rồi `os.getppid()` +
+    đọc `/proc/<ppid>/environ` để lấy **environment của tiến trình CHA**
+    — nguyên vẹn, gồm cả `DATABASE_URL`. `os.environ.clear()` không chạm
+    tới bộ nhớ của tiến trình cha, nên nó không chặn đường này.
+  * Cùng đường đó cho phép **đọc file bất kỳ** và **sinh tiến trình con**
+    (`os.system`, `subprocess` qua `os`).
+
+Cô lập tiến trình đầy đủ — chạy non-root, rootfs chỉ-đọc, không thấy
+`/proc` của cha, chặn egress, giới hạn mem/cpu/pids — là chuyện của một
+container riêng, và nó CỐ Ý nằm ngoài phạm vi plan này: xem mục "Phần
+spec cố ý để ngoài Plan B" trong
+`docs/superpowers/plans/2026-08-17-cung-hoa-ngan-sach-sandbox.md`, nơi
+spec 4.2 (container `adba-tools`) được hoãn sang **Plan C**. Cho tới khi
+Plan C xong, hãy coi code chạy ở đây là code KHÔNG đáng tin chạy với
+quyền của tiến trình cha, chỉ bớt được đúng một đường rò credential.
+
 Hệ quả về kiểu dữ liệu: mọi tham số đi qua ranh giới này phải pickle
 được. Lambda và module object thì không. Đó là lý do preset là một CHUỖI
 và namespace được dựng bên trong child, thay vì truyền callable/module
@@ -24,10 +48,12 @@ xuống như bản dùng `fork` trước đây.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import multiprocessing as mp
 import os
 import queue
+import sys
 from typing import Any
 
 import numpy as np
@@ -35,7 +61,21 @@ import pandas as pd
 import scipy.stats as stats
 
 logger = logging.getLogger(__name__)
-PANDAS_EXEC_TIMEOUT_SECONDS = float(os.getenv("PANDAS_EXEC_TIMEOUT_SECONDS", "10"))
+
+# 25s, không phải 10s. `spawn` dựng một interpreter MỚI mỗi lần gọi và
+# nạp lại pandas/numpy (và matplotlib ở preset chart) từ đầu — cái giá cố
+# định đó lớn hơn hẳn bản `fork` cũ, nơi child thừa hưởng sẵn mọi module
+# đã nạp. Trần 10s là con số của thời `fork`, và giữ nguyên nó sau khi đổi
+# sang `spawn` khiến sandbox báo "timed out" cho cả code đúng và nhanh.
+# Đó nhiều khả năng chính là hai lần "flaky timeout" mà người làm Task 10
+# tự ghi nhận rồi quy cho tải máy.
+PANDAS_EXEC_TIMEOUT_SECONDS = float(os.getenv("PANDAS_EXEC_TIMEOUT_SECONDS", "25"))
+
+# Preset chart còn nạp thêm matplotlib trong child, nên nó có trần riêng
+# — mặc định bằng trần pandas, nhưng chỉnh được độc lập khi cần.
+CHART_EXEC_TIMEOUT_SECONDS = float(
+    os.getenv("CHART_EXEC_TIMEOUT_SECONDS", str(PANDAS_EXEC_TIMEOUT_SECONDS))
+)
 
 PRESET_PANDAS = "pandas"
 PRESET_CHART = "chart"
@@ -160,8 +200,14 @@ def _sandbox_worker(code: str, df: pd.DataFrame, preset: str, result_queue: mp.Q
 
         # Xoá env NGAY TRƯỚC exec, không sớm hơn: các import phía trên
         # (matplotlib tìm thư mục cấu hình qua HOME/MPLCONFIGDIR) cần env
-        # còn nguyên. Sau dòng này, code của model không còn DATABASE_URL
-        # để đọc, kể cả khi nó lấy được module `os` qua pd.io.common.
+        # còn nguyên. Sau dòng này, environment dict CỦA CHÍNH TIẾN TRÌNH
+        # NÀY rỗng, nên `pd.io.common.os.environ` không còn DATABASE_URL.
+        #
+        # Nó KHÔNG bịt được đường đọc environment của tiến trình CHA: trên
+        # Linux, `os.getppid()` + `/proc/<ppid>/environ` lấy lại toàn bộ
+        # env của cha, và lời gọi này không chạm tới bộ nhớ của cha. Chặn
+        # đường đó cần cô lập ở mức namespace/container (Plan C) — xem
+        # docstring đầu module.
         os.environ.clear()
 
         global_vars = dict(namespace)
@@ -178,6 +224,48 @@ def _sandbox_worker(code: str, df: pd.DataFrame, preset: str, result_queue: mp.Q
         result_queue.put(("error", str(exc)))
 
 
+@contextlib.contextmanager
+def _main_module_not_reexecuted():
+    """Ngăn child của `spawn` chạy lại toàn bộ file `__main__`.
+
+    `multiprocessing.spawn` dựng lại trạng thái của child bằng cách nạp
+    LẠI `sys.modules["__main__"]` qua `runpy`, để nó phân giải được những
+    tên có thể đã được pickle theo tham chiếu tới `__main__`. Với một
+    script có `if __name__ == "__main__":` bọc phần thân, việc đó gần như
+    miễn phí. Với `streamlit run app.py` thì KHÔNG: Streamlit biến
+    `app.py` thành `__main__`, và app.py không có lớp bọc đó — nên MỖI
+    lời gọi sandbox lại import streamlit + langgraph + matplotlib + dựng
+    lại cả graph trong child trước khi chạy một dòng code nào của model.
+    Đo được ~12,6s so với ~3,9s ở một entry point có bọc — quá đủ để vượt
+    trần timeout và báo "Python execution timed out" cho code hoàn toàn
+    đúng.
+
+    Cách chữa tiêu chuẩn cho đúng tình huống này: tạm bỏ
+    `__main__.__file__` trong lúc `proc.start()` chạy. Bước main-fixup của
+    `spawn` khi đó không thấy file nào để chạy lại. Không có gì trong
+    sandbox này pickle theo tham chiếu tới `__main__` (code là chuỗi, df
+    là DataFrame, preset là chuỗi), nên không mất mát gì.
+
+    Khôi phục trong `finally`, và chỉ khôi phục nếu thuộc tính vốn CÓ:
+    dưới pytest/REPL `__main__` có thể không có `__file__`, và đặt thêm
+    một `__file__` giả vào đó sẽ làm hỏng thứ khác. Không khôi phục được
+    thì lần gọi sandbox sau, hoặc cơ chế reload của Streamlit, sẽ hỏng.
+    """
+    main = sys.modules.get("__main__")
+    had_file = main is not None and hasattr(main, "__file__")
+    original = getattr(main, "__file__", None) if main is not None else None
+    if had_file:
+        try:
+            del main.__file__
+        except (AttributeError, TypeError):
+            had_file = False
+    try:
+        yield
+    finally:
+        if had_file:
+            main.__file__ = original
+
+
 def _run_sandboxed(
     code: str,
     df: pd.DataFrame,
@@ -187,7 +275,8 @@ def _run_sandboxed(
     ctx = mp.get_context("spawn")
     result_queue: mp.Queue = ctx.Queue(maxsize=1)
     proc = ctx.Process(target=_sandbox_worker, args=(code, df, preset, result_queue))
-    proc.start()
+    with _main_module_not_reexecuted():
+        proc.start()
 
     try:
         status, payload = result_queue.get(timeout=timeout_seconds)
@@ -229,7 +318,7 @@ def run_pandas_safe(
 def run_chart_safe(
     code: str,
     df: pd.DataFrame,
-    timeout_seconds: float = PANDAS_EXEC_TIMEOUT_SECONDS,
+    timeout_seconds: float = CHART_EXEC_TIMEOUT_SECONDS,
 ) -> dict:
     """Chạy code vẽ biểu đồ, trả dict do code đặt vào biến `result`.
 

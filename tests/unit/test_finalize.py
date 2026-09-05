@@ -21,7 +21,18 @@ PLAN = [
 
 
 def _state(**over):
-    s = make_initial_state("q", SchemaContext(), budget_s=45, clock=lambda: 1000.0)
+    """State mặc định: kế hoạch 3 bước, deadline CÒN HẠN.
+
+    Đồng hồ thật, không phải `lambda: 1000.0`. `finalize_node` gọi
+    `is_expired(deadline_ts)` với `time.time()` — một deadline giả ở mốc
+    1045.0 (năm 1970) luôn là ĐÃ HẾT HẠN với đồng hồ thật, nên mọi state ở
+    đây từng mang sẵn một lý do suy giảm mà không test nào định dựng lên.
+    Điều đó không lộ ra trước bản sửa C1 chỉ vì nhánh "success" xoá sạch
+    `reasons` vô điều kiện — chính là lỗi C1. Test nào cần một deadline đã
+    hết hạn thì đặt `deadline_ts` tường minh (xem
+    `test_expired_deadline_is_named_in_the_reason`).
+    """
+    s = make_initial_state("q", SchemaContext(), budget_s=45)
     s["execution_plan"] = PLAN
     s["completed_agents"] = ["supervisor"]
     s["status"] = "running"
@@ -82,6 +93,43 @@ def test_call_ceiling_is_named_in_the_reason():
         llm_calls_used=12,
     )
     assert any("lời gọi" in r for r in finalize_node(s)["degradation_reason"])
+
+
+def test_a_budget_cut_step_is_partial_even_though_it_marked_itself_completed():
+    """Node bị `node_may_run` gác ra vì hết ngân sách TỰ THÊM mình vào
+    `completed_agents` (để router không chọn lại nó mỗi vòng). Vì thế
+    `_skipped_agents()` trả về [] cho một lượt chạy bị cắt sạch — và bản
+    trước phân loại nó là "success" rồi xoá luôn `degradation_reason`.
+
+    Người dùng khi đó nhận đúng một bảng SQL trần: không insight, không
+    biểu đồ, không banner cảnh báo (UI chỉ hiện banner cho partial/failed),
+    và không một chữ nào nói rằng có thứ gì đã bị cắt."""
+    s = _state(
+        completed_agents=["supervisor", "sql", "viz", "insight"],
+        sql_result={"sql": "SELECT 1", "row_count": 3},
+        degradation_reason=[
+            "Bỏ qua 'viz': còn 8.0s, không đủ ngân sách cho một lời gọi model.",
+            "Bỏ qua 'insight': còn 3.0s, không đủ ngân sách cho một lời gọi model.",
+        ],
+    )
+    out = finalize_node(s)
+    assert out["status"] == "partial", "một lượt bị cắt không được gọi là success"
+    assert out["degradation_reason"], "lý do bị cắt không được xoá đi"
+    assert any("viz" in r for r in out["degradation_reason"])
+    assert any("insight" in r for r in out["degradation_reason"])
+
+
+def test_an_expired_deadline_alone_blocks_the_success_label():
+    """Kể cả khi mọi bước đều nằm trong completed_agents: deadline đã hết
+    là một lý do suy giảm có thật, nên không thể là "success"."""
+    s = _state(
+        completed_agents=["supervisor", "sql", "viz", "insight"],
+        sql_result={"sql": "SELECT 1", "row_count": 3},
+        deadline_ts=900.0,
+    )
+    out = finalize_node(s)
+    assert out["status"] == "partial"
+    assert any("ngân sách" in r for r in out["degradation_reason"])
 
 
 # ── failed ──────────────────────────────────────────────────────────────────

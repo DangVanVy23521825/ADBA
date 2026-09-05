@@ -9,6 +9,7 @@ chứ không phải mẹo escape mong manh: đã kiểm trên pandas 2.3.3, truy
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -73,3 +74,83 @@ def test_timeout_still_kills_the_child():
     code = "import pandas as pd\nwhile True:\n    pass\n"
     with pytest.raises(RuntimeError, match="timed out"):
         run_pandas_safe(code, DF, timeout_seconds=2)
+
+
+# ── entry point: child KHÔNG được chạy lại __main__ ─────────────────────────
+
+_ENTRY_SCRIPT = '''\
+"""Giả lập entry point kiểu `streamlit run app.py`.
+
+Điểm mấu chốt: phần thân module KHÔNG nằm trong `if __name__ ==
+"__main__":`. Streamlit biến app.py thành `__main__`, và app.py có
+import/khởi tạo ở cấp module — đúng hình dạng này. Chỉ LỜI GỌI sandbox
+được bọc, vì nếu không thì child sẽ tự gọi lại sandbox và multiprocessing
+ném lỗi bootstrap thay vì thể hiện đúng cái giá phải trả.
+
+Mỗi lần thân module chạy, ghi một dòng vào file đếm. Cha chạy nó đúng một
+lần. Nếu `multiprocessing.spawn` bắt child chạy lại `__main__`, file sẽ có
+hai dòng — đó chính là lỗi, đo được mà không phụ thuộc đồng hồ.
+"""
+import os
+import pathlib
+import sys
+
+with pathlib.Path(os.environ["ADBA_MAIN_EXEC_COUNTER"]).open("a") as fh:
+    fh.write(__name__ + "\\n")
+
+sys.path.insert(0, os.environ["ADBA_REPO_ROOT"])
+
+import pandas as pd
+
+from graph.tools.python_tool import run_pandas_safe
+
+if __name__ == "__main__":
+    out = run_pandas_safe(
+        "df = df.copy()\\ndf['b'] = df['a'] * 2\\ndf",
+        pd.DataFrame({"a": [1, 2, 3]}),
+    )
+    print("ROWS", len(out))
+'''
+
+
+def test_the_child_does_not_re_execute_the_main_module(tmp_path):
+    """Hồi quy cho C3.
+
+    Dưới `spawn`, mỗi child dựng lại trạng thái bằng cách chạy lại
+    `sys.modules["__main__"]` qua runpy. Với `streamlit run app.py`, thân
+    app.py nằm ngoài mọi lớp bọc, nên MỖI lời gọi sandbox lại import
+    streamlit + langgraph + matplotlib và dựng lại graph trong child trước
+    khi chạy một dòng code nào của model — vài giây mỗi lần, đủ để sandbox
+    báo "Python execution timed out" cho code hoàn toàn đúng.
+
+    Bộ test chạy dưới pytest KHÔNG bắt được lỗi này: ở đó `__main__` là
+    entry point của pytest, và `__main__.__spec__.name` kết thúc bằng
+    `.__main__` nên spawn bỏ qua bước fixup. Vì vậy test này dựng một entry
+    point riêng và chạy nó như một tiến trình thật.
+    """
+    import subprocess
+    import sys as _sys
+
+    repo_root = Path(__file__).resolve().parents[2]
+    script = tmp_path / "fake_streamlit_app.py"
+    script.write_text(_ENTRY_SCRIPT, encoding="utf-8")
+    counter = tmp_path / "main_execs.txt"
+
+    env = {
+        **os.environ,
+        "ADBA_MAIN_EXEC_COUNTER": str(counter),
+        "ADBA_REPO_ROOT": str(repo_root),
+    }
+    proc = subprocess.run(
+        [_sys.executable, str(script)],
+        capture_output=True, text=True, timeout=180, env=env,
+    )
+
+    assert proc.returncode == 0, f"entry point chết:\n{proc.stdout}\n{proc.stderr}"
+    assert "ROWS 3" in proc.stdout, f"sandbox không trả kết quả:\n{proc.stdout}"
+
+    runs = counter.read_text(encoding="utf-8").split()
+    assert runs == ["__main__"], (
+        "thân module __main__ chạy nhiều hơn một lần — child của spawn đang "
+        f"nạp lại toàn bộ entry point: {runs}"
+    )

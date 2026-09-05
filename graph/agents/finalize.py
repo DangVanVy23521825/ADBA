@@ -63,6 +63,16 @@ def _planned_agents(state: MultiAgentState) -> list[str]:
 
 
 def _skipped_agents(state: MultiAgentState) -> list[str]:
+    """Bước có trong kế hoạch nhưng KHÔNG nằm trong `completed_agents`.
+
+    CẢNH BÁO — danh sách này KHÔNG phải "những gì đã bị cắt". Năm node bị
+    gác ngân sách (sql/python/viz/insight/reflector) TỰ THÊM mình vào
+    `completed_agents` khi `node_may_run` chặn chúng, cốt để router không
+    chọn lại chính node đó mỗi vòng lặp. Một bước bị cắt vì hết giờ vì thế
+    trông y hệt một bước đã chạy xong ở đây. Thứ phân biệt được hai ca đó
+    là `degradation_reason` — nhánh gác ghi lý do vào đấy. Xem
+    `finalize_node`: phân loại "success" phải xét CẢ HAI.
+    """
     completed = set(_safe_list(state, "completed_agents"))
     return [agent for agent in _planned_agents(state) if agent not in completed]
 
@@ -70,11 +80,11 @@ def _skipped_agents(state: MultiAgentState) -> list[str]:
 def finalize_node(state: MultiAgentState) -> MultiAgentState:
     """Gom mọi thứ đang có và phân loại kết quả.
 
-    | status    | Điều kiện                              |
-    |-----------|----------------------------------------|
-    | success   | Kế hoạch hoàn tất                      |
-    | partial   | Có kết quả SQL, một số bước bị bỏ      |
-    | failed    | Không có output nào dùng được          |
+    | status    | Điều kiện                                          |
+    |-----------|----------------------------------------------------|
+    | success   | Kế hoạch hoàn tất VÀ không có lý do suy giảm nào   |
+    | partial   | Có kết quả SQL, nhưng có bước bị bỏ hoặc bị cắt    |
+    | failed    | Không có output nào dùng được                      |
 
     `degradation_reason` ghi ra để UI hiển thị được — nuốt lỗi im lặng ở
     đây là cách chắc chắn nhất khiến không ai biết hệ thống đang cắt gì.
@@ -95,7 +105,17 @@ def finalize_node(state: MultiAgentState) -> MultiAgentState:
     if skipped:
         reasons.append("Bước bị bỏ: " + ", ".join(skipped) + ".")
 
-    if not skipped and has_sql:
+    # "success" đòi HAI điều, không phải một: không bước nào vắng mặt khỏi
+    # `completed_agents`, VÀ không lý do suy giảm nào đã được ghi nhận.
+    #
+    # Chỉ xét `skipped` là sai, và sai im lặng: node bị `node_may_run` gác
+    # ra vì hết ngân sách vẫn TỰ THÊM mình vào `completed_agents` (để router
+    # không chọn lại nó), nên nó biến mất khỏi `skipped`. Một lượt chạy có
+    # SQL xong còn viz/insight bị cắt vì hết giờ sẽ có `skipped == []` →
+    # phân loại "success" → dòng `reasons = []` bên dưới xoá sạch cả lý do
+    # do nhánh gác ghi lẫn lý do hết-hạn/chạm-trần vừa tính ở trên. Người
+    # dùng nhận một bảng trần, không banner, không biết mình mất gì.
+    if not skipped and not reasons and has_sql:
         status = "success"
         reasons = []
         observation = "Kế hoạch hoàn tất."

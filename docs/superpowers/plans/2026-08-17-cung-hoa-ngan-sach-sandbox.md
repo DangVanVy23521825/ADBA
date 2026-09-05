@@ -2878,8 +2878,14 @@ Ba câu hỏi từ roadmap, kèm cách kiểm từng câu:
 
 | Cổng | Kiểm bằng |
 |---|---|
-| Một câu hỏi bất kỳ không bao giờ vượt ngân sách | `tests/integration/test_budget_end_to_end.py` — graph với `budget_s=0` vẫn kết thúc ở `finalize`, không chạm node SQL |
-| Code trong sandbox không đọc được biến môi trường của tiến trình cha | `tests/unit/test_python_sandbox_isolation.py::test_sandbox_cannot_read_parent_environment` |
+| Một câu hỏi bất kỳ không bao giờ vượt ngân sách, và lượt bị cắt luôn nói ra vì sao | `tests/integration/test_budget_end_to_end.py::test_a_zero_budget_never_reaches_the_sql_node` (graph với `budget_s=0` kết thúc ở `finalize`, không chạm node SQL) và `::test_sql_succeeds_then_the_budget_runs_out_before_insight` (SQL xong, ngân sách cạn giữa chừng → `partial` kèm lý do, không phải `success` im lặng) |
+| Code trong sandbox không còn đọc được credential qua environment dict CỦA CHÍNH NÓ — **đóng một phần, xem ghi chú bên dưới** | `tests/unit/test_python_sandbox_isolation.py::test_sandbox_cannot_read_parent_environment` và `::test_sandbox_environment_is_emptied_not_just_filtered` |
 | Vai trò DB không thực thi được lệnh ghi | `tests/integration/test_readonly_role.py` — 7 test, gồm cả data-modifying CTE |
+
+**Ghi chú cổng 2 — phạm vi thật của nó.** Hai test kia chứng minh đúng một điều: sau `os.environ.clear()`, environment dict **của chính tiến trình con** rỗng, nên `pd.io.common.os.environ` không còn `DATABASE_URL`. Đó là lỗ hổng cụ thể mà bản `fork` cũ để hở, và bịt nó là cải thiện thật.
+
+Chúng **không** chứng minh rằng environment của tiến trình **cha** là bất khả xâm phạm. Trên **Linux** — môi trường khách hàng thật; máy dev macOS không có `/proc` nên không lộ ra điều này — code trong sandbox vẫn lấy được module `os` thật qua `pd.io.common.os`, rồi `os.getppid()` + đọc `/proc/<ppid>/environ` để phục hồi **nguyên vẹn** env của cha, gồm cả `DATABASE_URL`. `os.environ.clear()` không chạm tới bộ nhớ của cha nên không chặn được đường này. Cùng đường đó còn cho đọc file bất kỳ và sinh tiến trình con.
+
+Chặn phần còn lại cần cô lập ở mức namespace/container (non-root, rootfs chỉ-đọc, không thấy `/proc` của cha, chặn egress) — tức là spec 4.2, **đã cố ý hoãn sang Plan C** ở bảng ngay phía trên. Cho tới khi Plan C xong: code chạy trong sandbox là code KHÔNG đáng tin chạy với quyền của tiến trình cha, chỉ bớt được đúng một đường rò credential. Caveat này được ghi lại ở docstring đầu `graph/tools/python_tool.py` để người đọc code thấy nó mà không phải tìm tới plan.
 
 **Không nằm trong Plan B, và đừng báo cáo như thể có:** `slo_hit_rate`, `answer_accuracy`, `partial_rate` là số của `eval/eval_e2e.py` — thuộc pha 0 của spec, chưa tồn tại. Plan B chứng minh **cơ chế** cắt đúng, không chứng minh hệ thống đạt 45s. Con số đó chỉ đo được ở cấu hình vLLM và cần harness của pha 0.

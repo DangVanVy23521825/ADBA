@@ -6,12 +6,13 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from pathlib import Path
 
-from graph.budget import node_may_run
+from graph.budget import clamped_tool_timeout_s, node_may_run
 from graph.errors import BUDGET_EXCEEDED, CHART_ERROR, MISSING_DATA, MISSING_STEP
 from graph.state import MultiAgentState
-from graph.tools.python_tool import run_chart_safe
+from graph.tools.python_tool import CHART_EXEC_TIMEOUT_SECONDS, run_chart_safe
 from graph.utils import append_trace, df_from_state, with_routing
 from model.model_client import BudgetExceededError, ModelClient
 
@@ -121,6 +122,22 @@ def viz_agent_node(state: MultiAgentState) -> MultiAgentState:
 
         code = _extract_code(raw)
 
+        # Ngân sách còn lại SAU model, TRƯỚC khi vào sandbox — `node_may_run`
+        # ở đầu hàm chỉ gác cửa cho MỘT lời gọi model, không thấy phần chi
+        # tiêu sau đó. Một lượt qua cửa vì còn ~15s cho model vẫn có thể
+        # tốn tới `CHART_EXEC_TIMEOUT_SECONDS` (25s) ở sandbox ngay sau —
+        # cộng lại có thể vượt ngân sách toàn cục dù cửa gác nói "còn giờ".
+        clock = state.get("_clock", time.time)
+        deadline_ts = state.get("deadline_ts")
+        sandbox_timeout_s = clamped_tool_timeout_s(
+            deadline_ts, CHART_EXEC_TIMEOUT_SECONDS, clock=clock
+        )
+        if sandbox_timeout_s <= 0:
+            error_label = BUDGET_EXCEEDED
+            error_context = "Hết ngân sách thời gian sau khi model trả lời — không còn chỗ để vẽ biểu đồ."
+            logger.warning("Viz Agent attempt %d: %s", attempt, error_context)
+            continue
+
         # Try executing the LLM-generated code
         try:
             # Wrap bare dict literal at end so exec() captures it
@@ -129,7 +146,7 @@ def viz_agent_node(state: MultiAgentState) -> MultiAgentState:
                 lines[-1] = "result = " + lines[-1]
                 code = "\n".join(lines)
 
-            result = run_chart_safe(code, df)
+            result = run_chart_safe(code, df, timeout_seconds=sandbox_timeout_s)
             if "chart_b64" not in result:
                 raise ValueError("Code did not produce a chart result dict")
 

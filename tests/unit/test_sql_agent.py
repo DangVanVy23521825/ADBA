@@ -244,6 +244,59 @@ class TestSqlAgentNode:
             assert "nội bộ" not in text, f"internal-segment marker leaked: {text!r}"
 
 
+class TestBudgetCanRunOutBetweenModelAndTool:
+    """Regression: `node_may_run` chỉ gác cửa TRƯỚC lời gọi model — nó
+    không thấy phần chi tiêu SAU đó. Trước bản sửa này, một lượt qua được
+    cửa gác (còn đủ ~15s cho model) vẫn có thể chạy `execute_sql` với
+    `SQL_TIMEOUT_MS` (10s) độc lập với deadline ngay sau, cộng lại vượt
+    ngân sách toàn cục dù cửa gác nói "còn giờ".
+
+    `_clock` ở đây trả về hai mốc: mốc đầu (dùng cho `node_may_run` ở đầu
+    hàm) còn nhiều thời gian; mốc sau (dùng cho kiểm tra SAU khi model trả
+    lời) đã hết. Không `time.sleep` — cùng kỹ thuật tiêm đồng hồ với
+    `tests/unit/test_budget.py`.
+    """
+
+    @staticmethod
+    def _state_with_budget_dying_after_the_model_call():
+        s = _state(PLAN_SQL_INSIGHT)
+        seq = [1000.0, 1050.001]
+
+        def clock() -> float:
+            return seq.pop(0) if len(seq) > 1 else seq[0]
+
+        s["_clock"] = clock
+        s["deadline_ts"] = 1050.0
+        return s
+
+    @patch("graph.agents.sql_agent.execute_sql")
+    @patch("graph.agents.sql_agent.ModelClient")
+    def test_execute_sql_is_never_called_once_the_budget_is_gone(self, MockClient, mock_execute):
+        mock_instance = MagicMock()
+        mock_instance.invoke.return_value = "SELECT region, SUM(amount) FROM orders GROUP BY region"
+        MockClient.return_value = mock_instance
+
+        s = self._state_with_budget_dying_after_the_model_call()
+        result = sql_agent_node(s)
+
+        mock_execute.assert_not_called()
+        assert result["last_error"]["error_type"] == "budget_exceeded"
+
+    @patch("graph.agents.sql_agent.execute_sql")
+    @patch("graph.agents.sql_agent.ModelClient")
+    def test_the_reason_says_budget_not_a_generic_sql_failure(self, MockClient, mock_execute):
+        """Nhãn sai (`sql_execution`) khiến reflector chẩn đoán sai lớp lỗi —
+        chính lý do nhãn `budget_exceeded` tồn tại (xem graph/errors.py)."""
+        mock_instance = MagicMock()
+        mock_instance.invoke.return_value = "SELECT region, SUM(amount) FROM orders GROUP BY region"
+        MockClient.return_value = mock_instance
+
+        s = self._state_with_budget_dying_after_the_model_call()
+        result = sql_agent_node(s)
+
+        assert "ngân sách" in result["last_error"]["traceback"]
+
+
 class TestBuildSystemPromptHasNoSurvivingPlaceholders:
     def test_no_placeholder_survives_rendering(self):
         """IMPORTANT 1 (final review): assert on the RENDERED OUTPUT, not on an

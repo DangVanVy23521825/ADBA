@@ -83,6 +83,33 @@ def calls_exhausted(llm_calls_used: int) -> bool:
     return llm_calls_used >= MAX_LLM_CALLS_PER_QUERY
 
 
+def clamped_tool_timeout_s(
+    deadline_ts: float | None,
+    configured_s: float,
+    *,
+    clock: Clock = time.time,
+) -> float:
+    """Timeout thật cho một tool (SQL/sandbox) SAU KHI lời gọi model đã trả về.
+
+    `node_may_run` gác CỬA TRƯỚC lời gọi model — nó không thấy phần chi
+    tiêu SAU đó. Một node được cho qua cửa vì còn đủ chỗ cho MỘT lời gọi
+    model (~15s ước lượng) vẫn có thể tốn 25s ở sandbox hay 10s ở
+    statement_timeout ngay sau đó, và cả hai con số đó độc lập với deadline
+    — cộng lại, một lượt chạy có thể vượt ngân sách toàn cục dù mọi cửa
+    gác từng nói "còn giờ".
+
+    Hàm này là điểm kiểm giữa — sau model, trước tool — trả về nhỏ hơn
+    giữa cấu hình sẵn có và thời gian thật sự còn lại. `0.0` (không âm)
+    khi hết giờ, để bên gọi coi đó là "không còn chỗ" mà không phải tự
+    kiểm dấu âm. Không deadline (test cũ, lời gọi ngoài graph) → trả
+    nguyên cấu hình, không clamp gì — cùng quy ước với
+    `ModelClient.effective_timeout_s()`.
+    """
+    if deadline_ts is None:
+        return configured_s
+    return max(0.0, min(configured_s, time_left(deadline_ts, clock)))
+
+
 # Node nào được lấn vào phần dự trữ dành cho insight.
 #
 #   sql       — bắt buộc. Không có kết quả SQL thì không có gì để nhận xét,

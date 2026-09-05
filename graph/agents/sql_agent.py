@@ -6,12 +6,19 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from pathlib import Path
 
-from graph.budget import node_may_run
+from graph.budget import clamped_tool_timeout_s, node_may_run
 from graph.errors import BUDGET_EXCEEDED, MISSING_STEP, SQL_EXECUTION
 from graph.state import MultiAgentState
-from graph.tools.sql_tool import TableNotPermittedError, execute_sql, explain_query_plan
+from graph.tools.sql_tool import (
+    SQL_CONNECT_TIMEOUT_S,
+    SQL_TIMEOUT_MS,
+    TableNotPermittedError,
+    execute_sql,
+    explain_query_plan,
+)
 from graph.utils import append_trace, df_to_state, with_routing
 from model.model_client import BudgetExceededError, ModelClient
 from perception.schema_context import SchemaContext
@@ -194,10 +201,38 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
 
         logger.info("SQL Agent attempt %d:\n%s", attempt, sql)
 
+        # ── Ngân sách còn lại SAU model, TRƯỚC khi chạm DB ─────────
+        #
+        # `node_may_run` ở đầu hàm chỉ gác cửa cho MỘT lời gọi model — nó
+        # không thấy phần chi tiêu sau đó. Một lượt được cho qua vì còn đủ
+        # ~15s cho model vẫn có thể tốn tới `SQL_TIMEOUT_MS` (10s) ở
+        # statement_timeout ngay sau, và cả hai số đó độc lập với deadline
+        # cho tới đây — cộng lại có thể vượt ngân sách toàn cục dù mọi cửa
+        # gác đều nói "còn giờ". Tính lại thời gian còn lại NGAY TRƯỚC khi
+        # chạm DB đóng lỗ đó.
+        clock = state.get("_clock", time.time)
+        deadline_ts = state.get("deadline_ts")
+        sql_timeout_s = clamped_tool_timeout_s(deadline_ts, SQL_TIMEOUT_MS / 1000.0, clock=clock)
+        if sql_timeout_s <= 0:
+            error_label = BUDGET_EXCEEDED
+            error_context = "Hết ngân sách thời gian sau khi model trả lời — không còn chỗ để chạy SQL."
+            logger.warning("SQL Agent attempt %d: %s", attempt, error_context)
+            continue
+        # Sàn 1 giây: `connect_timeout`/`statement_timeout` bằng 0 với
+        # psycopg2/Postgres nghĩa là TẮT trần, ngược hẳn ý định — không bao
+        # giờ được để một clamp hợp lệ (còn dương) làm tròn xuống 0.
+        connect_timeout_s = max(
+            1, round(clamped_tool_timeout_s(deadline_ts, SQL_CONNECT_TIMEOUT_S, clock=clock))
+        )
+
         # ── Execution ────────────────────────────────────────────
         try:
             meta = state.get("shared_metadata", {})
-            df = execute_sql(sql, profile=meta["profile"], user=meta["user"])
+            df = execute_sql(
+                sql, profile=meta["profile"], user=meta["user"],
+                timeout_ms=max(1, int(sql_timeout_s * 1000)),
+                connect_timeout_s=connect_timeout_s,
+            )
         except Exception as exc:
             # Log the full exception (may include internal detail, e.g. the
             # forbidden-table list on TableNotPermittedError) server-side only.
@@ -216,12 +251,29 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
             continue
 
         # ── Success ───────────────────────────────────────────────
-        try:
-            plan = explain_query_plan(sql, profile=meta["profile"], user=meta["user"])
-            cost = plan.get("total_cost_estimate", "?")
-        except Exception:
-            plan = {}
-            cost = "?"
+        # `explain_query_plan` chỉ để trang trí trace ("cost ~X") — không
+        # đáng đánh đổi lấy thời gian ngân sách. Tính lại thời gian còn lại
+        # (đã trôi thêm kể từ lúc chạy execute_sql ở trên) và BỎ QUA hẳn
+        # nếu không còn chỗ, thay vì truyền timeout=0 xuống Postgres (nghĩa
+        # là TẮT trần, ngược ý định) hay cứ gọi và hy vọng try/except cứu
+        # kịp — connect() có thể treo trước khi có ngoại lệ nào để bắt.
+        plan_timeout_s = clamped_tool_timeout_s(deadline_ts, SQL_TIMEOUT_MS / 1000.0, clock=clock)
+        if plan_timeout_s <= 0:
+            plan, cost = {}, "?"
+        else:
+            plan_connect_timeout_s = max(
+                1, round(clamped_tool_timeout_s(deadline_ts, SQL_CONNECT_TIMEOUT_S, clock=clock))
+            )
+            try:
+                plan = explain_query_plan(
+                    sql, profile=meta["profile"], user=meta["user"],
+                    timeout_ms=max(1, int(plan_timeout_s * 1000)),
+                    connect_timeout_s=plan_connect_timeout_s,
+                )
+                cost = plan.get("total_cost_estimate", "?")
+            except Exception:
+                plan = {}
+                cost = "?"
 
         truncated_note = " (BỊ CẮT ở trần dòng)" if df.attrs.get("truncated") else ""
         trace = append_trace(state, "sql", "execute_sql",

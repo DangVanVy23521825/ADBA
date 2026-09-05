@@ -17,6 +17,7 @@ from graph.budget import (
     MAX_LLM_CALLS_PER_QUERY,
     MODEL_CALL_ESTIMATE_S,
     calls_exhausted,
+    clamped_tool_timeout_s,
     has_room_for,
     is_expired,
     make_deadline,
@@ -99,6 +100,38 @@ def test_the_insight_reserve_is_never_smaller_than_what_it_protects():
 def test_the_insight_reserve_does_not_shrink_below_its_historical_floor():
     """12s là sàn cũ. Dẫn ra từ ước lượng chỉ được phép làm nó TO ra."""
     assert INSIGHT_RESERVE_S >= 12
+
+
+# ── timeout tool sau model ──────────────────────────────────────────────────
+#
+# `node_may_run` gác cửa TRƯỚC lời gọi model. Nó không thấy phần chi tiêu
+# SAU đó — SQL/sandbox vẫn dùng timeout cấu hình sẵn, độc lập với deadline,
+# nên một lượt qua được cửa gác vẫn có thể vượt ngân sách toàn cục ở tool.
+# `clamped_tool_timeout_s` là điểm kiểm giữa, đóng đúng lỗ đó.
+
+def test_no_deadline_means_no_clamp():
+    """Không deadline (test cũ, lời gọi ngoài graph) → trả nguyên cấu hình."""
+    assert clamped_tool_timeout_s(None, 25.0, clock=fake_clock(1000.0)) == 25.0
+
+
+def test_clamps_down_to_remaining_time_when_it_is_the_smaller_number():
+    """Còn 8s, cấu hình 25s → chỉ được dùng 8s, không phải cấu hình."""
+    assert clamped_tool_timeout_s(1008.0, 25.0, clock=fake_clock(1000.0)) == 8.0
+
+
+def test_configured_ceiling_wins_when_plenty_of_time_remains():
+    """Còn 400s, cấu hình 25s → vẫn chỉ 25s — không giãn quá cấu hình."""
+    assert clamped_tool_timeout_s(1400.0, 25.0, clock=fake_clock(1000.0)) == 25.0
+
+
+def test_floors_at_zero_past_the_deadline_never_goes_negative():
+    """Deadline đã qua 5s — bên gọi cần một mốc so sánh được (`<= 0`), không
+    phải một số âm mà mỗi caller phải tự kẹp lại."""
+    assert clamped_tool_timeout_s(995.0, 25.0, clock=fake_clock(1000.0)) == 0.0
+
+
+def test_zero_remaining_exactly_at_the_deadline_floors_at_zero():
+    assert clamped_tool_timeout_s(1000.0, 25.0, clock=fake_clock(1000.0)) == 0.0
 
 
 # ── trần cứng số lời gọi ────────────────────────────────────────────────────

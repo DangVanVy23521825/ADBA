@@ -7,12 +7,13 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from pathlib import Path
 
-from graph.budget import node_may_run
+from graph.budget import clamped_tool_timeout_s, node_may_run
 from graph.errors import BUDGET_EXCEEDED, MISSING_DATA, MISSING_STEP, PYTHON_RUNTIME
 from graph.state import MultiAgentState
-from graph.tools.python_tool import run_pandas_safe
+from graph.tools.python_tool import PANDAS_EXEC_TIMEOUT_SECONDS, run_pandas_safe
 from graph.utils import append_trace, df_from_state, df_to_state, with_routing
 from model.model_client import BudgetExceededError, ModelClient
 
@@ -136,8 +137,24 @@ def python_agent_node(state: MultiAgentState) -> MultiAgentState:
         code = _extract_code(raw)
         logger.info("Python Agent attempt %d code preview:\n%s", attempt, code[:300])
 
+        # Ngân sách còn lại SAU model, TRƯỚC khi vào sandbox — `node_may_run`
+        # ở đầu hàm chỉ gác cửa cho MỘT lời gọi model, không thấy phần chi
+        # tiêu sau đó. Một lượt qua cửa vì còn ~15s cho model vẫn có thể
+        # tốn tới `PANDAS_EXEC_TIMEOUT_SECONDS` (25s) ở sandbox ngay sau —
+        # cộng lại có thể vượt ngân sách toàn cục dù cửa gác nói "còn giờ".
+        clock = state.get("_clock", time.time)
+        deadline_ts = state.get("deadline_ts")
+        sandbox_timeout_s = clamped_tool_timeout_s(
+            deadline_ts, PANDAS_EXEC_TIMEOUT_SECONDS, clock=clock
+        )
+        if sandbox_timeout_s <= 0:
+            error_label = BUDGET_EXCEEDED
+            error_context = "Hết ngân sách thời gian sau khi model trả lời — không còn chỗ để chạy code."
+            logger.warning("Python Agent attempt %d: %s", attempt, error_context)
+            continue
+
         try:
-            df_out = run_pandas_safe(code, df_in)
+            df_out = run_pandas_safe(code, df_in, timeout_seconds=sandbox_timeout_s)
         except Exception as exc:
             error_context = str(exc)
             logger.warning("Python Agent execution error (attempt %d): %s", attempt, error_context)

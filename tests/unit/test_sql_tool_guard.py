@@ -313,3 +313,75 @@ class TestRowCap:
         assert timeout_calls, "statement_timeout vẫn phải được đặt"
         assert timeout_calls[0].args[1] == (1234,)
         assert not conn.commit.called, "COMMIT giữa chừng sẽ giết cursor có tên"
+
+    def test_connect_carries_a_timeout(self):
+        """`psycopg2.connect()` không có trần mặc định — một mạng hỏng làm
+        nó treo vô hạn, ngoài tầm với của statement_timeout (chỉ có hiệu
+        lực SAU khi kết nối đã mở)."""
+        from unittest.mock import MagicMock, patch
+
+        from graph.tools.sql_tool import execute_sql
+
+        cur = MagicMock()
+        cur.description = [("id",)]
+        cur.fetchmany.side_effect = lambda n: [][:n]
+        cur.__enter__ = MagicMock(return_value=cur)
+        cur.__exit__ = MagicMock(return_value=False)
+        conn = MagicMock()
+        conn.cursor.return_value = cur
+
+        with patch("graph.tools.sql_tool.psycopg2.connect", return_value=conn) as connect:
+            execute_sql("SELECT id FROM orders", self._profile(), "u", connect_timeout_s=3)
+
+        assert connect.call_args.kwargs.get("connect_timeout") == 3
+
+
+class TestExplainQueryPlanTimeout:
+    """`explain_query_plan` chỉ để trang trí trace ("cost ~X") — trước bản
+    này nó không có trần thời gian nào, kể cả `connect_timeout`. Một
+    ngoại lệ bất kỳ đã được caller (sql_agent) nuốt gọn thành `plan={},
+    cost="?"`, nhưng "ngoại lệ bất kỳ" không cứu được một connect() treo
+    vô hạn — nó chỉ ném ra SAU khi có kết quả, không phải trong lúc treo."""
+
+    @staticmethod
+    def _profile():
+        return TestRowCap._profile()
+
+    @staticmethod
+    def _mock_conn():
+        from unittest.mock import MagicMock
+
+        cur = MagicMock()
+        cur.fetchall.return_value = [("Seq Scan on orders  (cost=0.00..1.05 rows=5)",)]
+        cur.__enter__ = MagicMock(return_value=cur)
+        cur.__exit__ = MagicMock(return_value=False)
+        conn = MagicMock()
+        conn.cursor.return_value = cur
+        return conn, cur
+
+    def test_connect_carries_a_timeout(self):
+        from unittest.mock import patch
+
+        from graph.tools.sql_tool import explain_query_plan
+
+        conn, _cur = self._mock_conn()
+        with patch("graph.tools.sql_tool.psycopg2.connect", return_value=conn) as connect:
+            explain_query_plan("SELECT id FROM orders", self._profile(), "u", connect_timeout_s=3)
+
+        assert connect.call_args.kwargs.get("connect_timeout") == 3
+
+    def test_statement_timeout_is_set_before_explain(self):
+        from unittest.mock import patch
+
+        from graph.tools.sql_tool import explain_query_plan
+
+        conn, cur = self._mock_conn()
+        with patch("graph.tools.sql_tool.psycopg2.connect", return_value=conn):
+            explain_query_plan("SELECT id FROM orders", self._profile(), "u", timeout_ms=1234)
+
+        timeout_calls = [
+            c for c in cur.execute.call_args_list
+            if "statement_timeout" in str(c.args[0])
+        ]
+        assert timeout_calls, "statement_timeout phải được đặt trước EXPLAIN"
+        assert timeout_calls[0].args[1] == (1234,)

@@ -170,7 +170,7 @@ ADBA hiện thực hoá phần **multi-agent collaboration** của khung này.
 | NFR-2 | Worst-case wall clock | ≤ 60 s | ❌ Hiện có thể chạy rất lâu — thiếu deadline toàn cục |
 | NFR-3 | Không có câu lệnh ghi chạm tới DB | 0, kiểm bằng test đối kháng | ⚠️ Chưa có SQL guard nhiều lớp |
 | NFR-4 | Timeout truy vấn ở tầng DB | `SET LOCAL statement_timeout` 30 s | ✅ `graph/tools/sql_tool.py` |
-| NFR-5 | Timeout sandbox Python | 10 s, cưỡng chế bằng process | ✅ `PANDAS_EXEC_TIMEOUT_SECONDS` |
+| NFR-5 | Timeout sandbox Python | 25 s, cưỡng chế bằng process | ✅ `PANDAS_EXEC_TIMEOUT_SECONDS` |
 | NFR-6 | Chạy được offline hoàn toàn | Không gọi mạng ngoài khi tắt fallback | ✅ |
 | NFR-7 | Unit test xanh trên CI mọi PR | 100% | ✅ `.github/workflows/ci-cd.yml` |
 
@@ -218,7 +218,7 @@ Dự án coi là thành công khi đồng thời:
 | `prompts` | 5 | 0 | 510 | System prompt của từng skill, dạng file text tách khỏi code |
 | `requirements.txt` | 1 | 0 | 18 | — |
 | `schemas` | 3 | 3 | 735 | Pydantic contract: ExecutionPlan (Supervisor) và InsightOutput (Insight) |
-| `scripts` | 8 | 3 | 1.683 | Tiện ích vận hành: áp schema, kiểm tra kết nối, sinh tài liệu |
+| `scripts` | 8 | 3 | 1.687 | Tiện ích vận hành: áp schema, kiểm tra kết nối, sinh tài liệu |
 | `tests` | 47 | 44 | 9.817 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
 | `training` | 13 | 5 | 3.795 | Sinh dữ liệu, LoRA/QLoRA notebook, checkpoint và kết quả |
 | `.cursorrules` | 1 | 0 | 0 | — |

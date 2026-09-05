@@ -109,7 +109,7 @@ Hướng bất thường xác định bằng so với **trung bình**: `positive
 |---|---|
 | Code import `os` / `sys` / `requests` | `ImportError` từ `_restricted_import` — chỉ cho `pandas`, `numpy`, `scipy` |
 | Code gọi builtin ngoài whitelist (`open`, `eval`, `__import__` trực tiếp) | `NameError` |
-| Vòng lặp vô tận | Bị process cha giết sau `PANDAS_EXEC_TIMEOUT_SECONDS` (mặc định 10 s) |
+| Vòng lặp vô tận | Bị process cha giết sau `PANDAS_EXEC_TIMEOUT_SECONDS` (mặc định 25 s — nâng từ 10s để bù chi phí khởi động interpreter mới của `spawn`) |
 | Code không tạo ra DataFrame kết quả | `result_picker` trả `None` → agent coi là lỗi và thử lại |
 
 ## 4. Chiến lược xử lý lỗi

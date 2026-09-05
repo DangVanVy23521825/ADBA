@@ -258,7 +258,7 @@ riêng qua MCP, và egress bị chặn ở tầng mạng. Chi tiết:
 | `prompts` | 5 | 0 | 510 | System prompt của từng skill, dạng file text tách khỏi code |
 | `requirements.txt` | 1 | 0 | 18 | — |
 | `schemas` | 3 | 3 | 735 | Pydantic contract: ExecutionPlan (Supervisor) và InsightOutput (Insight) |
-| `scripts` | 8 | 3 | 1.683 | Tiện ích vận hành: áp schema, kiểm tra kết nối, sinh tài liệu |
+| `scripts` | 8 | 3 | 1.687 | Tiện ích vận hành: áp schema, kiểm tra kết nối, sinh tài liệu |
 | `tests` | 47 | 44 | 9.817 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
 | `training` | 13 | 5 | 3.795 | Sinh dữ liệu, LoRA/QLoRA notebook, checkpoint và kết quả |
 | `.cursorrules` | 1 | 0 | 0 | — |
@@ -281,7 +281,7 @@ kèm giá trị thật; `env.example` là bản mẫu.
 | `ADBA_MODEL_CALL_ESTIMATE_S` | `"15"` | — | `graph/budget.py` |
 | `ADBA_QUERY_BUDGET_S` | `"45"` | — | `graph/budget.py` |
 | `BACKUP_MODEL` | `"llama3.1:8b-instruct-q4_K_M"` | — | `model/model_config.py` |
-| `CHART_EXEC_TIMEOUT_SECONDS` | `str(PANDAS_EXEC_TIMEOUT_SECONDS` | — | `graph/tools/python_tool.py` |
+| `CHART_EXEC_TIMEOUT_SECONDS` | `str(PANDAS_EXEC_TIMEOUT_SECONDS)` | — | `graph/tools/python_tool.py` |
 | `DATABASE_URL` | `"postgresql://adba_user:adba@localhost:5432/adba_db"` | — | `data/seed/seed_data.py`, `perception/extract_info_box.py`, `training/generate_data.py` (+1) |
 | `ENABLE_OPENAI_FALLBACK` | — | — | `model/model_client.py` |
 | `EVAL_MODEL` | `"qwen2.5-coder:7b-instruct-q5_K_M"` | — | `eval/eval_runner.py` |

@@ -62,6 +62,20 @@ import scipy.stats as stats
 
 logger = logging.getLogger(__name__)
 
+# Ghi một lần lúc import, không phải mỗi lần chạy sandbox — đây là một
+# cảnh báo kiến trúc tĩnh (luôn đúng), không phải phản ứng với một điều
+# kiện runtime cụ thể. Mục đích: người vận hành theo dõi log lúc khởi
+# động thấy được giới hạn này mà không cần đọc code hay tài liệu.
+logger.warning(
+    "Sandbox Python: PARTIAL MITIGATION, KHÔNG PHẢI security boundary. "
+    "spawn + os.environ.clear() chỉ chặn rò credential qua environment "
+    "dict của CHÍNH child — code do model sinh vẫn đọc được "
+    "/proc/<ppid>/environ (Linux) để lấy env của tiến trình CHA, đọc file "
+    "bất kỳ với quyền của app, và sinh tiến trình con. Cô lập thật (container "
+    "non-root, rootfs chỉ-đọc, chặn egress, PID/mem/cpu limit) là Plan C, "
+    "chưa có ở đây."
+)
+
 # 25s, không phải 10s. `spawn` dựng một interpreter MỚI mỗi lần gọi và
 # nạp lại pandas/numpy (và matplotlib ở preset chart) từ đầu — cái giá cố
 # định đó lớn hơn hẳn bản `fork` cũ, nơi child thừa hưởng sẵn mọi module

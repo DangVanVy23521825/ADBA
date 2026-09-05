@@ -202,6 +202,7 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Commit | Ngày | Tác giả | Nội dung |
 |---|---|---|---|
+| `7b8aa23` | 2026-09-05 | Đặng Văn Vỹ | feat(sandbox): cảnh báo runtime — sandbox là partial mitigation, không phải security boundary |
 | `2cfd9ee` | 2026-09-05 | Đặng Văn Vỹ | fix(budget): chặn tool execution vượt deadline sau khi model đã trả lời |
 | `18a1162` | 2026-09-05 | Đặng Văn Vỹ | docs(fix): sửa 2 dòng "10s" lỗi thời + regex generator không parse được default lồng ngoặc |
 | `a0ccf79` | 2026-09-05 | Đặng Văn Vỹ | fix(errors): I5 dùng thật tập nhãn đóng, phát ra budget_exceeded; I7 giữ đủ trace |
@@ -216,7 +217,6 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 | `ac65f33` | 2026-09-01 | Đặng Văn Vỹ | fix(graph): finalize_node chịu được state None/sai kiểu, không ném lỗi |
 | `fc69ccb` | 2026-09-01 | Đặng Văn Vỹ | feat(graph): node finalize — thang success/partial/failed có lý do |
 | `3c96a2c` | 2026-09-01 | Đặng Văn Vỹ | feat(budget): ModelClient từ chối khởi động lời gọi không kịp deadline |
-| `3e982da` | 2026-09-01 | Đặng Văn Vỹ | fix(test): remove unreachable fixture in test_supervisor.py (task 6 review) |
 
 <!-- AUTO:end id=commit-history -->
 
@@ -224,10 +224,10 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `2cfd9ee` — fix(budget): chặn tool execution vượt deadline sau khi model đã trả lời |
+| Commit nguồn gần nhất | `7b8aa23` — feat(sandbox): cảnh báo runtime — sandbox là partial mitigation, không phải security boundary |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-05 |
-| Số commit nguồn | 121 |
+| Số commit nguồn | 122 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

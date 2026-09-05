@@ -250,7 +250,7 @@ riêng qua MCP, và egress bị chặn ở tầng mạng. Chi tiết:
 | `docker-compose.yml` | 1 | 0 | 62 | — |
 | `docs` | 19 | 0 | — | Bộ tài liệu dự án (chính file này) |
 | `eval` | 12 | 8 | 2.719 | Runner đo baseline / PEFT và so sánh hai lần chạy |
-| `graph` | 19 | 19 | 3.027 | LangGraph: state, các node agent, và tool thực thi |
+| `graph` | 19 | 19 | 3.041 | LangGraph: state, các node agent, và tool thực thi |
 | `model` | 3 | 3 | 480 | ModelClient (Ollama local-first, fallback OpenAI) + tham số theo agent |
 | `onboard.py` | 1 | 1 | 1.012 | — |
 | `pages` | 1 | 1 | 86 | — |
@@ -332,10 +332,10 @@ kèm giá trị thật; `env.example` là bản mẫu.
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `2cfd9ee` — fix(budget): chặn tool execution vượt deadline sau khi model đã trả lời |
+| Commit nguồn gần nhất | `7b8aa23` — feat(sandbox): cảnh báo runtime — sandbox là partial mitigation, không phải security boundary |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-05 |
-| Số commit nguồn | 121 |
+| Số commit nguồn | 122 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

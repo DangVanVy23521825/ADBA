@@ -78,6 +78,7 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 **Tính năng mới**
 
+- cảnh báo runtime — sandbox là partial mitigation, không phải security boundary — `7b8aa23` (2026-09-05, Đặng Văn Vỹ)
 - hiển thị kết quả một phần và lý do bị cắt — `d2f7f25` (2026-09-03, Đặng Văn Vỹ)
 - query_id + ngân sách trong trace, ghi JSONL; nhãn lỗi một nguồn — `ddaeb5a` (2026-09-03, Đặng Văn Vỹ)
 - cấp phát theo dự trữ — python/viz bị cắt trước, insight được bảo vệ — `0ba85e1` (2026-09-03, Đặng Văn Vỹ)
@@ -252,10 +253,10 @@ Cập nhật `PRIMARY_MODEL` trong `.env`, `ollama pull <model>`, rồi chạy l
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `2cfd9ee` — fix(budget): chặn tool execution vượt deadline sau khi model đã trả lời |
+| Commit nguồn gần nhất | `7b8aa23` — feat(sandbox): cảnh báo runtime — sandbox là partial mitigation, không phải security boundary |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-05 |
-| Số commit nguồn | 121 |
+| Số commit nguồn | 122 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

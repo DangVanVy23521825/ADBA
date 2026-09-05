@@ -151,6 +151,45 @@ class TestSqlAgentNode:
         assert result["last_error"]["agent"] == "sql"
         assert "syntax error" in result["last_error"]["traceback"]
 
+    @patch("graph.agents.sql_agent.explain_query_plan")
+    @patch("graph.agents.sql_agent.execute_sql")
+    @patch("graph.agents.sql_agent.ModelClient")
+    def test_every_attempt_reaches_the_trace_not_just_the_last_one(
+        self, MockClient, mock_execute, mock_explain
+    ):
+        """`append_trace` dựng danh sách mới từ `state["action_trace"]`.
+
+        Vòng lặp retry nào cũng gọi nó với CÙNG một `state` gốc thì mỗi
+        lần lại dựng lại từ danh sách ban đầu, và chỉ mục cuối sống sót.
+        Chẩn đoán "Attempt 1: ..." — đúng thứ mà lớp fail-closed của
+        `_extract_sql` sinh ra để người ta đọc được — không bao giờ tới
+        được UI hay log JSONL.
+
+        Ba mục phải có mặt: "started" trước vòng lặp, lỗi của lần 1, và OK
+        của lần 2."""
+        mock_explain.return_value = {}
+        mock_instance = MagicMock()
+        mock_instance.invoke.side_effect = [
+            "SELECT * FROM non_existent_table",
+            "SELECT region, SUM(amount) FROM orders WHERE year=2024 GROUP BY region",
+        ]
+        MockClient.return_value = mock_instance
+        mock_execute.side_effect = [
+            Exception("relation 'non_existent_table' does not exist"),
+            pd.DataFrame({"region": ["North"], "total": [100000]}),
+        ]
+
+        s = _state(PLAN_SQL_INSIGHT)
+        before = len(s["action_trace"])
+        trace = sql_agent_node(s)["action_trace"]
+
+        added = trace[before:]
+        assert len(added) == 3, f"mất mục trung gian: {[e['observation'] for e in added]}"
+        assert added[0]["status"] == "started"
+        assert "Attempt 1" in added[1]["observation"]
+        assert added[1]["status"] == "error"
+        assert added[2]["status"] == "ok"
+
     def test_missing_step_returns_failed(self):
         """No sql step in plan → status='failed'."""
         s = _state(PLAN_NO_SQL)

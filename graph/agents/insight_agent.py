@@ -9,10 +9,10 @@ import json
 from pathlib import Path
 
 from graph.budget import node_may_run
-from graph.errors import INSIGHT_GENERATION
+from graph.errors import BUDGET_EXCEEDED, INSIGHT_GENERATION, MISSING_STEP
 from graph.state import MultiAgentState
 from graph.utils import append_trace
-from model.model_client import ModelClient
+from model.model_client import BudgetExceededError, ModelClient
 from schemas.insight_schema import InsightOutput
 
 logger = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ def insight_agent_node(state: MultiAgentState) -> MultiAgentState:
     if step is None:
         logger.error("Insight Agent: no insight step in execution plan")
         return {**state, "status": "failed",
-                "last_error": {"agent": "insight", "error_type": "missing_step"}}
+                "last_error": {"agent": "insight", "error_type": MISSING_STEP}}
 
     query: str = state["query"]
 
@@ -132,6 +132,16 @@ def insight_agent_node(state: MultiAgentState) -> MultiAgentState:
         }
 
     except Exception as exc:
+        # Phân biệt "hết giờ" với "sinh insight hỏng". BudgetExceededError
+        # kế thừa RuntimeError nên nhánh chung này bắt được nó; nếu không
+        # tách nhãn ra, mọi lượt bị cắt vì ngân sách đều hiện lên log và
+        # trace dưới tên `insight_generation` — tức là đổ lỗi cho bước sinh
+        # insight về một lời gọi model chưa từng khởi động. Kiểm bằng
+        # isinstance thay vì thêm một `except` riêng vì thân khối này dài
+        # và hai nhánh chỉ khác đúng một chuỗi nhãn.
+        error_label = (
+            BUDGET_EXCEEDED if isinstance(exc, BudgetExceededError) else INSIGHT_GENERATION
+        )
         error_msg = f"Insight Agent failed: {exc}"
         logger.error(error_msg)
         trace = append_trace(state, "insight", "generate_insight", error_msg, "error")
@@ -150,7 +160,7 @@ def insight_agent_node(state: MultiAgentState) -> MultiAgentState:
             },
             "last_error": {
                 "agent": "insight",
-                "error_type": INSIGHT_GENERATION,
+                "error_type": error_label,
                 "traceback": error_msg,
             },
             "action_trace": trace,

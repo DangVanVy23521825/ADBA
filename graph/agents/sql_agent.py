@@ -9,10 +9,11 @@ import re
 from pathlib import Path
 
 from graph.budget import node_may_run
+from graph.errors import BUDGET_EXCEEDED, MISSING_STEP, SQL_EXECUTION
 from graph.state import MultiAgentState
 from graph.tools.sql_tool import TableNotPermittedError, execute_sql, explain_query_plan
 from graph.utils import append_trace, df_to_state, with_routing
-from model.model_client import ModelClient
+from model.model_client import BudgetExceededError, ModelClient
 from perception.schema_context import SchemaContext
 
 logger = logging.getLogger(__name__)
@@ -128,7 +129,7 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
         return {
             **state,
             "status": "failed",
-            "last_error": {"agent": "sql", "error_type": "missing_step"},
+            "last_error": {"agent": "sql", "error_type": MISSING_STEP},
         }
 
     task: str = step.get("task", "")
@@ -137,9 +138,14 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
 
     trace = append_trace(state, "sql", "generate_sql",
                          f"Task: {task}", "started")
+    state = {**state, "action_trace": trace}
 
     client = ModelClient(agent_type="sql", deadline_ts=state.get("deadline_ts"))
     error_context: str = ""
+
+    # Nhãn cho đường thất bại. Mặc định là lỗi thực thi SQL; chỉ đổi khi
+    # nguyên nhân thật sự khác — xem nhánh BudgetExceededError bên dưới.
+    error_label: str = SQL_EXECUTION
 
     for attempt in range(1, MAX_RETRIES + 1):
         user_prompt = f"Task: {task}"
@@ -155,6 +161,17 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
 
         try:
             raw = client.invoke(system_prompt=system_prompt, user_prompt=user_prompt)
+        except BudgetExceededError as exc:
+            # PHẢI đứng trước `except Exception`: BudgetExceededError kế
+            # thừa RuntimeError, nên nhánh chung nuốt nó và lượt chạy hết
+            # giờ bị dán nhãn `sql_execution` — đọc log thì tưởng SQL hỏng,
+            # trong khi thứ hỏng là ngân sách. Đó là lý do nhãn
+            # `budget_exceeded` tồn tại; trước bản này không nơi nào phát ra
+            # nó cả.
+            error_label = BUDGET_EXCEEDED
+            error_context = str(exc)
+            logger.warning("SQL Agent attempt %d hết ngân sách: %s", attempt, error_context)
+            continue
         except Exception as exc:
             error_context = f"ModelClient error: {exc}"
             logger.warning("SQL Agent attempt %d: %s", attempt, error_context)
@@ -167,6 +184,12 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
             logger.warning("SQL Agent attempt %d: %s", attempt, error_context)
             trace = append_trace(state, "sql", "generate_sql",
                                  f"Attempt {attempt}: {error_context}", "error")
+            # Ghi lại vào state: `append_trace` dựng danh sách mới từ
+            # `state["action_trace"]`, nên vòng lặp sau mà vẫn đọc `state`
+            # cũ sẽ dựng lại từ danh sách GỐC và ghi đè mất mục vừa thêm.
+            # Không có dòng này, chỉ mục cuối cùng sống sót và mọi chẩn
+            # đoán của các lần thử trước biến mất khỏi UI lẫn log JSONL.
+            state = {**state, "action_trace": trace}
             continue
 
         logger.info("SQL Agent attempt %d:\n%s", attempt, sql)
@@ -184,6 +207,12 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
             error_context = _public_error_message(exc)
             trace = append_trace(state, "sql", "execute_sql",
                                  f"Attempt {attempt} error: {error_context}", "error")
+            # Ghi lại vào state: `append_trace` dựng danh sách mới từ
+            # `state["action_trace"]`, nên vòng lặp sau mà vẫn đọc `state`
+            # cũ sẽ dựng lại từ danh sách GỐC và ghi đè mất mục vừa thêm.
+            # Không có dòng này, chỉ mục cuối cùng sống sót và mọi chẩn
+            # đoán của các lần thử trước biến mất khỏi UI lẫn log JSONL.
+            state = {**state, "action_trace": trace}
             continue
 
         # ── Success ───────────────────────────────────────────────
@@ -238,7 +267,7 @@ def sql_agent_node(state: MultiAgentState) -> MultiAgentState:
         },
         "last_error": {
             "agent": "sql",
-            "error_type": "sql_execution",
+            "error_type": error_label,
             "traceback": error_summary,
         },
         "action_trace": trace,

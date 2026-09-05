@@ -190,7 +190,7 @@ vì thành phần sửa lỗi.
 | `tests/integration/test_simple_queries.py` | 10 |
 | `tests/unit/test_annotate.py` | 38 |
 | `tests/unit/test_annotations.py` | 32 |
-| `tests/unit/test_budget.py` | 24 |
+| `tests/unit/test_budget.py` | 29 |
 | `tests/unit/test_budget_gating.py` | 11 |
 | `tests/unit/test_connection_profile.py` | 16 |
 | `tests/unit/test_describe_dataset.py` | 6 |
@@ -207,7 +207,7 @@ vì thành phần sửa lỗi.
 | `tests/unit/test_onboard_verify.py` | 20 |
 | `tests/unit/test_profile_store.py` | 24 |
 | `tests/unit/test_prompts_are_schema_agnostic.py` | 6 |
-| `tests/unit/test_python_agent.py` | 14 |
+| `tests/unit/test_python_agent.py` | 15 |
 | `tests/unit/test_python_sandbox_isolation.py` | 7 |
 | `tests/unit/test_reflector.py` | 3 |
 | `tests/unit/test_render_schema.py` | 29 |
@@ -216,14 +216,14 @@ vì thành phần sửa lỗi.
 | `tests/unit/test_routing_is_pure.py` | 8 |
 | `tests/unit/test_schema_context.py` | 12 |
 | `tests/unit/test_schema_model.py` | 7 |
-| `tests/unit/test_sql_agent.py` | 17 |
+| `tests/unit/test_sql_agent.py` | 19 |
 | `tests/unit/test_sql_tables.py` | 21 |
-| `tests/unit/test_sql_tool_guard.py` | 24 |
+| `tests/unit/test_sql_tool_guard.py` | 27 |
 | `tests/unit/test_supervisor.py` | 18 |
 | `tests/unit/test_tier1_recall.py` | 9 |
 | `tests/unit/test_trace_jsonl.py` | 10 |
-| `tests/unit/test_viz_agent.py` | 11 |
-| **Tổng** | **644** |
+| `tests/unit/test_viz_agent.py` | 12 |
+| **Tổng** | **656** |
 
 <!-- AUTO:end id=tests -->
 
@@ -240,10 +240,10 @@ PYTHONPATH=. pytest tests/unit/ -v       # không cần DB và Ollama
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `18a1162` — docs(fix): sửa 2 dòng "10s" lỗi thời + regex generator không parse được default lồng ngoặc |
+| Commit nguồn gần nhất | `2cfd9ee` — fix(budget): chặn tool execution vượt deadline sau khi model đã trả lời |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-05 |
-| Số commit nguồn | 120 |
+| Số commit nguồn | 121 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

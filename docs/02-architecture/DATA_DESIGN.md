@@ -380,10 +380,10 @@ giữa các lần chạy. Không dùng làm bản sao lưu production.
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `18a1162` — docs(fix): sửa 2 dòng "10s" lỗi thời + regex generator không parse được default lồng ngoặc |
+| Commit nguồn gần nhất | `2cfd9ee` — fix(budget): chặn tool execution vượt deadline sau khi model đã trả lời |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-05 |
-| Số commit nguồn | 120 |
+| Số commit nguồn | 121 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

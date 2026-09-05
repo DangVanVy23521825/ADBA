@@ -118,6 +118,7 @@ Tóm tắt do người viết — phần chi tiết ở mục **Lịch sử comm
 
 **Sửa lỗi**
 
+- chặn tool execution vượt deadline sau khi model đã trả lời — `2cfd9ee` (2026-09-05, Đặng Văn Vỹ)
 - I5 dùng thật tập nhãn đóng, phát ra budget_exceeded; I7 giữ đủ trace — `a0ccf79` (2026-09-05, Đặng Văn Vỹ)
 - I4 dự trữ ≥ ước lượng; I6 đếm lời gọi của supervisor; I8 timeout thật — `a1542ab` (2026-09-05, Đặng Văn Vỹ)
 - I1 dòng chảy qua cursor phía server; I3 nói rõ role chỉ-đọc chưa được nối — `b07124d` (2026-09-05, Đặng Văn Vỹ)
@@ -251,10 +252,10 @@ Cập nhật `PRIMARY_MODEL` trong `.env`, `ollama pull <model>`, rồi chạy l
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `18a1162` — docs(fix): sửa 2 dòng "10s" lỗi thời + regex generator không parse được default lồng ngoặc |
+| Commit nguồn gần nhất | `2cfd9ee` — fix(budget): chặn tool execution vượt deadline sau khi model đã trả lời |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-05 |
-| Số commit nguồn | 120 |
+| Số commit nguồn | 121 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

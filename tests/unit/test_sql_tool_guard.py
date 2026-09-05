@@ -251,3 +251,65 @@ class TestRowCap:
 
         importlib.reload(sql_tool)
         assert sql_tool.SQL_MAX_ROWS == 50000
+
+    def test_rows_stream_through_a_server_side_cursor(self):
+        """Trần dòng một mình KHÔNG chặn được nổ RAM phía client.
+
+        Cursor mặc định của psycopg2 là client-side: `cur.execute(sql)` kéo
+        TRỌN result set về RAM rồi mới trả điều khiển, nên `fetchmany()`
+        phía sau chỉ cắt một thứ đã nằm sẵn trong bộ nhớ. Một `SELECT *`
+        trên bảng chục triệu dòng vẫn làm sập tiến trình dù trần là 50k.
+
+        Test này kiểm THIẾT KẾ chứ không kiểm bộ nhớ: nó khẳng định
+        execute_sql xin một cursor CÓ TÊN (server-side) cho câu SELECT, và
+        đặt `itersize`. Hành vi streaming thật chỉ đo được với Postgres
+        thật — mock không mô phỏng được nó, và một test giả vờ đo RAM sẽ
+        tệ hơn là không có test.
+        """
+        from unittest.mock import MagicMock, patch
+
+        from graph.tools.sql_tool import SQL_STREAM_ITERSIZE, execute_sql
+
+        cur = MagicMock()
+        cur.description = [("id",)]
+        cur.fetchmany.side_effect = lambda n: [{"id": 1}][:n]
+        cur.__enter__ = MagicMock(return_value=cur)
+        cur.__exit__ = MagicMock(return_value=False)
+        conn = MagicMock()
+        conn.cursor.return_value = cur
+
+        with patch("graph.tools.sql_tool.psycopg2.connect", return_value=conn):
+            execute_sql("SELECT id FROM orders", self._profile(), "u")
+
+        named_calls = [c for c in conn.cursor.call_args_list if c.kwargs.get("name")]
+        assert named_calls, "câu SELECT phải chạy trên cursor phía server (name=...)"
+        assert cur.itersize == SQL_STREAM_ITERSIZE
+
+    def test_the_statement_timeout_is_set_on_a_plain_cursor(self):
+        """`SET LOCAL` không hợp lệ trên cursor có tên — psycopg2 dịch nó
+        thành `DECLARE ... CURSOR FOR SET LOCAL ...`. Nên nó phải đi trên
+        một cursor thường, cùng connection, cùng transaction (không COMMIT
+        ở giữa) để `LOCAL` còn phủ tới câu SELECT."""
+        from unittest.mock import MagicMock, call, patch
+
+        from graph.tools.sql_tool import execute_sql
+
+        cur = MagicMock()
+        cur.description = [("id",)]
+        cur.fetchmany.side_effect = lambda n: [][:n]
+        cur.__enter__ = MagicMock(return_value=cur)
+        cur.__exit__ = MagicMock(return_value=False)
+        conn = MagicMock()
+        conn.cursor.return_value = cur
+
+        with patch("graph.tools.sql_tool.psycopg2.connect", return_value=conn):
+            execute_sql("SELECT id FROM orders", self._profile(), "u", timeout_ms=1234)
+
+        assert call() in conn.cursor.call_args_list, "cursor thường cho SET LOCAL"
+        timeout_calls = [
+            c for c in cur.execute.call_args_list
+            if "statement_timeout" in str(c.args[0])
+        ]
+        assert timeout_calls, "statement_timeout vẫn phải được đặt"
+        assert timeout_calls[0].args[1] == (1234,)
+        assert not conn.commit.called, "COMMIT giữa chừng sẽ giết cursor có tên"

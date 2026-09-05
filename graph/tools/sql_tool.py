@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import uuid
 from typing import Any
 
 import pandas as pd
@@ -27,10 +28,17 @@ logger = logging.getLogger(__name__)
 SQL_TIMEOUT_MS = int(os.getenv("SQL_TIMEOUT_MS", "10000"))
 
 # Trần dòng nạp về client. statement_timeout không cứu được trường hợp này:
-# Postgres trả dòng đúng hạn, chỗ chết là fetchall() phía client nạp trọn
-# result set vào RAM. Một SELECT * trên bảng chục triệu dòng làm sập tiến
-# trình trước khi có ai kịp báo lỗi.
+# Postgres trả dòng đúng hạn, chỗ chết là phía client nạp trọn result set
+# vào RAM. Một SELECT * trên bảng chục triệu dòng làm sập tiến trình trước
+# khi có ai kịp báo lỗi.
 SQL_MAX_ROWS = int(os.getenv("SQL_MAX_ROWS", "50000"))
+
+# Số dòng psycopg2 kéo về mỗi lượt FETCH trên cursor phía server. Đây là
+# đơn vị RAM thật của một lời gọi: bộ nhớ đỉnh xấp xỉ `itersize` dòng, chứ
+# không phải cả result set. 2000 là mặc định của psycopg2 — giữ nguyên,
+# đủ nhỏ để an toàn và đủ lớn để không biến một lần đọc 50k dòng thành 50
+# nghìn vòng round-trip.
+SQL_STREAM_ITERSIZE = int(os.getenv("SQL_STREAM_ITERSIZE", "2000"))
 
 # Guards against injection via f-string table-name interpolation.
 _TABLE_NAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
@@ -128,12 +136,37 @@ def execute_sql(
     Kết quả bị cắt ở `max_rows`. Cờ `truncated` đi qua `df.attrs` chứ không
     qua kiểu trả về: đổi kiểu trả về sẽ buộc sql_agent, app.py và toàn bộ
     test hiện có phải sửa, đổi lấy một bit thông tin.
+
+    Dòng chảy về qua CURSOR PHÍA SERVER (`conn.cursor(name=...)`), không
+    phải cursor mặc định. Khác biệt không phải chuyện phong cách: cursor
+    mặc định của psycopg2 là client-side, `cur.execute(sql)` kéo TRỌN result
+    set về RAM tiến trình rồi mới trả điều khiển — nên `fetchmany(max_rows
+    + 1)` phía dưới chỉ cắt một thứ đã nằm sẵn trong bộ nhớ. Trần 50k dòng
+    khi đó bảo vệ được DataFrame, nhưng không bảo vệ được cái làm sập tiến
+    trình. Với cursor có tên, Postgres giữ result set ở phía nó và chỉ gửi
+    về từng lô `itersize` dòng, nên `SELECT *` trên bảng chục triệu dòng
+    tốn bộ nhớ theo lô chứ không theo cả bảng.
     """
     assert_tables_permitted(sql, profile, user)
     conn = psycopg2.connect(profile.dsn)
     try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SET LOCAL statement_timeout = %s", (timeout_ms,))
+        # statement_timeout phải đặt trên cursor THƯỜNG: cursor có tên dịch
+        # `execute()` thành `DECLARE ... CURSOR FOR <sql>`, và `SET LOCAL`
+        # không hợp lệ trong ngữ cảnh đó. Cả hai cursor dùng chung một
+        # connection và không có COMMIT nào ở giữa, nên chúng nằm trong
+        # cùng một transaction — đó chính là phạm vi mà `SET LOCAL` có
+        # hiệu lực, và cũng là phạm vi sống của cursor có tên.
+        with conn.cursor() as setup_cur:
+            setup_cur.execute("SET LOCAL statement_timeout = %s", (timeout_ms,))
+
+        # Tên cursor phải duy nhất trong transaction. uuid thay vì một tên
+        # cố định: một tên cố định sẽ va nhau nếu về sau có hai lời gọi
+        # cùng dùng chung connection.
+        cursor_name = f"adba_ro_{uuid.uuid4().hex}"
+        with conn.cursor(
+            name=cursor_name, cursor_factory=psycopg2.extras.RealDictCursor
+        ) as cur:
+            cur.itersize = SQL_STREAM_ITERSIZE
             cur.execute(sql, params)
             # Lấy dư một dòng: đó là cách duy nhất phân biệt "đúng max_rows
             # dòng" với "còn nữa" mà không phải đếm cả bảng.

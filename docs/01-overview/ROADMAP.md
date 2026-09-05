@@ -202,6 +202,7 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Commit | Ngày | Tác giả | Nội dung |
 |---|---|---|---|
+| `448a89e` | 2026-09-05 | Đặng Văn Vỹ | fix(budget): đếm lời gọi model bằng số lời gọi mạng thật, không phải biến vòng lặp |
 | `7b8aa23` | 2026-09-05 | Đặng Văn Vỹ | feat(sandbox): cảnh báo runtime — sandbox là partial mitigation, không phải security boundary |
 | `2cfd9ee` | 2026-09-05 | Đặng Văn Vỹ | fix(budget): chặn tool execution vượt deadline sau khi model đã trả lời |
 | `18a1162` | 2026-09-05 | Đặng Văn Vỹ | docs(fix): sửa 2 dòng "10s" lỗi thời + regex generator không parse được default lồng ngoặc |
@@ -216,7 +217,6 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 | `eaceedf` | 2026-09-01 | Đặng Văn Vỹ | fix(graph): đóng 2 lỗ hổng present-but-wrong-shape còn sót trong finalize |
 | `ac65f33` | 2026-09-01 | Đặng Văn Vỹ | fix(graph): finalize_node chịu được state None/sai kiểu, không ném lỗi |
 | `fc69ccb` | 2026-09-01 | Đặng Văn Vỹ | feat(graph): node finalize — thang success/partial/failed có lý do |
-| `3c96a2c` | 2026-09-01 | Đặng Văn Vỹ | feat(budget): ModelClient từ chối khởi động lời gọi không kịp deadline |
 
 <!-- AUTO:end id=commit-history -->
 
@@ -224,10 +224,10 @@ Số liệu đo được thực tế: [AGENT_ARCHITECTURE.md § Kết quả đá
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `7b8aa23` — feat(sandbox): cảnh báo runtime — sandbox là partial mitigation, không phải security boundary |
+| Commit nguồn gần nhất | `448a89e` — fix(budget): đếm lời gọi model bằng số lời gọi mạng thật, không phải biến vòng lặp |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-05 |
-| Số commit nguồn | 122 |
+| Số commit nguồn | 123 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

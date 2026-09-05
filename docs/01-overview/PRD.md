@@ -210,8 +210,8 @@ Dự án coi là thành công khi đồng thời:
 | `docker-compose.yml` | 1 | 0 | 62 | — |
 | `docs` | 19 | 0 | — | Bộ tài liệu dự án (chính file này) |
 | `eval` | 12 | 8 | 2.719 | Runner đo baseline / PEFT và so sánh hai lần chạy |
-| `graph` | 19 | 19 | 3.041 | LangGraph: state, các node agent, và tool thực thi |
-| `model` | 3 | 3 | 480 | ModelClient (Ollama local-first, fallback OpenAI) + tham số theo agent |
+| `graph` | 19 | 19 | 3.061 | LangGraph: state, các node agent, và tool thực thi |
+| `model` | 3 | 3 | 519 | ModelClient (Ollama local-first, fallback OpenAI) + tham số theo agent |
 | `onboard.py` | 1 | 1 | 1.012 | — |
 | `pages` | 1 | 1 | 86 | — |
 | `perception` | 16 | 12 | 5.342 | Perception layer — introspect PostgreSQL sinh `info_box` JSON |
@@ -219,7 +219,7 @@ Dự án coi là thành công khi đồng thời:
 | `requirements.txt` | 1 | 0 | 18 | — |
 | `schemas` | 3 | 3 | 735 | Pydantic contract: ExecutionPlan (Supervisor) và InsightOutput (Insight) |
 | `scripts` | 8 | 3 | 1.687 | Tiện ích vận hành: áp schema, kiểm tra kết nối, sinh tài liệu |
-| `tests` | 47 | 44 | 10.051 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
+| `tests` | 48 | 45 | 10.224 | pytest — unit theo từng agent, integration theo độ phức tạp câu hỏi |
 | `training` | 13 | 5 | 3.795 | Sinh dữ liệu, LoRA/QLoRA notebook, checkpoint và kết quả |
 | `.cursorrules` | 1 | 0 | 0 | — |
 | `.github` | 1 | 0 | 29 | CI/CD — unit test, build & push image lên GHCR |
@@ -231,10 +231,10 @@ Dự án coi là thành công khi đồng thời:
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `7b8aa23` — feat(sandbox): cảnh báo runtime — sandbox là partial mitigation, không phải security boundary |
+| Commit nguồn gần nhất | `448a89e` — fix(budget): đếm lời gọi model bằng số lời gọi mạng thật, không phải biến vòng lặp |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-05 |
-| Số commit nguồn | 122 |
+| Số commit nguồn | 123 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

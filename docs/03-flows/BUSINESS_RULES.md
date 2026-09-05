@@ -201,6 +201,7 @@ vì thành phần sửa lỗi.
 | `tests/unit/test_insight_agent.py` | 7 |
 | `tests/unit/test_introspect.py` | 16 |
 | `tests/unit/test_load_sqlite_to_postgres.py` | 46 |
+| `tests/unit/test_model_client_calls_made.py` | 6 |
 | `tests/unit/test_model_client_deadline.py` | 12 |
 | `tests/unit/test_onboard_cli.py` | 45 |
 | `tests/unit/test_onboard_refresh.py` | 5 |
@@ -223,7 +224,7 @@ vì thành phần sửa lỗi.
 | `tests/unit/test_tier1_recall.py` | 9 |
 | `tests/unit/test_trace_jsonl.py` | 10 |
 | `tests/unit/test_viz_agent.py` | 12 |
-| **Tổng** | **656** |
+| **Tổng** | **662** |
 
 <!-- AUTO:end id=tests -->
 
@@ -240,10 +241,10 @@ PYTHONPATH=. pytest tests/unit/ -v       # không cần DB và Ollama
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `7b8aa23` — feat(sandbox): cảnh báo runtime — sandbox là partial mitigation, không phải security boundary |
+| Commit nguồn gần nhất | `448a89e` — fix(budget): đếm lời gọi model bằng số lời gọi mạng thật, không phải biến vòng lặp |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-05 |
-| Số commit nguồn | 122 |
+| Số commit nguồn | 123 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->

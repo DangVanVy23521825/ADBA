@@ -242,10 +242,10 @@ sequenceDiagram
 
 | Trường | Giá trị |
 |---|---|
-| Commit nguồn gần nhất | `7b8aa23` — feat(sandbox): cảnh báo runtime — sandbox là partial mitigation, không phải security boundary |
+| Commit nguồn gần nhất | `448a89e` — fix(budget): đếm lời gọi model bằng số lời gọi mạng thật, không phải biến vòng lặp |
 | Tác giả | Đặng Văn Vỹ |
 | Ngày commit | 2026-09-05 |
-| Số commit nguồn | 122 |
+| Số commit nguồn | 123 |
 | Sinh bởi | `scripts/update_docs.py` (hook `post-commit`) |
 
 <!-- AUTO:end id=stamp -->
